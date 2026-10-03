@@ -14,7 +14,7 @@ const text=bytes=>new TextDecoder().decode(bytes);
 button.onclick=async()=>{
   button.disabled=true;
   try {
-    const names=await caches.keys(),version='local-first-offline-0.13.12-v2';
+    const names=await caches.keys(),version='local-first-offline-0.13.14-v1';
     if(!names.includes(version))throw new Error('新版快取尚未啟用');
     const cache=await caches.open(version);
     for(const [path,content] of [['index.html','id="storage-status"'],['rules.mjs','自動來源消費的原入帳日期不可更改'],
@@ -27,7 +27,7 @@ button.onclick=async()=>{
     if(paths.length!==required.size||paths.some(url=>url.origin!==location.origin||url.search||!required.has(url.pathname)))throw new Error('快取超出必要靜態來源');
     if(names.some(name=>name.startsWith('local-first-offline-')&&name!==version))throw new Error('舊版快取仍在，請關閉舊頁後再試');
     if(text(await exportPortableBackup(db))!==text(before)||rawBefore!==await raw())throw new Error('唯讀檢查期間帳本改變');
-    result.textContent='PASS：0.13.12-v2 支出比較、Chart.js、搜尋／月曆、定期支出、CSV、持久保存與完整備份共 14 個離線資源；原始資料列、metadata 與備份逐位元組不變'+(namesBefore.some(name=>name.startsWith('local-first-offline-')&&name!==version)?'；原生 Service Worker 更新完成':'');
+    result.textContent='PASS：0.13.14-v1 支出比較、Chart.js、搜尋／月曆、定期支出、CSV、持久保存與完整備份共 14 個離線資源；原始資料列、metadata 與備份逐位元組不變'+(namesBefore.some(name=>name.startsWith('local-first-offline-')&&name!==version)?'；原生 Service Worker 更新完成':'');
   }catch(error){result.textContent='FAIL：'+error.message;}
   finally{button.disabled=false;}
 };

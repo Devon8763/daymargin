@@ -15,15 +15,27 @@ const storage={
 if(scenario==='query-only')delete storage.persist;
 Object.defineProperty(navigator,'storage',{configurable:true,value:scenario==='unsupported'?undefined:storage});
 if(scenario==='database-unavailable')indexedDB.open=()=>{throw new Error('PRIVATE-STORAGE-DETAIL');};
+if(scenario==='initial-read-failure'){
+  const transaction=IDBDatabase.prototype.transaction;let failed=false;
+  IDBDatabase.prototype.transaction=function(...args){
+    if(this.name===name&&!failed){failed=true;throw new Error('PRIVATE-STORAGE-DETAIL');}
+    return transaction.apply(this,args);
+  };
+}
 try{
   await import('../local-first/page.mjs');
   check(q('#storage-status')&&q('#request-persistence'),'Missing browser storage status');
   await wait(()=>q('#storage-status').textContent.length>0);
   check(requests===0,'Opening requested permission');
   const button=q('#request-persistence');
-  if(scenario==='database-unavailable'){
+  if(scenario==='database-unavailable'||scenario==='initial-read-failure'){
     check(q('#error').textContent.includes('無法開啟')&&!q('#error').textContent.includes('PRIVATE-STORAGE-DETAIL'),'Unavailable IndexedDB loses safe error');
     check(q('#ledger-page').hidden&&requests===0,'Unavailable IndexedDB permits ledger operations or requests permission');
+    const guidance=q('#recovery-guidance');
+    check(guidance&&!guidance.hidden,'Missing visible recovery guidance');
+    for(const text of ['不要清除','覆蓋','原瀏覽器設定檔','全新','空白','同一個固定網址','沒有可用備份','停止操作'])check(guidance.textContent.includes(text),'Incomplete recovery guidance');
+    check(!guidance.querySelector('button,a,input,form')&&q('#welcome').hidden&&q('#start-ledger').disabled&&q('#choose-restore').disabled,'Failed source offers a destructive recovery shortcut');
+    check(!document.body.textContent.includes('PRIVATE-STORAGE-DETAIL'),'Opening failure leaked exception');
   }else if(scenario==='pending'){
     check(button.disabled,'Pending query permits request');release(false);await wait(()=>!button.disabled);
   }else if(scenario==='granted'){

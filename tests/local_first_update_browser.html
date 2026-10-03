@@ -1,0 +1,9 @@
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>原生更新與帳本不變驗證</title>
+<h1>原生更新與帳本不變驗證（隔離合成來源）</h1>
+<p>先開啟兩個測試頁，換成 --next-worker 服務後檢查等待，再停服、關閉兩頁及離線重開。本頁不在 worker 範圍內。</p>
+<pre id="result">RUNNING</pre>
+<button id="open-a" disabled>開啟舊頁 A</button><button id="open-b" disabled>開啟舊頁 B</button>
+<button id="check-old" disabled>檢查舊頁與草稿</button><button id="check-failure" disabled>檢查新版安裝失敗</button><button id="check-waiting" disabled>下載並檢查等待新版</button>
+<button id="close-a" disabled>只關閉舊頁 A</button><button id="close-b" disabled>關閉最後舊頁 B</button>
+<button id="open-new" disabled>同網址離線冷啟動</button><button id="check-new" disabled>核對新版與帳本</button>
+<script type="module" src="local_first_update_browser.mjs"></script></html>
