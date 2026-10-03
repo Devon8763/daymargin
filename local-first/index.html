@@ -11,11 +11,18 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
+  <p id="page-version">目前使用頁面版本：0.13.14</p>
+  <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
   <p>瀏覽器可能清除離線快取或本機帳本；可離線使用不等於資料永久安全，請下載並妥善保存備份。</p>
   <noscript>請啟用 JavaScript 才能操作本機驗證頁；現有 Python Web 不受影響。</noscript>
   <p id="error" role="alert"></p>
+  <div id="recovery-guidance" hidden>
+    <p>不要清除原瀏覽器的網站資料或覆蓋原帳本，請保留原瀏覽器設定檔。</p>
+    <p>如果已有可用的完整備份，可在另一個全新、空白的瀏覽器設定檔，使用同一個固定網址還原；核對資料後再備份。</p>
+    <p>沒有可用備份時，請先停止操作並查明原因。目前無法判定資料是否遺失，也無法保證能自動取回。</p>
+  </div>
   <section id="welcome" aria-labelledby="welcome-title" hidden>
     <h2 id="welcome-title">建立本機測試帳本</h2>
     <div class="buttons"><button id="start-ledger" type="button">開始記帳</button><button id="choose-restore" type="button">從備份還原</button></div>

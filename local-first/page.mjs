@@ -823,10 +823,34 @@ try {
 } catch {
   error.textContent = '無法開啟本機測試帳本。請保留資料並確認瀏覽器允許本機儲存。';
   status.textContent = '瀏覽器本機測試帳本尚未就緒。';
+  document.querySelector('#recovery-guidance').hidden = false;
+  welcome.hidden = true; ledgerPage.hidden = true;
+  writeBlocked = true; restoreControls(true);
+  db?.close();
 }
 
 if (['/local-first/', '/local-first/index.html'].includes(location.pathname) && 'serviceWorker' in navigator) {
   const offlineStatus = document.querySelector('#offline-status');
+  const updateStatus = document.querySelector('#update-status');
+  let registration = null, installFailed = false;
+  const showUpdate = () => {
+    updateStatus.textContent = registration?.waiting?.state === 'installed'
+      ? '新版已下載，關閉此來源所有頁籤／視窗後重新開啟才會使用新版。請先儲存或自行保留草稿。'
+      : !navigator.onLine ? '目前離線，無法確認是否有新版；目前頁面不會自動更新。'
+      : !registration ? '無法確認新版狀態；目前頁面不會自動更新。'
+      : installFailed ? '新版安裝未完成；目前頁面不會自動更新，請稍後連線再確認。'
+      : registration.installing ? '新版正在下載／安裝，尚未確認完成；目前頁面不會自動更新。'
+      : '未偵測到等待啟用的新版；目前頁面不會自動更新。';
+  };
+  const observeInstall = () => {
+    installFailed = false;
+    const worker = registration.installing;
+    if (worker) worker.addEventListener('statechange', () => {
+      if (worker.state === 'redundant') installFailed = true;
+      showUpdate();
+    });
+    showUpdate();
+  };
   let checkNumber = 0;
   const checkOffline = async () => {
     const current = ++checkNumber;
@@ -847,10 +871,17 @@ if (['/local-first/', '/local-first/index.html'].includes(location.pathname) && 
       ? '可離線重新開啟（相同瀏覽器與網址）；請定期下載備份。'
       : '離線重新開啟尚未就緒；請保持預覽服務開啟。';
   };
-  navigator.serviceWorker.addEventListener('controllerchange', checkOffline);
-  window.addEventListener('pageshow', checkOffline);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkOffline(); });
+  const refreshStatus = () => { showUpdate(); checkOffline(); };
+  navigator.serviceWorker.addEventListener('controllerchange', refreshStatus);
+  window.addEventListener('pageshow', refreshStatus);
+  window.addEventListener('online', showUpdate);
+  window.addEventListener('offline', showUpdate);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshStatus(); });
   navigator.serviceWorker.register('/local-first/sw.js', { scope: '/local-first/' })
-    .then(checkOffline)
-    .catch(checkOffline);
+    .then(value => {
+      registration = value;
+      registration.addEventListener('updatefound', observeInstall);
+      observeInstall(); checkOffline();
+    })
+    .catch(refreshStatus);
 }

@@ -20,6 +20,8 @@ const files = new Map([
   ['/local-first/csv.mjs', ['../local-first/csv.mjs', 'text/javascript']],
   ['/tests/local-first-persistence.html', ['../local-first/index.html', 'text/html']],
   ['/tests/local_first_persistence_browser.mjs', ['local_first_persistence_browser.mjs', 'text/javascript']],
+  ['/tests/local_first_update_browser.html', ['local_first_update_browser.html', 'text/html']],
+  ['/tests/local_first_update_browser.mjs', ['local_first_update_browser.mjs', 'text/javascript']],
   ['/tests/local-first-crypto.html', ['../local-first/index.html', 'text/html']],
   ['/tests/local_first_crypto_ui_browser.mjs', ['local_first_crypto_ui_browser.mjs', 'text/javascript']],
   ['/tests/local_first_origin_browser.html', ['local_first_origin_browser.html', 'text/html']],
@@ -69,13 +71,15 @@ createServer(async (request, response) => {
     return;
   }
   const file = files.get(path);
-  if(process.argv[4]==='--no-charts'&&path==='/local-first/vendor/chartjs-4.5.1/chart.umd.min.js'){response.writeHead(503,secureHeaders);response.end();return;}
+  if(process.argv.includes('--no-charts')&&path==='/local-first/vendor/chartjs-4.5.1/chart.umd.min.js'){response.writeHead(503,secureHeaders);response.end();return;}
   if (request.method !== 'GET' || !file) { response.writeHead(404); response.end(); return; }
   try {
     let body = await readFile(new URL(file[0], import.meta.url));
-    // Isolated update test only: install the preceding 12-asset worker, then restart without this flag.
-    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.13.12-v2','0.13.11-v1')
+    // Isolated update tests only; these flags do not exist in the fixed production entry.
+    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.13.14-v1','0.13.11-v1')
       .replace("  '/local-first/comparison.mjs',\n",'').replace("  '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js',\n",'');
+    if(process.argv[4]==='--next-worker'&&(path==='/local-first/sw.js'||path==='/local-first/'||path==='/local-first/index.html'))
+      body=body.toString('utf8').replace('0.13.14','0.13.15'); // Synthetic next-version label, not a release.
     if(path==='/tests/local-first-comparison.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_comparison_ui_browser.mjs"');
     if (path === '/tests/local-first-recurring.html') {
       body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"')
