@@ -1,6 +1,6 @@
 import {DB_NAME,openDatabase,readLedgerIfPresent,initializeLedger,exportPortableBackup} from '../local-first/ledger.mjs';
 import {STORES} from '../local-first/idb.mjs';
-import {readBackup,writeBackup} from '../local-first/backup.mjs';
+import {readBackup,writeBackup,emptyData} from '../local-first/backup.mjs';
 import {encryptBackup,decryptBackup,MAX_ENCRYPTED_BYTES} from '../local-first/backup-crypto.mjs';
 const report=document.createElement('pre');report.id='crypto-test-result';document.body.prepend(report);
 const lines=[],check=(value,message)=>{if(!value)throw new Error(message);};
@@ -10,7 +10,30 @@ const done=tx=>new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=r
 const name=DB_NAME+'-crypto-ui-'+crypto.randomUUID(),open=indexedDB.open.bind(indexedDB);
 indexedDB.open=(value,version)=>{const request=open(value===DB_NAME?name:value,version);if(value===DB_NAME)request.addEventListener('success',()=>Object.defineProperty(request.result,'name',{value:DB_NAME}));return request;};
 const db=await openDatabase(),choose=payload=>{const transfer=new DataTransfer();transfer.items.add(payload instanceof File?payload:new File([payload],'synthetic.backup'));q('#restore-file').files=transfer.files;q('#restore-file').dispatchEvent(new Event('change'));};
-const password='合成 encrypted password 123',payload=new Uint8Array(await (await fetch('/tests/fixtures/portable_life_ledger.json')).arrayBuffer());
+const password='合成 encrypted password 123',legacyPayload=new Uint8Array(await (await fetch('/tests/fixtures/portable_life_ledger.json')).arrayBuffer());
+let payload=legacyPayload;
+if(['v2','v3','v4'].includes(new URLSearchParams(location.search).get('finance'))){
+  const original=readBackup(legacyPayload),rule=original.data.recurring_rules[0].id;
+  payload=writeBackup({format:original.format,version:2,data:{...emptyData(2),...original.data,
+    incomes:[{id:'i_finance',received_on:'2025-02-28',cents:'29',name:'<img src=x onerror=alert(3)>合成收入',voided:1,revision:1}],
+    income_actions:[{id:'ia_finance',income_id:'i_finance',before:{id:'i_finance',received_on:'2025-02-28',cents:'29',name:'<img src=x onerror=alert(3)>合成收入',voided:0,revision:0},undone:0}],
+    monthly_allocations:[{month:'2025-02',items:[{id:'living',name:'生活開銷',cents:'10'},{id:'custom',name:'<img src=x onerror=alert(4)>',cents:'20'}],excluded_recurring_ids:[rule],revision:1}],
+    allocation_preferences:[{recurring_id:rule,excluded_from_month:'2025-03',revision:0}]}});
+}
+if(['v3','v4'].includes(new URLSearchParams(location.search).get('finance'))){
+  const original=readBackup(payload),payment=original.data.payment_sources.find(row=>row.active===1),entry=original.data.expenses.find(row=>row.source==='manual');
+  const defaults=year=>({name:'<img src=x onerror=alert(5)>合成年度',cents:'120001',category:'餐飲',payment_source_id:payment.id,payment_source_name:payment.name,due_on:year+'-02-'+(year===2024?'29':'28')});
+  payload=writeBackup({format:original.format,version:3,data:{...emptyData(3),...original.data,
+    annual_rules:[{id:'y_crypto',...defaults(2024),first_year:2024,due_month:2,due_day:31,effective_month:'2024-02',active:1,revision:2}].map(({due_on,...row})=>row),
+    annual_periods:[{annual_id:'y_crypto',year:2024,defaults:defaults(2024),status:'recorded',expense_id:entry.id,revision:1},
+      {annual_id:'y_crypto',year:2025,defaults:defaults(2025),status:'skipped',expense_id:null,revision:0},
+      {annual_id:'y_crypto',year:2026,defaults:defaults(2026),status:'pending',expense_id:null,revision:0}]}});
+}
+if(new URLSearchParams(location.search).get('finance')==='v4'){
+  const original=readBackup(payload),entry=original.data.expenses[0];
+  payload=writeBackup({format:original.format,version:4,data:{...emptyData(4),...original.data,
+    usage_periods:[{expense_id:entry.id,started_on:'2025-02-28',days:180,remind:1,reminder_days:7,show_daily_cost:1,active:0,revision:3}]}});
+}
 const encrypted=await encryptBackup(payload,password),blobs=[],create=URL.createObjectURL,click=HTMLAnchorElement.prototype.click;
 URL.createObjectURL=blob=>{blobs.push(blob);return create(blob);};HTMLAnchorElement.prototype.click=function(){};
 const enterPassword=()=>{q('#restore-password').value=password;q('#decrypt-form').requestSubmit();};
@@ -24,12 +47,12 @@ try{
   check(await readLedgerIfPresent(db)===null&&q('#restore-review').hidden,'Wrong password wrote data');
   check(!q('#restore-password-error').textContent.includes('WRONG SECRET'),'Password leaked');
   enterPassword();await wait(()=>!q('#restore-review').hidden);
-  check(q('#restore-summary').children.length===9&&q('#restore-password').value==='','Missing validated counts or password cleanup');
-  q('#cancel-restore').click();check(await readLedgerIfPresent(db)===null,'Cancel preview wrote data');lines.push('encrypted password gate, safe failure, nine validated counts and cancel');
+  check(q('#restore-summary').children.length===Object.keys(readBackup(payload).data).length&&q('#restore-password').value==='','Missing validated counts or password cleanup');
+  q('#cancel-restore').click();check(await readLedgerIfPresent(db)===null,'Cancel preview wrote data');lines.push('encrypted password gate, safe failure, '+Object.keys(readBackup(payload).data).length+' validated section counts and cancel');
   const changed=encrypted.slice();changed[47]^=1;choose(changed);await wait(()=>!q('#decrypt-panel').hidden);enterPassword();await wait(()=>q('#restore-password-error').textContent.length>0);q('#cancel-decrypt').click();
   const huge=new File(['small'],'synthetic');Object.defineProperty(huge,'size',{value:MAX_ENCRYPTED_BYTES+1});choose(huge);await wait(()=>q('#error').textContent.includes('上限'));
   check(await readLedgerIfPresent(db)===null,'Corrupt/oversized import wrote data');lines.push('tampered and oversized files leave blank ledger');
-  choose(payload);await wait(()=>!q('#restore-review').hidden);q('#cancel-restore').click();lines.push('legacy JSON remains importable without password');
+  choose(legacyPayload);await wait(()=>!q('#restore-review').hidden);check(q('#restore-summary').children.length===9,'Legacy v1 lost nine-section review');q('#cancel-restore').click();lines.push('legacy JSON remains importable without password');
   const deriveRestore=crypto.subtle.deriveKey.bind(crypto.subtle);let releaseRestore;
   crypto.subtle.deriveKey=(...args)=>new Promise(resolve=>{releaseRestore=()=>resolve(deriveRestore(...args));});
   choose(encrypted);await wait(()=>!q('#decrypt-panel').hidden);enterPassword();await wait(()=>q('#decrypt-backup').disabled);

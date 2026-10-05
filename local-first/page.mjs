@@ -1,10 +1,13 @@
-import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateRecurring, taiwanToday, LedgerError } from './ledger.mjs';
-import { readBackup, validateStorageLimits, MAX_BYTES, SECTIONS, integerValue, storedInteger } from './backup.mjs';
+import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateRecurring, updateIncome, updateAllocation, excludeSuggestion, updateAnnual, processAnnual, taiwanToday, LedgerError } from './ledger.mjs';
+import { readBackup, validateStorageLimits, MAX_BYTES, integerValue, storedInteger } from './backup.mjs';
 import {encryptBackup,decryptBackup,isEncryptedBackup,inspectEncryptedBackup,confirmBackupPassword,MAX_ENCRYPTED_BYTES,EncryptedBackupError} from './backup-crypto.mjs';
 import { categoryOptions, categoryName, cents, fixedNextMonth, fixedSettings, fixedView, recurringProgress, ValidationError } from './rules.mjs';
 import { activeExpenses, validateSearch, searchExpenses, calendarMonth, monthBudget } from './browse.mjs';
 import { validateCsvRange, expenseCsv } from './csv.mjs';
 import {comparisonDefaults,comparisonCategories,validateComparison,compareExpenses,comparisonDay,canPlotComparison} from './comparison.mjs';
+import {incomeMonth, recurringSuggestions, defaultAllocation, allocationMonth} from './income.mjs';
+import {annualItems,annualReserve} from './annual.mjs';
+import {endingSoon,usageEnd,dailyCost} from './usage.mjs';
 
 const form = document.querySelector('#expense-form');
 const fields = document.querySelector('#fields');
@@ -19,6 +22,7 @@ const restoreFile = document.querySelector('#restore-file');
 const review = document.querySelector('#restore-review');
 let db, state, editing = null, deleting = null, busy = false, writeBlocked = false;
 let editingOrigin = null, deletingOrigin = null;
+let expenseSubmissionId=null,usageStartChosen=false;
 let pendingBackup = null, selection = 0;
 let pendingEncrypted = null, exportSelection = 0;
 const decryptForm=document.querySelector('#decrypt-form'),decryptPanel=document.querySelector('#decrypt-panel');
@@ -80,6 +84,193 @@ function node(tag, text, className) {
   if (className) element.className = className;
   return element;
 }
+const annualForm=document.querySelector('#annual-form'),annualPanel=document.querySelector('#annual-management');
+const annualError=document.querySelector('#annual-error'),annualDialog=document.querySelector('#annual-dialog');
+let annualEditing=null,annualDraftId=null,annualDraft=null,annualAction=null,annualLimit=100;
+annualForm.elements.first_year.value=taiwanToday().slice(0,4);
+annualForm.elements.due_month.value=Number(taiwanToday().slice(5,7));
+annualForm.elements.due_day.value='1';
+function annualChoices() {
+  for(const [field,rows] of [['category',categoryOptions(state).filter(row=>row.active===1||row.name===annualEditing?.category).map(row=>({value:row.name,name:row.name+(row.active?'':'（已停用）')}))],
+    ['payment_source_id',state.payment_sources.filter(row=>row.active===1||row.id===annualEditing?.payment_source_id).map(row=>({value:row.id,name:row.name+(row.active?'':'（已停用）')}))]]) {
+    const select=annualForm.elements[field],value=select.value;
+    select.replaceChildren(...rows.map(row=>{const option=node('option',row.name);option.value=row.value;return option;}));
+    if(rows.some(row=>row.value===value))select.value=value;
+  }
+}
+function resetAnnual() {
+  annualForm.reset();annualEditing=null;annualDraftId=null;
+  annualForm.elements.first_year.value=taiwanToday().slice(0,4);annualForm.elements.due_month.value=Number(taiwanToday().slice(5,7));annualForm.elements.due_day.value='1';
+  document.querySelector('#annual-form-title').textContent='新增年度費用';document.querySelector('#cancel-annual-edit').hidden=true;annualChoices();
+}
+function askAnnual(operation,item) {
+  if(busy||writeBlocked)return;annualAction={operation,item:structuredClone(item)};
+  document.querySelector('#annual-dialog-title').textContent=operation==='disable'?'確認停用年度費用':'確認略過今年';
+  document.querySelector('#annual-dialog-summary').textContent=operation==='disable'
+    ? item.name+'：停止未來新期數，已到期未處理草稿仍保留；不產生或刪除消費。'
+    : item.year+'｜'+item.defaults.name+'：只略過這一次，明年仍照常；不產生消費。';
+  document.querySelector('#annual-dialog-error').textContent='';annualDialog.showModal();
+}
+function renderAnnual() {
+  annualChoices();const rules=document.querySelector('#annual-rules');rules.replaceChildren();
+  if(!state.annual_rules.length)rules.append(node('li','尚未設定年度費用。'));
+  for(const rule of state.annual_rules) {
+    const row=node('li');row.dataset.annualId=rule.id;
+    row.append(node('p',rule.name+'｜'+amountText(rule.cents)+' 元｜每年 '+rule.due_month+'/'+rule.due_day+'｜首次 '+rule.first_year+' 年｜'+rule.category+'｜'+rule.payment_source_name+(rule.active?'':'（已停用）')));
+    if(rule.active) {
+      const edit=node('button','更改年度費用');edit.type='button';edit.onclick=()=>{
+        if(busy||writeBlocked)return;annualEditing=structuredClone(rule);annualDraftId=null;annualChoices();
+        for(const key of ['name','category','payment_source_id','first_year','due_month','due_day'])annualForm.elements[key].value=rule[key];
+        annualForm.elements.amount.value=amountText(rule.cents,false);document.querySelector('#annual-form-title').textContent='更改年度費用（已開始期數保留原草稿）';
+        document.querySelector('#cancel-annual-edit').hidden=false;annualForm.elements.name.focus();
+      };
+      const stop=node('button','停用年度費用');stop.type='button';stop.onclick=()=>askAnnual('disable',rule);row.append(edit,stop);
+    }rules.append(row);
+  }
+  const periods=document.querySelector('#annual-periods'),result=annualItems(state,taiwanToday(),annualLimit);periods.replaceChildren();
+  if(!result.items.length)periods.append(node('li','目前沒有已開始的年度期數。'));
+  for(const item of result.items) {
+    const row=node('li');row.dataset.annualId=item.annual_id;row.dataset.year=item.year;
+    const voided=state.expenses.find(entry=>entry.id===item.expense_id)?.voided===1;
+    row.append(node('p',item.year+'｜'+item.defaults.name+'｜原定 '+item.due_on+'｜'+amountText(item.defaults.cents)+' 元｜'+({pending:'待記錄',recorded:'已記錄',skipped:'已略過'}[item.status])+(voided?'（消費已刪除，不會重建）':'')));
+    if(item.status==='pending') {
+      const record=node('button','記錄消費');record.type='button';record.onclick=()=>{
+        if(busy||writeBlocked)return;resetForm();annualDraft=structuredClone(item);
+        form.elements.spent_on.value=item.due_on;usageFields(null,item.due_on);form.elements.amount.value=amountText(item.defaults.cents,false);form.elements.note.value=item.defaults.name;
+        form.elements.category.value=item.defaults.category;form.elements.payment_source_id.value=item.defaults.payment_source_id;
+        document.querySelector('#form-title').textContent='記錄年度費用消費（'+item.year+' 年）';document.querySelector('#save').textContent='記錄消費';document.querySelector('#cancel-edit').hidden=false;
+        error.textContent=!form.elements.category.value||!form.elements.payment_source_id.value?'原分類或付款方式已停用，請另選有效項目。':'';
+        form.elements.amount.focus();
+      };
+      const skip=node('button','略過今年');skip.type='button';skip.onclick=()=>askAnnual('skip',item);row.append(record,skip);
+    }periods.append(row);
+  }
+  document.querySelector('#annual-more').hidden=!result.more;
+}
+document.querySelector('#annual-more').onclick=()=>{if(!busy&&!writeBlocked){annualLimit+=100;renderAnnual();}};
+document.querySelector('#annual-entry').onclick=()=>{annualPanel.open=true;};
+annualForm.onsubmit=event=>{
+  event.preventDefault();if(busy||writeBlocked)return;
+  const input=Object.fromEntries(new FormData(annualForm));
+  for(const field of ['first_year','due_month','due_day'])input[field]=/^[0-9]{1,4}$/.test(input[field])?Number(input[field]):NaN;
+  annualDraftId??='y_'+crypto.randomUUID();
+  saving(()=>updateAnnual(db,annualEditing?'update':'add',annualEditing?.id||annualDraftId,annualEditing?.revision??null,input),resetAnnual,annualError);
+};
+document.querySelector('#cancel-annual-edit').onclick=()=>{if(!busy&&!writeBlocked)resetAnnual();};
+document.querySelector('#cancel-annual').onclick=()=>{if(!busy)annualDialog.close();};
+annualDialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+annualDialog.addEventListener('close',()=>{annualAction=null;});
+document.querySelector('#confirm-annual').onclick=()=>{
+  if(busy||writeBlocked||!annualAction)return;const {operation,item}=annualAction;
+  saving(()=>operation==='disable'?updateAnnual(db,'disable',item.id,item.revision,null)
+    :processAnnual(db,'skip',item.annual_id,item.year,item.rule_revision,item.revision,null),()=>annualDialog.close(),document.querySelector('#annual-dialog-error'));
+};
+const incomePanel=document.querySelector('#income-planning'),incomeForm=document.querySelector('#income-form');
+const incomeMonthForm=document.querySelector('#income-month-form'),allocationForm=document.querySelector('#allocation-form');
+const incomeError=document.querySelector('#income-error'),incomeVoidDialog=document.querySelector('#income-void-dialog');
+let incomeViewedMonth=taiwanToday().slice(0,7),incomeLoaded=false,incomeEditing=null,incomeVoiding=null;
+let incomeDraftId=null,allocationExpected=null,allocationDirty=false;
+let incomeViewRequest=0;
+incomeMonthForm.elements.month.value=incomeViewedMonth;
+incomeForm.elements.received_on.value=taiwanToday();
+function incomeBusy(disabled) {
+  document.querySelector('#income-fields').disabled=disabled;
+  for (const id of ['confirm-income-void','cancel-income-void']) document.querySelector('#'+id).disabled=disabled;
+}
+function allocationRow(item) {
+  const row=node('div',undefined,'form-grid'); row.dataset.itemId=item.id;
+  const name=node('input'),amount=node('input');name.value=item.name;name.maxLength=30;name.dataset.field='name';
+  amount.value=amountText(item.cents,false);amount.inputMode='decimal';amount.dataset.field='amount';
+  const nameLabel=node('label','分配項目名稱'),amountLabel=node('label','分配金額（元）');nameLabel.append(name);amountLabel.append(amount);row.append(nameLabel,amountLabel);
+  const remove=node('button','移除此分配草稿項目');remove.type='button';remove.onclick=()=>{if(!busy&&!writeBlocked){row.remove();allocationDirty=true;}};row.append(remove);
+  return row;
+}
+function loadAllocation() {
+  const plan=state.monthly_allocations.find(row=>row.month===incomeViewedMonth);
+  allocationExpected=plan?.revision??null;allocationDirty=false;
+  document.querySelector('#allocation-items').replaceChildren(...(plan?.items||defaultAllocation()).map(allocationRow));
+}
+function resetIncomeForm() {
+  incomeForm.reset();incomeEditing=null;incomeDraftId=null;incomeForm.elements.received_on.value=taiwanToday();
+  document.querySelector('#income-form-title').textContent='新增已收到的收入';document.querySelector('#save-income').textContent='儲存收入';
+  document.querySelector('#cancel-income-edit').hidden=true;
+}
+function renderIncome() {
+  incomeMonthForm.elements.month.value=incomeViewedMonth;
+  const summary=incomeMonth(state,incomeViewedMonth,taiwanToday()),suggestions=recurringSuggestions(state,incomeViewedMonth);
+  const totals=document.querySelector('#income-summary');
+  totals.replaceChildren(node('h3',incomeViewedMonth),node('p','已收到的收入：'+amountText(summary.received)+' 元'),
+    node('p','已規劃的分配：'+(summary.plan?amountText(summary.allocated)+' 元':'尚未設定')),
+    node('p',summary.difference<0n?'超出本月收入 '+amountText(-summary.difference)+' 元':'尚未分配的規劃差額：'+amountText(summary.difference)+' 元'));
+  const incomes=document.querySelector('#income-list');incomes.replaceChildren();
+  if(!summary.entries.length)incomes.append(node('li','本月尚無已收到的收入。'));
+  for(const entry of summary.entries.slice().reverse()) {
+    const row=node('li');row.dataset.incomeId=entry.id;row.append(node('p',entry.received_on+'｜'+entry.name+'｜'+amountText(entry.cents)+' 元'));
+    const edit=node('button','更改收入');edit.type='button';edit.onclick=()=>{
+      if(busy||writeBlocked)return;incomeEditing=structuredClone(entry);incomeDraftId=null;
+      incomeForm.elements.received_on.value=entry.received_on;incomeForm.elements.name.value=entry.name;incomeForm.elements.amount.value=amountText(entry.cents,false);
+      document.querySelector('#income-form-title').textContent='更改已收到的收入';document.querySelector('#save-income').textContent='儲存收入更改';
+      document.querySelector('#cancel-income-edit').hidden=false;incomeForm.elements.amount.focus();
+    };
+    const remove=node('button','作廢收入');remove.type='button';remove.onclick=()=>{
+      if(busy||writeBlocked)return;incomeVoiding=structuredClone(entry);
+      document.querySelector('#income-void-summary').textContent=entry.received_on+'｜'+entry.name+'｜'+amountText(entry.cents)+' 元';incomeVoidDialog.showModal();
+    };row.append(edit,remove);incomes.append(row);
+  }
+  document.querySelector('#income-suggestion-total').textContent='生活開銷建議合計：'+amountText(suggestions.total)+' 元（只供規劃）';
+  const details=document.querySelector('#income-suggestions');details.replaceChildren();
+  if(!suggestions.items.length)details.append(node('li','本月份沒有可用定期支出建議。'));
+  for(const item of suggestions.items){
+    const row=node('li');row.append(node('p',item.kind+'｜'+item.name+'｜'+item.due_on+'｜'+amountText(item.cents)+' 元'+(item.excluded?'（已排除建議）':'')));
+    if(!item.excluded){const exclude=node('button','只排除此月份建議');exclude.type='button';exclude.onclick=()=>{
+      if(busy||writeBlocked)return;
+      saving(()=>excludeSuggestion(db,incomeViewedMonth,item.id,'month',allocationExpected),()=>{allocationExpected=state.monthly_allocations.find(row=>row.month===incomeViewedMonth).revision;},incomeError);
+    };row.append(exclude);}details.append(row);
+  }
+  const reserve=annualReserve(state,incomeViewedMonth,taiwanToday());
+  document.querySelector('#annual-reserve-total').textContent=incomeViewedMonth<taiwanToday().slice(0,7)?'往月不重新推算年度參考額，以上為當時已儲存分配。':'每月參考額合計：'+amountText(reserve.total)+' 元（另列，不套用分配）';
+  document.querySelector('#annual-reserve-items').replaceChildren(...reserve.items.map(item=>node('li',item.name+'｜年度預估 '+amountText(item.annual_cents)+' 元｜每月參考額 '+amountText(item.cents)+' 元')));
+}
+async function openIncomeMonth(month) {
+  if(busy||writeBlocked)return;
+  const request=++incomeViewRequest;
+  try{allocationMonth(month);const snapshot=await readLedger(db);if(request!==incomeViewRequest)return;const retain=incomeLoaded&&month===incomeViewedMonth&&allocationDirty;state=snapshot;incomeViewedMonth=month;incomeLoaded=true;if(!retain)loadAllocation();renderIncome();incomeError.textContent='';}
+  catch{if(request===incomeViewRequest)incomeError.textContent='無法讀取收入與分配，請確認月份並重新載入。';}
+}
+incomePanel.addEventListener('toggle',()=>{if(incomePanel.open&&!incomeLoaded)openIncomeMonth(incomeViewedMonth);});
+document.querySelector('#income-entry').onclick=()=>{incomePanel.open=true;};
+incomeMonthForm.onsubmit=event=>{
+  event.preventDefault();const month=incomeMonthForm.elements.month.value;
+  if(allocationDirty&&month!==incomeViewedMonth&&!confirm('切換月份將放棄未儲存的分配草稿；已儲存資料不變。'))return;
+  openIncomeMonth(month);
+};
+incomeForm.onsubmit=event=>{
+  event.preventDefault();if(busy||writeBlocked||!incomeLoaded)return;
+  incomeDraftId??='i_'+crypto.randomUUID();const id=incomeEditing?.id||incomeDraftId,input=Object.fromEntries(new FormData(incomeForm));
+  saving(()=>updateIncome(db,incomeEditing?'update':'add',id,incomeEditing?.revision??null,input),resetIncomeForm,incomeError);
+};
+document.querySelector('#cancel-income-edit').onclick=()=>{if(!busy&&!writeBlocked)resetIncomeForm();};
+document.querySelector('#cancel-income-void').onclick=()=>{if(!busy)incomeVoidDialog.close();};
+document.querySelector('#confirm-income-void').onclick=()=>{
+  if(busy||writeBlocked||!incomeVoiding)return;
+  saving(()=>updateIncome(db,'void',incomeVoiding.id,incomeVoiding.revision,null),()=>{incomeVoidDialog.close();incomeVoiding=null;},document.querySelector('#income-void-error'));
+};
+allocationForm.addEventListener('input',()=>{allocationDirty=true;});
+document.querySelector('#add-allocation-item').onclick=()=>{
+  if(busy||writeBlocked)return;document.querySelector('#allocation-items').append(allocationRow({id:'item_'+crypto.randomUUID(),name:'',cents:'0'}));allocationDirty=true;
+};
+document.querySelector('#apply-income-suggestion').onclick=()=>{
+  if(busy||writeBlocked||!incomeLoaded)return;
+  const value=recurringSuggestions(state,incomeViewedMonth).total;
+  let target=document.querySelector('[data-item-id="living"] [data-field="amount"]');
+  if(!target){document.querySelector('#allocation-items').append(allocationRow(defaultAllocation()[0]));target=document.querySelector('[data-item-id="living"] [data-field="amount"]');}
+  target.value=amountText(value,false);allocationDirty=true;
+};
+allocationForm.onsubmit=event=>{
+  event.preventDefault();if(busy||writeBlocked||!incomeLoaded)return;
+  const items=[...document.querySelectorAll('#allocation-items > div')].map(row=>({id:row.dataset.itemId,name:row.querySelector('[data-field="name"]').value,amount:row.querySelector('[data-field="amount"]').value}));
+  saving(()=>updateAllocation(db,incomeViewedMonth,allocationExpected,items),()=>{allocationExpected=state.monthly_allocations.find(row=>row.month===incomeViewedMonth).revision;allocationDirty=false;},incomeError);
+};
 const comparisonForm=document.querySelector('#comparison-form');
 for(const [key,value] of Object.entries(comparisonDefaults(taiwanToday())))comparisonForm.elements[key].value=value;
 let comparisonCharts=[];
@@ -178,14 +369,60 @@ function choices() {
   }
   form.elements.payment_source_id.replaceChildren(...payments);
 }
+function usageFields(row=null,date=form.elements.spent_on.value || taiwanToday()) {
+  form.elements.usage_started_on.value=row?.started_on || date;
+  form.elements.usage_days.value=row?.active===1 ? row.days : '';
+  form.elements.usage_remind.checked=row ? row.remind===1 : true;
+  form.elements.usage_reminder_days.value=row?.reminder_days ?? 7;
+  form.elements.usage_show_daily_cost.checked=row?.show_daily_cost===1;
+  document.querySelector('#usage-stop').hidden=!row || row.active!==1;
+  document.querySelector('#usage-inputs').open=row?.active===1;
+  usageStartChosen=false;
+}
+form.elements.usage_started_on.oninput=()=>{usageStartChosen=true;};
+form.elements.spent_on.onchange=()=>{
+  if(!usageStartChosen && (!editing || !state.usage_periods.some(row=>row.expense_id===editing.id)))
+    form.elements.usage_started_on.value=form.elements.spent_on.value;
+};
+document.querySelector('#usage-stop').onclick=()=>{if(!busy&&!writeBlocked){form.elements.usage_days.value='';form.elements.usage_remind.checked=false;}};
+function beginExpenseEdit(entry,origin) {
+  if(busy||writeBlocked)return;
+  annualDraft=null;expenseSubmissionId=null;editingOrigin=origin;
+  editing=structuredClone(entry);choices();error.textContent='';
+  form.elements.amount.value=amountText(entry.cents,false);form.elements.note.value=entry.note;
+  form.elements.spent_on.value=entry.spent_on;form.elements.spent_on.readOnly=entry.source!=='manual';
+  document.querySelector('#expense-date-note').hidden=entry.source==='manual';
+  form.elements.category.value=entry.category;form.elements.payment_source_id.value='';
+  usageFields(state.usage_periods.find(row=>row.expense_id===entry.id),entry.spent_on);
+  document.querySelector('#form-title').textContent='更改消費';document.querySelector('#save').textContent='儲存更改';
+  document.querySelector('#cancel-edit').hidden=false;form.elements.amount.focus();
+}
+function renderEndingSoon() {
+  const items=endingSoon(state,taiwanToday()),container=document.querySelector('#ending-soon-list');
+  container.replaceChildren();document.querySelector('#ending-soon').hidden=items.length===0;
+  for(const item of items) {
+    const row=node('li');row.append(node('p',item.name+'｜'+item.text+(item.end?'｜預計用完 '+item.end:'')));
+    const button=node('button',item.kind==='usage'?'更改／停止追蹤':'查看分期');button.type='button';
+    if(item.kind==='usage') {
+      row.dataset.expenseId=item.id;button.onclick=()=>beginExpenseEdit(state.expenses.find(entry=>entry.id===item.id),{listId:'ending-soon-list',id:item.id});
+    } else button.onclick=()=>{
+      document.querySelector('#ledger-settings').open=true;document.querySelector('#fixed-settings').open=true;
+      const target=[...document.querySelector('#fixed-list').children].find(entry=>entry.dataset.id===item.id);
+      if(target){target.tabIndex=-1;target.focus();}
+    };
+    row.append(button);container.append(row);
+  }
+}
 function resetForm() {
   const origin = editingOrigin;
   editing = null;
+  annualDraft = null;
   editingOrigin = null;
   choices();
   form.elements.amount.value = '';
   form.elements.note.value = '';
   form.elements.spent_on.value = taiwanToday();
+  expenseSubmissionId=null;usageFields();
   form.elements.spent_on.readOnly = false;
   document.querySelector('#expense-date-note').hidden = true;
   document.querySelector('#form-title').textContent = '記錄消費';
@@ -206,6 +443,9 @@ function render() {
   renderSettings();
   renderBudgets();
   renderFixed();
+  renderAnnual();
+  renderEndingSoon();
+  if (incomePanel.open && incomeLoaded) renderIncome();
   list.replaceChildren();
   const entries = activeExpenses(state, taiwanToday()).slice().reverse();
   document.querySelector('#empty').hidden = entries.length !== 0;
@@ -218,22 +458,12 @@ function expenseRow(entry) {
       const cell = node('div'); cell.append(node('small', label), node('span', value)); row.append(cell);
     }
     const buttons = node('div', undefined, 'buttons');
+    const usage=state.usage_periods.find(item=>item.expense_id===entry.id);
+    if(usage) row.append(node('p',usage.active===1 ? '使用期間：'+usage.started_on+' 起，'+usage.days+' 天；預計用完 '+usageEnd(usage)
+      +(usage.show_daily_cost===1?'；每日平均成本約 '+dailyCost(entry.cents,usage.days)+' 元／天（只供理解）':'') : '使用期間：已停止追蹤'));
     const edit = node('button', '更改'); edit.type = 'button';
     edit.onclick = () => {
-      if (busy || writeBlocked) return;
-      editingOrigin = {listId:row.parentElement.id, id:entry.id};
-      editing = structuredClone(entry); choices(); error.textContent = '';
-      form.elements.amount.value = amountText(entry.cents, false);
-      form.elements.note.value = entry.note;
-      form.elements.spent_on.value = entry.spent_on;
-      form.elements.spent_on.readOnly = entry.source !== 'manual';
-      document.querySelector('#expense-date-note').hidden = entry.source === 'manual';
-      form.elements.category.value = entry.category;
-      form.elements.payment_source_id.value = '';
-      document.querySelector('#form-title').textContent = '更改消費';
-      document.querySelector('#save').textContent = '儲存更改';
-      document.querySelector('#cancel-edit').hidden = false;
-      form.elements.amount.focus();
+      beginExpenseEdit(entry,{listId:row.parentElement.id,id:entry.id});
     };
     const remove = node('button', '刪除'); remove.type = 'button';
     remove.onclick = () => {
@@ -353,11 +583,15 @@ document.querySelector('#calendar-prev').onclick = () => moveMonth(-1);
 document.querySelector('#calendar-next').onclick = () => moveMonth(1);
 async function saving(operation, success, message = error) {
   if (busy || writeBlocked) return;
+    ++incomeViewRequest;
   let committed = false;
   const budgetControl = document.activeElement.closest('#budget-fields') ? document.activeElement : null;
   const fixedControl = document.activeElement.closest('#fixed-fields') ? document.activeElement : null;
   const budgetRow = budgetControl?.closest('#budget-setting-list > li');
   busy = true; fields.disabled = true; error.textContent = '';
+  incomeBusy(true);
+  document.querySelector('#annual-fields').disabled=true;
+  document.querySelector('#confirm-annual').disabled=true;document.querySelector('#cancel-annual').disabled=true;
   message.textContent = '';
   document.querySelector('#settings-fields').disabled = true;
   document.querySelector('#budget-fields').disabled = true;
@@ -377,13 +611,16 @@ async function saving(operation, success, message = error) {
     status.textContent = '瀏覽器本機測試帳本；儲存完成。';
   } catch (failure) {
     writeBlocked = committed;
-    if (committed) for (const modal of [dialog, settingsDialog, fixedStopDialog]) if (modal.open) modal.close();
+    if (committed) for (const modal of [dialog, settingsDialog, fixedStopDialog, incomeVoidDialog, annualDialog]) if (modal.open) modal.close();
     message.textContent = committed ? '資料已儲存，但畫面更新未完成。請重新載入確認，勿重複提交。'
       : failure instanceof LedgerError || failure instanceof ValidationError ? failure.message : '儲存未完成，請確認瀏覽器儲存空間後重試。';
     if (dialog.open) document.querySelector('#delete-error').textContent = error.textContent;
     status.textContent = committed ? message.textContent : '瀏覽器本機測試帳本；此次儲存未完成。';
   } finally {
     busy = false; fields.disabled = writeBlocked;
+    incomeBusy(writeBlocked);
+    document.querySelector('#annual-fields').disabled=writeBlocked;
+    document.querySelector('#confirm-annual').disabled=writeBlocked;document.querySelector('#cancel-annual').disabled=writeBlocked;
     document.querySelector('#settings-fields').disabled = writeBlocked;
     document.querySelector('#budget-fields').disabled = writeBlocked;
     document.querySelector('#setting-fields').disabled = writeBlocked;
@@ -480,7 +717,15 @@ function renderFixed() {
         document.querySelector('#fixed-stop-error').textContent = ''; fixedStopDialog.showModal();
       };
       buttons.append(edit);
-      buttons.append(stop); row.append(buttons);
+      buttons.append(stop);
+      const excluded = state.allocation_preferences.some(item => item.recurring_id === rule.id);
+      const suggestion = node(excluded ? 'p' : 'button', excluded ? '已排除往後分配建議' : '往後不顯示分配建議'); if (!excluded) suggestion.type = 'button';
+      suggestion.onclick = () => {
+        if (busy || writeBlocked) return;
+        if (!confirm('往後不顯示此項目的分配建議；原定期支出仍照原規則執行。')) return;
+        saving(() => excludeSuggestion(db,taiwanToday().slice(0,7),rule.id,'future',null), () => {}, document.querySelector('#fixed-error'));
+      };
+      if (!excluded) buttons.append(suggestion); else row.append(suggestion); row.append(buttons);
     }
     listElement.append(row);
   }
@@ -639,9 +884,15 @@ settingsDialog.addEventListener('cancel', event => { if (busy) event.preventDefa
 settingsDialog.addEventListener('close', () => { setting = null; });
 form.addEventListener('submit', event => {
   event.preventDefault();
+  if(busy||writeBlocked)return;
   const input = Object.fromEntries(new FormData(form));
+  if(form.elements.usage_days.value.trim())input.usage={started_on:form.elements.usage_started_on.value,days:Number(form.elements.usage_days.value),
+    remind:Number(form.elements.usage_remind.checked),reminder_days:form.elements.usage_reminder_days.value.trim()===''?NaN:Number(form.elements.usage_reminder_days.value),show_daily_cost:Number(form.elements.usage_show_daily_cost.checked),active:1};
+  else if(editing && state.usage_periods.some(row=>row.expense_id===editing.id))input.usage=null;
   const today = taiwanToday();
-  saving(() => editing ? editExpense(db, editing.id, editing.revision, input, today) : addExpense(db, input, today), resetForm);
+  expenseSubmissionId ??= 'e_'+crypto.randomUUID();
+  saving(() => annualDraft ? processAnnual(db,'record',annualDraft.annual_id,annualDraft.year,annualDraft.rule_revision,annualDraft.revision,input)
+    : editing ? editExpense(db, editing.id, editing.revision, input, today) : addExpense(db, input, today,expenseSubmissionId), resetForm);
 });
 document.querySelector('#cancel-edit').onclick = () => { if (!busy) { const origin = resetForm(); error.textContent = ''; returnToExpense(origin); } };
 document.querySelector('#cancel-delete').onclick = () => dialog.close();
@@ -677,8 +928,9 @@ document.querySelector('#start-ledger').onclick = async () => {
 document.querySelector('#choose-restore').onclick = () => { if (!busy) restoreFile.click(); };
 function prepareRestore(payload){
   const backup=readBackup(payload);validateStorageLimits(backup);
-  const labels={expenses:'消費',categories:'分類',payment_sources:'付款方式',budgets:'預算',recurring_rules:'定期規則',recurring_versions:'歷史版本',shortcuts:'捷徑',actions:'操作紀錄',settings:'設定'};
-  document.querySelector('#restore-summary').replaceChildren(...SECTIONS.map(section=>node('li',`${labels[section]}：${section==='settings'?1:backup.data[section].length} 項`)));
+  const labels={expenses:'消費',categories:'分類',payment_sources:'付款方式',budgets:'預算',recurring_rules:'定期規則',recurring_versions:'歷史版本',shortcuts:'捷徑',actions:'消費操作紀錄',settings:'設定',incomes:'收入',income_actions:'收入操作紀錄',monthly_allocations:'月份分配',allocation_preferences:'往後建議排除',annual_rules:'年度費用',annual_periods:'年度期數',usage_periods:'使用期間'};
+  document.querySelector('#restore-format').textContent=`備份 JSON v${backup.version}${backup.version >= 2 ? '（舊 Python 不支援）' : ''}`;
+  document.querySelector('#restore-summary').replaceChildren(...Object.keys(backup.data).map(section=>node('li',`${labels[section]}：${section==='settings'?1:backup.data[section].length} 項`)));
   pendingBackup=payload;pendingEncrypted=null;decryptForm.reset();decryptPanel.hidden=true;review.hidden=false;
   document.querySelector('#restore-title').focus();
 }
@@ -801,7 +1053,7 @@ exportForm.onsubmit = async event => {
     if(currentSelection!==exportSelection)return;
     const url = URL.createObjectURL(new Blob([payload], { type: encrypted?'application/octet-stream':'application/json;charset=utf-8' }));
     const link = document.createElement('a');
-    link.href = url; link.download = encrypted?'life-ledger-encrypted-backup-v1.llbk':'life-ledger-backup-v1.json'; link.click();
+    link.href = url; link.download = encrypted?'life-ledger-encrypted-backup-v1.llbk':`life-ledger-backup-v${readBackup(payload).version}.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     resetExport();exportPanel.hidden=true;
     status.textContent = '已要求瀏覽器下載完整備份；尚未確認檔案已保存。請確認檔案存在，並妥善保管備份與密碼。';

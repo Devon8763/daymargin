@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.13.14</p>
+  <p id="page-version">目前使用頁面版本：0.16.1</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -39,12 +39,12 @@
     <div id="restore-review" hidden>
       <h3 id="restore-title" tabindex="-1">確認還原至空白帳本</h3>
       <p>僅能還原到完全空白的本機測試帳本。請確認下列資料筆數：</p>
-      <ul id="restore-summary"></ul>
+      <p id="restore-format"></p><ul id="restore-summary"></ul>
       <div class="buttons"><button id="confirm-restore" type="button">確認還原</button><button id="cancel-restore" type="button">取消</button></div>
     </div>
   </section>
   <div id="ledger-page" hidden>
-  <p><a href="#expense-comparison">支出比較</a></p>
+  <p><a href="#expense-comparison">支出比較</a> · <a id="income-entry" href="#income-planning">收入與每月分配</a> · <a id="annual-entry" href="#annual-management">年度費用</a></p>
   <section aria-labelledby="form-title">
     <h2 id="form-title">記錄消費</h2>
     <form id="expense-form">
@@ -57,9 +57,27 @@
           <label>付款方式<select name="payment_source_id"></select></label>
         </div>
         <p id="expense-date-note" hidden>自動來源消費的原入帳日期不可更改；本次操作只影響這一筆消費。</p>
+        <details id="usage-inputs">
+          <summary>使用期間（選填）</summary>
+          <p>起始日算第 1 天，只是使用估計，不代表實際庫存。未填天數維持一般記帳；清空已保存的天數可停止追蹤，不刪除消費。</p>
+          <div class="form-grid">
+            <label>使用起始日<input name="usage_started_on" type="date"></label>
+            <label>可使用天數<input name="usage_days" type="number" min="1" max="36500" step="1"></label>
+            <label class="usage-checkbox"><input name="usage_remind" type="checkbox" checked>開啟快結束提示</label>
+            <label>提前提醒天數<input name="usage_reminder_days" type="number" min="0" max="36500" step="1" value="7"></label>
+            <label class="usage-checkbox"><input name="usage_show_daily_cost" type="checkbox">顯示每日平均成本（約數，元／天）</label>
+          </div>
+          <button id="usage-stop" type="button" hidden>停止追蹤／不再提醒（儲存後生效）</button>
+        </details>
         <div class="buttons"><button type="submit" id="save">儲存消費</button><button type="button" id="cancel-edit" hidden>取消更改</button></div>
       </fieldset>
     </form>
+  </section>
+  <section id="ending-soon" aria-labelledby="ending-soon-title" hidden>
+    <details><summary id="ending-soon-title">快結束</summary>
+      <p>使用天數是估計；分期顯示未處理期數（撤銷的已入帳期仍算已處理）。只供查看，不補記消費。</p>
+      <ul id="ending-soon-list"></ul>
+    </details>
   </section>
   <section id="budget-overview" aria-labelledby="budget-title">
     <h2 id="budget-title">本月預算</h2>
@@ -173,6 +191,69 @@
     <p id="comparison-error" role="alert"></p>
     <div id="comparison-results" aria-live="polite"></div>
   </section>
+  <section aria-label="收入與每月分配">
+    <details id="income-planning">
+      <summary>收入與每月分配</summary>
+      <p>收入是已收到的錢；分配只是用途規劃，不是消費、轉帳或實際存款餘額。</p>
+      <fieldset id="income-fields">
+        <form id="income-month-form" novalidate><label>查看收入與分配月份<input name="month" type="month" required></label><button type="submit">查看月份</button></form>
+        <div id="income-summary" aria-live="polite"></div>
+        <h3 id="income-form-title">新增已收到的收入</h3>
+        <form id="income-form" novalidate>
+          <div class="form-grid">
+            <label>收到日期<input name="received_on" type="date" required></label>
+            <label>收入金額（元）<input name="amount" type="text" inputmode="decimal" required autocomplete="off"></label>
+            <label>收入來源名稱<input name="name" type="text" maxlength="200" required autocomplete="off"></label>
+          </div>
+          <div class="buttons"><button id="save-income" type="submit">儲存收入</button><button id="cancel-income-edit" type="button" hidden>取消收入更改</button></div>
+        </form>
+        <ul id="income-list"></ul>
+        <h3>已規劃的分配</h3>
+        <p>未儲存時只有生活開銷草稿；不自動複製上月或套用建議。0 元表示暫不分配。</p>
+        <form id="allocation-form" novalidate>
+          <div id="allocation-items"></div>
+          <div class="buttons"><button id="add-allocation-item" type="button">新增分配項目</button><button type="submit">儲存本月分配</button></div>
+        </form>
+        <h3>生活開銷建議</h3>
+        <p>本月應扣款的啟用固定／訂閱／分期，含尚未到期項目，只供規劃參考；這裡不補記消費。排除建議不會停用扣款規則。</p>
+        <p id="income-suggestion-total"></p>
+        <button id="apply-income-suggestion" type="button">將建議合計填入生活開銷草稿</button>
+        <details><summary>查看建議明細與本月排除</summary><ul id="income-suggestions"></ul></details>
+        <h3>年度費用建議預留</h3>
+        <p>依目前年度設定計算的每月參考額，向上取至分；不是已存入或尚欠金額，不會套用分配。往月只保留已儲存規劃，不重算年度參考額。</p>
+        <p id="annual-reserve-total"></p>
+        <details><summary>查看年度費用每月參考明細</summary><ul id="annual-reserve-items"></ul></details>
+      </fieldset>
+      <p id="income-error" role="alert"></p>
+    </details>
+  </section>
+  <section aria-label="年度費用">
+    <details id="annual-management">
+      <summary>年度費用與待確認消費</summary>
+      <p>每年重複；短月取月底。到期月份開始可處理草稿，確認前不算支出。更改只影響尚未開始的期數；停用仍保留已到期未處理項目。</p>
+      <fieldset id="annual-fields">
+        <h3 id="annual-form-title">新增年度費用</h3>
+        <form id="annual-form" novalidate>
+          <div class="form-grid">
+            <label>年度費用名稱<input name="name" maxlength="200" required autocomplete="off"></label>
+            <label>預估年度金額（元）<input name="amount" inputmode="decimal" required autocomplete="off"></label>
+            <label>分類<select name="category" required></select></label>
+            <label>預設付款方式<select name="payment_source_id" required></select></label>
+            <label>首次到期年份<input name="first_year" inputmode="numeric" required></label>
+            <label>到期月份（1～12）<input name="due_month" inputmode="numeric" required></label>
+            <label>到期日（1～31，短月取月底）<input name="due_day" inputmode="numeric" required></label>
+          </div>
+          <div class="buttons"><button type="submit">儲存年度費用</button><button id="cancel-annual-edit" type="button" hidden>取消更改</button></div>
+        </form>
+        <ul id="annual-rules"></ul>
+        <h3>年度期數處理狀態</h3>
+        <p>「記錄消費」帶入上方既有記帳表單；取消填寫不會略過期數。「略過今年」只影響當次。已記錄的消費即使刪除，也不會重建。</p>
+        <ul id="annual-periods"></ul>
+        <button id="annual-more" type="button" hidden>顯示更多年度期數</button>
+      </fieldset>
+      <p id="annual-error" role="alert"></p>
+    </details>
+  </section>
   <section id="data-management" aria-labelledby="data-management-title" hidden>
     <h2 id="data-management-title">資料管理</h2>
     <p id="storage-status" role="status">正在查詢本來源的瀏覽器儲存狀態……</p>
@@ -200,6 +281,7 @@
     <div id="export-panel" hidden>
       <h3>完整備份方式</h3>
       <p>備份密碼不會加密瀏覽器帳本；本頁不保存密碼或金鑰，忘記密碼無法取回。Python Web 尚未被取代。</p>
+      <p>含收入／分配使用 JSON v2，含年度費用／期數使用 JSON v3；舊 Python／舊版 local-first 不支援，不可刪去新資料後當作完整帳本搬移。加密封裝仍為 v1。</p>
       <form id="export-form" novalidate autocomplete="off">
         <fieldset id="export-inputs">
           <label>備份方式<select id="export-mode"><option value="encrypted" selected>加密備份（建議）</option><option value="plain">不加密備份</option></select></label>
@@ -244,6 +326,16 @@
   <p>此筆將標記為已刪除，帳目與操作紀錄仍會保留。</p>
   <p id="delete-error" role="alert"></p>
   <div class="buttons"><button id="confirm-delete" type="button">確認刪除</button><button id="cancel-delete" type="button">取消</button></div>
+</dialog>
+<dialog id="income-void-dialog" aria-labelledby="income-void-title">
+  <h2 id="income-void-title">確認作廢收入</h2><p id="income-void-summary"></p>
+  <p id="income-void-error" role="alert"></p>
+  <p>此筆將作廢；收入與操作紀錄保留，不改寫已儲存分配。</p>
+  <div class="buttons"><button id="confirm-income-void" type="button">確認作廢收入</button><button id="cancel-income-void" type="button">取消</button></div>
+</dialog>
+<dialog id="annual-dialog" aria-labelledby="annual-dialog-title">
+  <h2 id="annual-dialog-title"></h2><p id="annual-dialog-summary"></p><p id="annual-dialog-error" role="alert"></p>
+  <div class="buttons"><button id="confirm-annual" type="button">確認</button><button id="cancel-annual" type="button">取消</button></div>
 </dialog>
 </body>
 </html>

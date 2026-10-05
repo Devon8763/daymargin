@@ -1,0 +1,66 @@
+import * as ledger from '../local-first/ledger.mjs';
+import {emptyData,readBackup,writeBackup,SECTIONS} from '../local-first/backup.mjs';
+import {addState,STORES} from '../local-first/idb.mjs';
+import {incomeMonth} from '../local-first/income.mjs';
+import {encryptBackup,decryptBackup} from '../local-first/backup-crypto.mjs';
+const q=document.querySelector('#result'),lines=[],check=(value,message)=>{if(!value)throw new Error(message);};
+const request=req=>new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});
+const done=tx=>new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});
+const text=bytes=>new TextDecoder().decode(bytes),input=(amount='0.10')=>({received_on:ledger.taiwanToday(),amount,name:'<img src=x onerror=alert(1)>合成收入'});
+const fault=(db,abort=false,method='put')=>({name:db.name,transaction(...args){const tx=db.transaction(...args),original=tx.objectStore.bind(tx);let failed=false;tx.objectStore=name=>{const store=original(name),write=store[method].bind(store);store[method]=(...values)=>{if(!abort)throw new DOMException('private-synthetic','QuotaExceededError');const req=write(...values);req.addEventListener('success',()=>{if(!failed){failed=true;tx.abort();}});return req;};return store;};return tx;}});
+let db,peer,restored;
+try{
+  check(location.hostname==='127.0.0.1'&&Number(location.port)>=19000,'Isolated source required');
+  const bytes=new Uint8Array(await (await fetch('/tests/fixtures/portable_life_ledger.json')).arrayBuffer());
+  const legacy={format:'local-first-test-ledger',version:2,owner:'local-test-owner',...readBackup(bytes).data};
+  const name='income-upgrade-'+crypto.randomUUID();let old;
+  // Create the exact prior v2 row stores, not a fixture in the new schema.
+  const oldName=name+'-rows',opening=indexedDB.open(oldName,2);
+  opening.onupgradeneeded=()=>{for(const section of [...SECTIONS,'meta'])opening.result.createObjectStore(section,{keyPath:'key'});};
+  old=await request(opening);let tx=old.transaction([...SECTIONS,'meta'],'readwrite');addState(tx,legacy);await done(tx);old.close();
+  let upgraded=await ledger.openDatabase(oldName);check(upgraded.version===5,'Expected v5');
+  check(text(await ledger.exportPortableBackup(upgraded))===text(writeBackup({format:'life-ledger-backup',version:1,data:readBackup(bytes).data})),'V2 upgrade changed original backup');
+  upgraded.close();lines.push('v2 to v5 upgrade preserves nine-section bytes and action order');
+  // Corrupt old metadata must abort upgrade and leave the complete old schema.
+  const badName=name+'-bad',badOpen=indexedDB.open(badName,2);badOpen.onupgradeneeded=()=>{for(const section of [...SECTIONS,'meta'])badOpen.result.createObjectStore(section,{keyPath:'key'});};
+  old=await request(badOpen);tx=old.transaction([...SECTIONS,'meta'],'readwrite');addState(tx,legacy);tx.objectStore('meta').put({key:'row_count',value:0});await done(tx);old.close();
+  let refused=false;try{(await ledger.openDatabase(badName)).close();}catch{refused=true;}check(refused,'Corrupt migration accepted');
+  old=await request(indexedDB.open(badName,2));check(old.objectStoreNames.length===10&&!old.objectStoreNames.contains('incomes'),'Failed upgrade left partial stores');old.close();lines.push('corrupt upgrade abort leaves original v2 schema and rows');
+  db=await ledger.openDatabase();await ledger.initializeLedger(db);peer=await ledger.openDatabase();const month=ledger.taiwanToday().slice(0,7);
+  await ledger.updateIncome(db,'add','i_one',null,input());await ledger.updateIncome(db,'add','i_two',null,input('0.20'));
+  let state=await ledger.readLedger(db);check(incomeMonth(state,month).received===30n,'Exact total');
+  const rejected=async operation=>{const before=text(await ledger.exportPortableBackup(db));let failed=false;try{await operation();}catch{failed=true;}check(failed&&text(await ledger.exportPortableBackup(db))===before,'Failure did not fully roll back');};
+  await rejected(()=>ledger.updateIncome(peer,'add','i_one',null,input()));
+  await ledger.updateIncome(peer,'update','i_one',0,input('.11'));
+  await rejected(()=>ledger.updateIncome(db,'update','i_one',0,input('.12')));
+  for(const op of [()=>ledger.updateIncome(fault(db),'add','i_fail',null,input()),()=>ledger.updateIncome(fault(db,true),'update','i_one',1,input('.99')),()=>ledger.updateIncome(fault(db,true),'void','i_one',1,null)])await rejected(op);
+  lines.push('exact incomes, repeated/stale peer operations, quota and request-success abort roll back all rows');
+  const plan=[{id:'living',name:'生活開銷',amount:'1'},{id:'item_one',name:'<img src=x onerror=alert(2)>',amount:'2'}];
+  state=await ledger.updateAllocation(db,month,null,plan);const originalPlans=JSON.stringify(state.monthly_allocations);
+  await ledger.updateIncome(db,'void','i_two',0,null);state=await ledger.readLedger(db);
+  check(JSON.stringify(state.monthly_allocations)===originalPlans&&incomeMonth(state,month).received===11n,'Income changed saved allocation');
+  await rejected(()=>ledger.updateAllocation(peer,month,null,plan));await rejected(()=>ledger.updateAllocation(fault(db,true),month,0,plan));
+  lines.push('saved plans stay independent; same-month peer and aborted writes cannot overwrite');
+  const financeBefore=JSON.stringify([state.incomes,state.income_actions,state.monthly_allocations,state.allocation_preferences]);
+  const expenseForm={amount:'.17',note:'合成消費',spent_on:ledger.taiwanToday(),category:'餐飲',payment_source_id:'p_cash'};
+  state=await ledger.addExpense(db,expenseForm,ledger.taiwanToday());const expense=state.expenses.at(-1);
+  state=await ledger.editExpense(db,expense.id,0,{...expenseForm,amount:'.19'},ledger.taiwanToday());
+  state=await ledger.voidExpense(db,expense.id,1);
+  check(JSON.stringify([state.incomes,state.income_actions,state.monthly_allocations,state.allocation_preferences])===financeBefore,'Consumption modified finance data');
+  check((await ledger.readLedger(db)).expenses.at(-1).voided===1,'V2 consumption metadata invalid');
+  lines.push('consumption add/edit/void preserves all finance sections and exact v2 capacity metadata');
+  const payload=await ledger.exportPortableBackup(db);check(readBackup(payload).version===2&&Object.keys(readBackup(payload).data).length===13,'Finance omitted from backup');
+  const encrypted=await encryptBackup(payload,'synthetic-income-password');
+  check(text(await decryptBackup(encrypted,'synthetic-income-password'))===text(payload),'Encrypted v2 bytes changed');
+  restored=await ledger.openDatabase(ledger.DB_NAME+'-portable-checks');
+  for(const abort of [false,true]){let failed=false;try{await ledger.restorePortableBackup(fault(restored,abort,'add'),payload);}catch{failed=true;}check(failed&&await ledger.readLedgerIfPresent(restored)===null,'Failed restore left a partial ledger');}
+  await rejected(()=>ledger.updateIncome(fault(db),'update','i_one',1,input()));
+  await ledger.restorePortableBackup(restored,payload);
+  check(text(await ledger.exportPortableBackup(restored))===text(payload),'Restored all sections/order differ');
+  let duplicate=false;try{await ledger.restorePortableBackup(restored,payload);}catch{duplicate=true;}check(duplicate,'Duplicate restore accepted');
+  lines.push('encrypted JSON v2 round-trip and blank atomic restore preserve 13 sections, snapshots and order');
+  const baseline=text(await ledger.exportPortableBackup(db));await ledger.readLedger(db);check(text(await ledger.exportPortableBackup(db))===baseline,'Readonly query changed ledger');
+  db.close();db=await ledger.openDatabase();check(text(await ledger.exportPortableBackup(db))===baseline,'Close/reopen lost data');
+  lines.push('readonly and close/reopen preserve the complete backup');
+  q.textContent='PASS：'+lines.length+' 組收入與分配原生交易驗證\n'+lines.join('\n');
+}catch(error){q.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{db?.close();peer?.close();restored?.close();}

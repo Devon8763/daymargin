@@ -2,7 +2,13 @@
 
 0.13.6，2026-10-02。**僅供合成資料測試，請勿輸入真實帳目。** 帳本開啟不需密碼；IndexedDB 未加密，Python Web 尚未被取代。密碼只保護下載檔，忘記密碼無法取回；不加密 JSON 可被任何取得檔案的人讀取。
 
+0.14.0 相容補充（2026-10-04）：二進位封裝仍是 v1，現在承載完整 JSON v1／v2；解密後依同一驗證入口顯示九／十三類筆數。JSON v2 完整保留收入／分配與原九類，現有 Python／舊 local-first 會拒絕；內部版本選擇與 IndexedDB v3 升級見[收入備份契約](local-first-income-backup-format.md)。下列封裝演算法、容量、密碼及安全限制均不變。
+
+0.15.0 相容補充（2026-10-04）：封裝仍為 v1，可承載 JSON v3／十五類年度資料，解密後沿用完整驗證；演算法、密碼及容量不變。現有 Python 安全拒絕 v3；IndexedDB v4 及還原限制見[年度備份契約](local-first-annual-backup-format.md)。
+
 ## 二進位格式（`.llbk`）
+
+0.16.0 相容補充（2026-10-05）：同一封裝 v1 可承載完整 JSON v4／十六類使用期間資料，解密後才由既有完整驗證檢查消費引用、日期、天數與追蹤狀態；不得省略停止或撤銷歷史。舊 v1／v2／v3 仍可匯入，現有 Python／舊 local-first 安全拒絕 v4；詳見[使用期間契約](local-first-usage-backup-format.md)。加密參數、檔案容量與密碼規則不變。
 
 封裝版本與內部 JSON 版本獨立。沒有壓縮、Base64、附帶帳目名稱或明文摘要。所有多位元組整數均為 unsigned big-endian；長度以 bytes 計。
 
@@ -15,7 +21,7 @@
 | 11 | 4 | Iterations：只接受 `600000` |
 | 15 | 16 | 每次由 `crypto.getRandomValues` 產生的新 salt |
 | 31 | 12 | 每次產生的新 AES-GCM IV |
-| 43 | 4 | 原始 JSON v1 UTF-8 明文長度 |
+| 43 | 4 | 原始完整 JSON（v1／v2／v3／v4）UTF-8 明文長度 |
 | 47 | 明文長度 | AES-GCM ciphertext |
 | 47 + 明文長度 | 16 | Authentication tag |
 

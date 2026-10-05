@@ -1,0 +1,54 @@
+import * as ledger from '../local-first/ledger.mjs';
+const q=selector=>document.querySelector(selector),check=(value,message)=>{if(!value)throw new Error(message);};
+const wait=async predicate=>{for(let i=0;i<300;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('UI timeout');};
+const report=document.createElement('pre');report.id='usage-test-result';document.body.prepend(report);
+const name=ledger.DB_NAME+'-usage-ui-'+crypto.randomUUID(),open=indexedDB.open.bind(indexedDB);indexedDB.open=(value,version)=>open(value===ledger.DB_NAME?name:value,version);
+const db=await ledger.openDatabase(),lines=[],today=ledger.taiwanToday();await ledger.initializeLedger(db);
+try {
+  await import('../local-first/page.mjs');await wait(()=>!q('#ledger-page').hidden);
+  const usageInputs=q('#usage-inputs');
+  check(usageInputs?.tagName==='DETAILS'&&!usageInputs.open&&!q('#fields').disabled,'Missing optional collapsed usage fields');
+  usageInputs.open=true;
+  for(const [name,text] of [['usage_remind','開啟快結束提示'],['usage_show_daily_cost','顯示每日平均成本（約數，元／天）']]){
+    const checkbox=form.elements[name],label=checkbox.closest('label'),textNode=[...label.childNodes].find(node=>node.nodeType===Node.TEXT_NODE&&node.textContent.includes(text));
+    check(label&&textNode&&label.textContent.includes(text),'Checkbox label is not associated: '+name);
+    check(checkbox.tabIndex===0,'Checkbox is not keyboard focusable: '+name);
+    check(name==='usage_remind'?checkbox.checked:!checkbox.checked,'Checkbox default changed: '+name);
+    const before=checkbox.checked;label.click();check(checkbox.checked!==before,'Clicking checkbox text does not toggle: '+name);checkbox.checked=before;
+    const checkboxRect=checkbox.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(textNode);
+    const textRect=range.getBoundingClientRect();
+    check(Math.abs(checkboxRect.top-textRect.top)<4&&textRect.left>=checkboxRect.right,'Checkbox and text are not adjacent on one line: '+name);
+  }
+  check(document.documentElement.scrollWidth<=window.innerWidth,'Usage form overflows viewport');
+  usageInputs.open=false;
+  check(q('#ending-soon').hidden,'Empty reminder area shown');
+  const form=q('#expense-form');form.elements.amount.value='100.01';form.elements.note.value='合成商品';form.requestSubmit();await wait(()=>q('#expenses').children.length===1);
+  check((await ledger.readLedger(db)).usage_periods.length===0,'Quick add created tracking');lines.push('optional collapsed fields preserve fast add and hide empty reminders');
+  q('#expenses button').click();check(form.elements.usage_started_on.value===today,'Start default differs');
+  form.elements.spent_on.value=today.slice(0,7)+'-01';form.elements.spent_on.dispatchEvent(new Event('change'));
+  check(form.elements.usage_started_on.value===form.elements.spent_on.value,'Unsaved usage default did not follow edited consumption date');
+  form.elements.usage_started_on.value=today;form.elements.usage_started_on.dispatchEvent(new Event('input'));
+  form.elements.usage_days.value='7';form.elements.usage_remind.checked=true;form.elements.usage_show_daily_cost.checked=true;form.requestSubmit();await wait(()=>!q('#ending-soon').hidden);
+  check(q('#ending-soon-list').textContent.includes('剩 6 天')&&q('#expenses').textContent.includes('約 14.2871 元／天'),'Reminder/daily cost missing');
+  check(q('#budget-spent').textContent.includes('100.01 元'),'Cost doubled consumption');lines.push('existing edit adds usage and refreshes exact cost without doubling spending');
+  q('#ending-soon-list button').click();form.elements.spent_on.value=today.slice(0,7)+'-01';form.elements.spent_on.dispatchEvent(new Event('change'));form.requestSubmit();await wait(()=>q('#status').textContent.includes('儲存完成')&&q('#form-title').textContent==='記錄消費');
+  let state=await ledger.readLedger(db);check(state.usage_periods[0].started_on===today,'Date edit moved start');lines.push('shared reminder edit retains saved start while manual consumption date changes');
+  q('#ending-soon-list button').click();form.elements.usage_days.value='0';form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait(()=>q('#error').textContent.length>0);check(form.elements.usage_days.value==='0','Invalid input discarded');
+  form.elements.usage_days.value='180';const before=(await ledger.exportPortableBackup(db)).toString(),transaction=IDBDatabase.prototype.transaction;
+  IDBDatabase.prototype.transaction=function(...args){if(this.name===name&&args[1]==='readwrite')throw new DOMException('private-detail','QuotaExceededError');return transaction.apply(this,args);};
+  form.requestSubmit();await wait(()=>q('#status').textContent.includes('此次儲存未完成'));check(form.elements.usage_days.value==='180'&&!q('#error').textContent.includes('private-detail'),'Failure lost input or leaked');
+  IDBDatabase.prototype.transaction=transaction;check((await ledger.exportPortableBackup(db)).toString()===before,'Failure changed data');lines.push('validation and storage failures retain usage draft with safe errors');
+  q('#usage-stop').click();form.requestSubmit();await wait(()=>q('#ending-soon').hidden);state=await ledger.readLedger(db);check(state.expenses.length===1&&state.usage_periods[0].active===0,'Stop deleted consumption/history');
+  q('#expenses button').click();form.elements.usage_days.value='1';form.elements.usage_remind.checked=true;form.requestSubmit();await wait(()=>!q('#ending-soon').hidden);
+  check(q('#ending-soon-list').textContent.includes('今天預計用完'),'One-day today wrong');lines.push('stop and resume via existing form preserve original consumption and history');
+  q('#expenses button:last-child').click();q('#confirm-delete').click();await wait(()=>q('#ending-soon').hidden);check((await ledger.readLedger(db)).usage_periods.length===1,'Void removed tracking history');lines.push('confirmed soft deletion suppresses reminder without deleting usage row');
+  form.elements.amount.value='.29';form.elements.note.value='<img src=x onerror=alert(1)>';form.elements.usage_days.value='1';form.requestSubmit();await wait(()=>!q('#ending-soon').hidden);
+  check(q('#ending-soon-list').textContent.includes('<img')&&!q('#ending-soon-list img')&&!q('#expenses img')&&!q('#expenses').textContent.includes('每日平均成本'),'XSS or daily-cost default');
+  lines.push('malicious consumption names remain text; new daily cost is opt-in');
+  const fixed=q('#fixed-form');fixed.elements.kind.value='分期';fixed.elements.kind.dispatchEvent(new Event('change'));fixed.elements.name.value='合成末期';fixed.elements.amount.value='.29';fixed.elements.due_day.value='1';fixed.elements.periods.value='2';fixed.requestSubmit();
+  await wait(()=>q('#fixed-list').textContent.includes('合成末期'));q('#fixed-sync').click();await wait(()=>q('#ending-soon-list').textContent.includes('剩 1 期'));
+  const buttons=[...q('#ending-soon-list').querySelectorAll('button')];buttons.find(button=>button.textContent==='查看分期').click();
+  check(q('#fixed-settings').open&&q('#ending-soon-list').textContent.includes('今天預計用完'),'Shared reminder navigation lost one kind');
+  lines.push('one shared collapsed reminder distinguishes usage days and last installment with direct settings navigation');
+  report.textContent='PASS：'+lines.length+' 組使用期間畫面驗證\n'+lines.join('\n');
+}catch(error){report.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{db.close();}
