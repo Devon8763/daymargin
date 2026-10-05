@@ -1,6 +1,6 @@
 import {readBackup,validateStorageLimits,MAX_BYTES} from './backup.mjs';
 
-const MAGIC=new Uint8Array([76,76,66,75,69,78,67,0]); // LLBKENC\0; independent envelope, not JSON v2.
+const MAGIC=new Uint8Array([76,76,66,75,69,78,67,0]); // LLBKENC\0; envelope version is independent of the ledger JSON version.
 const HEADER=47, TAG=16, ITERATIONS=600000;
 export const MAX_ENCRYPTED_BYTES=MAX_BYTES+HEADER+TAG;
 export class EncryptedBackupError extends Error {
@@ -50,6 +50,6 @@ export async function decryptBackup(payload,password){
   let plain;
   try{plain=new Uint8Array(await crypto.subtle.decrypt(parameters(header),derived,payload.subarray(HEADER)));}
   catch{throw new EncryptedBackupError('密碼錯誤或備份檔已損壞，無法解密。');}
-  // Authentication is not ledger validation; keep the one existing JSON v1 contract.
+  // Authentication is not ledger validation; reuse the full JSON v1/v2 validator.
   validateStorageLimits(readBackup(plain));return plain;
 }

@@ -1,5 +1,6 @@
 import * as distribution from './vendor/lossless-json-4.3.1/lossless-json.js';
 import { isoDate } from './rules.mjs';
+import {usageInput} from './usage.mjs';
 
 // Official UMD exports in Node; its browser global is created by the same local file.
 const { parse, stringify } = distribution.default ?? globalThis.LosslessJSON;
@@ -17,6 +18,23 @@ const FIELDS = {
   actions: ['id', 'expense_id', 'before', 'undone'],
 };
 export const SECTIONS = [...Object.keys(FIELDS), 'settings'];
+export const INCOME_FIELDS = ['id', 'received_on', 'cents', 'name', 'voided', 'revision'];
+const FINANCE_FIELDS = {
+  incomes: INCOME_FIELDS,
+  income_actions: ['id', 'income_id', 'before', 'undone'],
+  monthly_allocations: ['month', 'items', 'excluded_recurring_ids', 'revision'],
+  allocation_preferences: ['recurring_id', 'excluded_from_month', 'revision'],
+};
+export const FINANCE_SECTIONS = Object.keys(FINANCE_FIELDS);
+export const V2_SECTIONS = [...SECTIONS, ...FINANCE_SECTIONS];
+const ANNUAL_FIELDS = {
+  annual_rules:['id','name','cents','category','payment_source_id','payment_source_name','first_year','due_month','due_day','effective_month','active','revision'],
+  annual_periods:['annual_id','year','defaults','status','expense_id','revision'],
+};
+export const ANNUAL_SECTIONS = Object.keys(ANNUAL_FIELDS);
+export const V3_SECTIONS = [...V2_SECTIONS,...ANNUAL_SECTIONS];
+const USAGE_FIELDS = {usage_periods:['expense_id','started_on','days','remind','reminder_days','show_daily_cost','active','revision']};
+export const ALL_SECTIONS = [...V3_SECTIONS,...Object.keys(USAGE_FIELDS)];
 export class BackupError extends Error {
   constructor(kind) { super('生活帳本備份資料異常：' + kind); this.code = 'backup'; }
 }
@@ -71,17 +89,20 @@ function expense(row, payments, rules) {
   if (periods && BigInt(offset) >= periods) invalid('分期月份');
 }
 
-export function emptyData() {
-  return { expenses: [], categories: [], payment_sources: [], budgets: [], recurring_rules: [], recurring_versions: [], shortcuts: [], actions: [], settings: { reminder_levels: null, recording_started_on: null } };
+export function emptyData(version = 1) {
+  return { expenses: [], categories: [], payment_sources: [], budgets: [], recurring_rules: [], recurring_versions: [], shortcuts: [], actions: [], settings: { reminder_levels: null, recording_started_on: null },
+    ...(version >= 2 ? Object.fromEntries(FINANCE_SECTIONS.map(section => [section, []])) : {}),
+    ...(version >= 3 ? Object.fromEntries(ANNUAL_SECTIONS.map(section => [section, []])) : {}),
+    ...(version >= 4 ? {usage_periods:[]} : {}) };
 }
 export function validateBackup(bundle) {
   shape(bundle, ['format', 'version', 'data'], '格式');
   if (bundle.format !== 'life-ledger-backup') invalid('格式／版本');
-  integerValue(bundle.version, 1n, 1n);
-  const data = bundle.data; shape(data, SECTIONS, '生活帳本');
+  const version = integerValue(bundle.version, 1n, 4n);
+  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : ALL_SECTIONS, '生活帳本');
   let count = 0;
   const ids = [];
-  for (const [section, fields] of Object.entries(FIELDS)) {
+  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {})})) {
     const rows = data[section];
     if (!Array.isArray(rows)) invalid(section + '結構');
     count += rows.length; if (count > 100000) invalid('資料筆數上限');
@@ -146,6 +167,75 @@ export function validateBackup(bundle) {
     const exact = levels.map(level => integerValue(level, 1n, 1000n)); unique(exact, '提醒門檻');
   }
   if (data.settings.recording_started_on !== null) iso(data.settings.recording_started_on);
+  if (version >= 2n) {
+    const income = row => {
+      shape(row, INCOME_FIELDS, '收入'); iso(row.received_on); amount(row.cents); text(row.name);
+      if ([...row.name].length > 200 || /[\u0000-\u001f]/u.test(row.name)) invalid('收入名稱');
+      integerValue(row.voided, 0n, 1n); integerValue(row.revision);
+    };
+    for (const row of data.incomes) income(row);
+    const incomes = new Map(data.incomes.map(row => [row.id, row]));
+    for (const row of data.income_actions) {
+      const current = incomes.get(row.income_id);
+      if (typeof row.income_id !== 'string' || !current) invalid('操作收入引用');
+      integerValue(row.undone, 0n, 1n);
+      if (row.before !== null) { income(row.before); if (row.before.id !== row.income_id) invalid('收入快照引用'); }
+    }
+    for (const row of data.monthly_allocations) {
+      iso(row.month, true); integerValue(row.revision);
+      if (!Array.isArray(row.items) || row.items.length > 100) invalid('分配項目');
+      for (const item of row.items) {
+        shape(item, ['id', 'name', 'cents'], '分配項目');
+        if (typeof item.id !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(item.id)) invalid('分配識別');
+        text(item.name); if ([...item.name].length > 30 || /[\u0000-\u001f]/u.test(item.name)) invalid('分配名稱');
+        amount(item.cents, true);
+      }
+      unique(row.items.map(item => item.id), '分配項目'); unique(row.items.map(item => item.name), '分配名稱');
+      if (!Array.isArray(row.excluded_recurring_ids) || row.excluded_recurring_ids.some(id => typeof id !== 'string' || !rules.has(id))) invalid('月份排除引用');
+      unique(row.excluded_recurring_ids, '月份排除');
+    }
+    unique(data.monthly_allocations.map(row => row.month), '分配月份');
+    for (const row of data.allocation_preferences) {
+      if (typeof row.recurring_id !== 'string' || !rules.has(row.recurring_id)) invalid('建議規則引用');
+      iso(row.excluded_from_month, true); integerValue(row.revision);
+    }
+    unique(data.allocation_preferences.map(row => row.recurring_id), '建議排除');
+  }
+  if (version >= 3n) {
+    const defaults = row => {
+      text(row.name); text(row.category); text(row.payment_source_name); amount(row.cents);
+      if ([...row.name].length > 200 || /[\u0000-\u001f]/u.test(row.name)) invalid('年度名稱');
+      if (typeof row.payment_source_id !== 'string' || !payments.has(row.payment_source_id)) invalid('年度付款引用');
+    };
+    for (const row of data.annual_rules) {
+      defaults(row); integerValue(row.first_year,1n,9999n); integerValue(row.due_month,1n,12n); integerValue(row.due_day,1n,31n);
+      iso(row.effective_month,true); integerValue(row.active,0n,1n); integerValue(row.revision);
+    }
+    const annual = new Set(data.annual_rules.map(row => row.id));
+    for (const row of data.annual_periods) {
+      if (typeof row.annual_id !== 'string' || !annual.has(row.annual_id)) invalid('年度規則引用');
+      integerValue(row.year,1n,9999n); integerValue(row.revision);
+      shape(row.defaults,['name','cents','category','payment_source_id','payment_source_name','due_on'],'年度草稿');
+      defaults(row.defaults); iso(row.defaults.due_on);
+      if (Number(row.defaults.due_on.slice(0,4)) !== Number(row.year)) invalid('年度草稿年份');
+      if (!['pending','recorded','skipped'].includes(row.status)) invalid('年度處理狀態');
+      if (row.status === 'recorded') {
+        const entry = expenses.get(row.expense_id);
+        if (typeof row.expense_id !== 'string' || !entry || entry.source !== 'manual' || entry.recurring_id !== null || entry.period !== null) invalid('年度消費引用');
+      } else if (row.expense_id !== null) invalid('年度消費引用');
+    }
+    unique(data.annual_periods.map(row => row.annual_id+'\0'+row.year),'年度期數');
+    unique(data.annual_periods.filter(row => row.status === 'recorded').map(row => row.expense_id),'年度消費');
+  }
+  if (version >= 4n) {
+    for (const row of data.usage_periods) {
+      if (typeof row.expense_id!=='string' || !expenses.has(row.expense_id)) invalid('使用期間消費引用');
+      integerValue(row.revision);
+      try { usageInput(Object.fromEntries(['started_on','days','remind','reminder_days','show_daily_cost','active'].map(key=>[key,row[key]]))); }
+      catch { invalid('使用期間'); }
+    }
+    unique(data.usage_periods.map(row=>row.expense_id),'使用期間');
+  }
   return bundle;
 }
 export function validateStorageLimits(bundle) {

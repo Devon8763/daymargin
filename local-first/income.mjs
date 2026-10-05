@@ -1,0 +1,46 @@
+import {isoDate, money, pythonStrip, cents, fixedSettings, fixedDueDate, recurringProgress, ValidationError} from './rules.mjs';
+
+export const allocationMonth = value => { isoDate(value + '-01'); return value; };
+export const defaultAllocation = () => [{id:'living', name:'生活開銷', cents:'0'}];
+export function incomeName(value, limit = 200) {
+  const name = pythonStrip(value);
+  if (!name || [...name].length > limit || /[\u0000-\u001f]/u.test(name)) throw new ValidationError(`名稱需 1～${limit} 字，不可包含控制字元。`);
+  return name;
+}
+export function incomeInput(form, today) {
+  if (!form || Object.keys(form).length !== 3 || !['amount','received_on','name'].every(key => Object.hasOwn(form,key))) throw new ValidationError('收入欄位不符合規則。');
+  const received_on = isoDate(form.received_on);
+  if (received_on > isoDate(today)) throw new ValidationError('收入只記錄已收到的錢，日期不可晚於台灣今天。');
+  return {received_on, cents:money(form.amount), name:incomeName(form.name)};
+}
+export function allocationInput(items) {
+  if (!Array.isArray(items) || items.length > 100) throw new ValidationError('分配最多 100 個項目。');
+  return items.map(item => {
+    if (!item || Object.keys(item).length !== 3 || !['id','name','amount'].every(key => Object.hasOwn(item,key))) throw new ValidationError('分配欄位不符合規則。');
+    const zero = typeof item.amount === 'string' && /^0+(?:\.0{0,2})?$/.test(item.amount.trim());
+    return {id:item.id, name:incomeName(item.name,30), cents:zero ? '0' : money(item.amount)};
+  });
+}
+export function incomeMonth(state, month, today = '9999-12-31') {
+  allocationMonth(month); isoDate(today);
+  const entries = (state.incomes || []).filter(row => row.voided === 0 && row.received_on.slice(0,7) === month && row.received_on <= today);
+  const plan = (state.monthly_allocations || []).find(row => row.month === month) || null;
+  const received = entries.reduce((sum,row) => sum + cents(row.cents),0n);
+  const allocated = (plan?.items || []).reduce((sum,row) => sum + cents(row.cents),0n);
+  return {entries, plan, received, allocated, difference:received-allocated};
+}
+export function recurringSuggestions(state, month) {
+  allocationMonth(month);
+  const monthly = new Set(state.monthly_allocations?.find(row => row.month === month)?.excluded_recurring_ids || []);
+  const future = new Set((state.allocation_preferences || []).filter(row => row.excluded_from_month <= month).map(row => row.recurring_id));
+  const items = [];
+  for (const rule of state.recurring_rules) {
+    if (rule.active !== 1 || rule.start_month > month || recurringProgress(state,rule).complete) continue;
+    const offset = (Number(month.slice(0,4))-Number(rule.start_month.slice(0,4)))*12 + Number(month.slice(5))-Number(rule.start_month.slice(5));
+    if (rule.kind === '分期' && BigInt(offset) >= BigInt(rule.periods)) continue;
+    const settings = fixedSettings(state,rule,month);
+    items.push({id:rule.id, kind:rule.kind, name:settings.name, cents:settings.cents,
+      due_on:fixedDueDate(month,settings.due_day), excluded:monthly.has(rule.id) || future.has(rule.id), future:future.has(rule.id)});
+  }
+  return {items, total:items.filter(row => !row.excluded).reduce((sum,row) => sum+cents(row.cents),0n)};
+}

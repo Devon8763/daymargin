@@ -31,6 +31,63 @@ def synthetic_payload(helper):
 
 
 class BrowserPortableBackupTests(unittest.TestCase):
+    def test_usage_json_v4_safely_rejects_in_python_without_changes(self):
+        code = """
+import {emptyData,writeBackup} from './local-first/backup.mjs';
+const data=emptyData(4);
+data.payment_sources=[{id:'p_cash',name:'現金',active:1}];
+data.expenses=[{id:'e_usage',spent_on:'2026-10-01',cents:'29',category:'餐飲',note:'合成商品',source:'manual',recurring_id:null,period:null,voided:1,payment_source_id:'p_cash',payment_source_name:'現金',kind:'consumption',revision:1}];
+data.usage_periods=[{expense_id:'e_usage',started_on:'2026-10-01',days:7,remind:1,reminder_days:7,show_daily_cost:0,active:0,revision:1}];
+process.stdout.write(writeBackup({format:'life-ledger-backup',version:4,data}));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['version'], 4)
+        before = self.helper.snapshot()
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            self.helper.bk.read_backup(result.stdout)
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            existing.service.restore_portable_backup('target', result.stdout)
+        self.assertEqual(self.helper.snapshot(), before)
+
+    def test_annual_json_v3_safely_rejects_in_python_without_changes(self):
+        code = """
+import {emptyData,writeBackup} from './local-first/backup.mjs';
+import {changeAnnual} from './local-first/ledger.mjs';
+import {portable} from './local-first/idb.mjs';
+const state={format:'local-first-test-ledger',version:4,owner:'local-test-owner',...emptyData(3),payment_sources:[{id:'p_cash',name:'現金',active:1}]};
+const changed=changeAnnual(state,'add','y_one',null,{name:'合成年度',amount:'.29',category:'餐飲',payment_source_id:'p_cash',first_year:2026,due_month:5,due_day:31},'2026-05-01');
+process.stdout.write(writeBackup(portable(changed)));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['version'], 3)
+        before = self.helper.snapshot()
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            self.helper.bk.read_backup(result.stdout)
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            existing.service.restore_portable_backup('target', result.stdout)
+        self.assertEqual(self.helper.snapshot(), before)
+
+    def test_finance_json_v2_is_explicitly_rejected_by_unchanged_python(self):
+        code = """
+import {readBackup,emptyData,writeBackup} from './local-first/backup.mjs';
+import {changeIncome} from './local-first/ledger.mjs';
+import {portable} from './local-first/idb.mjs';
+const state={format:'local-first-test-ledger',version:3,owner:'local-test-owner',...emptyData(2)};
+const changed=changeIncome(state,'add','i_received',null,{received_on:'2025-02-01',amount:'.29',name:'合成收入'},'2025-02-28');
+process.stdout.write(writeBackup(portable(changed)));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['version'], 2)
+        before = self.helper.snapshot()
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            self.helper.bk.read_backup(result.stdout)
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            existing.service.restore_portable_backup('target', result.stdout)
+        self.assertEqual(self.helper.snapshot(), before)
+
     def setUp(self):
         self.helper = existing.PortableLifeBackupTests('test_full_roundtrip_preserves_meaning_settings_and_history')
         self.helper.setUp()

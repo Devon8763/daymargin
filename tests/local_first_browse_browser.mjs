@@ -4,6 +4,7 @@ import { addState } from '../local-first/idb.mjs';
 import { monthBudget } from '../local-first/browse.mjs';
 
 const check = (value, message) => { if (!value) throw new Error(message); };
+const wait = async predicate => { for (let i=0;i<200;i++) { if (predicate()) return; await new Promise(resolve=>setTimeout(resolve,20)); } throw new Error('Search result timeout'); };
 const amountText = total => { const fraction=(total%100n).toString().padStart(2,'0').replace(/0+$/,'');return (total/100n).toString()+(fraction?'.'+fraction:''); };
 const report = document.createElement('pre');
 document.body.prepend(report);
@@ -59,7 +60,7 @@ try {
 
   form.elements.keyword.value = '<img src=x';
   form.requestSubmit();
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await wait(() => document.querySelector('#search-results').textContent.includes('<img src=x'));
   check(document.querySelector('#search-results').textContent.includes('<img src=x'), 'Malicious text missing');
   check(!document.querySelector('#search-results img') && !window.__synthetic_xss, 'Search executed HTML');
   check(!location.search && performance.getEntriesByType('resource').every(item => new URL(item.name).origin === location.origin),

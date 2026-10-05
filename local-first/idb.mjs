@@ -1,4 +1,4 @@
-import { emptyData, SECTIONS, writeBackup } from './backup.mjs';
+import { emptyData, SECTIONS as LEGACY_SECTIONS, ALL_SECTIONS as SECTIONS, FINANCE_SECTIONS, ANNUAL_SECTIONS, V2_SECTIONS, V3_SECTIONS, writeBackup } from './backup.mjs';
 
 export class StorageError extends Error {
   constructor(code = 'storage', message = '本機測試帳本資料不完整，請保留資料並停止操作。') {
@@ -10,25 +10,34 @@ const OWNER = 'local-test-owner';
 const HEADER = ['format', 'version', 'owner'];
 export const STORES = [...SECTIONS, 'meta'];
 const fail = () => { throw new StorageError(); };
-export const portable = state => ({ format: 'life-ledger-backup', version: 1,
-  data: Object.fromEntries(SECTIONS.map(section => [section, state[section]])) });
+export const portable = state => {
+  const annual = ANNUAL_SECTIONS.some(section => state[section]?.length);
+  const extended = FINANCE_SECTIONS.some(section => state[section]?.length);
+  const usage = state.usage_periods?.length;
+  return {format:'life-ledger-backup', version:usage ? 4 : annual ? 3 : extended ? 2 : 1,
+    data:Object.fromEntries((usage ? SECTIONS : annual ? V3_SECTIONS : extended ? V2_SECTIONS : LEGACY_SECTIONS).map(section => [section,state[section] || []]))};
+};
 
 export function rowKey(section, row) {
   if (section === 'categories') return row.name;
   if (section === 'budgets') return [row.month, row.category];
   if (section === 'recurring_versions') return [row.recurring_id, row.effective_month];
   if (section === 'settings') return 'settings';
+  if (section === 'annual_periods') return [row.annual_id,row.year];
+  if (section === 'usage_periods') return row.expense_id;
+  if (section === 'monthly_allocations') return row.month;
+  if (section === 'allocation_preferences') return row.recurring_id;
   return row.id;
 }
 
 function checkedLegacy(state, marker, keys) {
   const legacy = state?.version === 1;
-  const fields = [...HEADER, ...(legacy ? ['expenses', 'actions', 'categories', 'payment_sources'] : SECTIONS)];
+  const fields = [...HEADER, ...(legacy ? ['expenses', 'actions', 'categories', 'payment_sources'] : LEGACY_SECTIONS)];
   if (keys.length !== 2 || !keys.includes('created') || !keys.includes(OWNER) || marker !== 1 ||
       !state || state.format !== 'local-first-test-ledger' || state.owner !== OWNER ||
       ![1, 2].includes(state.version) || Object.keys(state).length !== fields.length ||
       fields.some(field => !Object.hasOwn(state, field))) fail();
-  const full = legacy ? { ...emptyData(), ...state, version: 2 } : state;
+  const full = { ...emptyData(4), ...state, version:5 };
   try { writeBackup(portable(full)); } catch { fail(); }
   return full;
 }
@@ -36,13 +45,13 @@ function checkedLegacy(state, marker, keys) {
 export function metadata(state) {
   const bytes = writeBackup(portable(state)).byteLength;
   const rowCount = SECTIONS.filter(section => section !== 'settings')
-    .reduce((total, section) => total + state[section].length, 0);
+    .reduce((total, section) => total + (state[section]?.length || 0), 0);
   return { created: 1, next_action_order: state.actions.length, row_count: rowCount, backup_bytes: bytes };
 }
 
 export function addState(tx, state) {
   for (const section of SECTIONS) {
-    const rows = section === 'settings' ? [state.settings] : state[section];
+    const rows = section === 'settings' ? [state.settings] : state[section] || [];
     rows.forEach((row, position) => tx.objectStore(section).add({ key: rowKey(section, row), position, value: row }));
   }
   for (const [key, value] of Object.entries(metadata(state))) tx.objectStore('meta').add({ key, value });
@@ -56,7 +65,7 @@ function snapshotFrom(records) {
   if (records.meta.length !== 4 || meta.created !== 1 || !Number.isSafeInteger(meta.next_action_order) ||
       !Number.isSafeInteger(meta.row_count) || !Number.isSafeInteger(meta.backup_bytes) ||
       records.settings.length !== 1 || meta.next_action_order !== rows.actions.length) fail();
-  const state = { format: 'local-first-test-ledger', version: 2, owner: OWNER, ...rows, settings: rows.settings[0] };
+  const state = { format: 'local-first-test-ledger', version: 5, owner: OWNER, ...rows, settings: rows.settings[0] };
   let actual;
   try { actual = metadata(state); } catch { fail(); }
   if (actual.row_count !== meta.row_count || actual.backup_bytes !== meta.backup_bytes ||
@@ -94,7 +103,7 @@ export function readSnapshot(db, optional = false) {
 export function openLedgerDatabase(name) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const request = indexedDB.open(name, 2);
+    const request = indexedDB.open(name, 5);
     const rejectSafe = message => {
       if (!settled) { settled = true; reject(new StorageError('storage', message)); }
     };
@@ -103,6 +112,15 @@ export function openLedgerDatabase(name) {
       const tx = request.transaction;
       if (settled) { tx.abort(); return; }
       try {
+        if ([2,3,4].includes(event.oldVersion)) {
+          const previous = [...(event.oldVersion === 2 ? LEGACY_SECTIONS : event.oldVersion === 3 ? V2_SECTIONS : V3_SECTIONS), 'meta'];
+          if (db.objectStoreNames.length !== previous.length || previous.some(section => !db.objectStoreNames.contains(section))) fail();
+          for (const section of SECTIONS.filter(section=>!previous.includes(section))) db.createObjectStore(section,{keyPath:'key'});
+          // Validate every original row and metadata in the upgrade transaction.
+          // Empty new stores keep the original JSON v1 bytes and metadata intact.
+          scanTransaction(tx, () => {}, () => {});
+          return;
+        }
         if (event.oldVersion !== 0 && (event.oldVersion !== 1 || db.objectStoreNames.length !== 1 ||
             !db.objectStoreNames.contains('ledger'))) fail();
         for (const section of STORES) db.createObjectStore(section, { keyPath: 'key' });

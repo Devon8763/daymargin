@@ -35,6 +35,7 @@ test('comparison module and reused Chart.js are local, byte-identical and retain
   const response=await get(port,'/local-first/vendor/chartjs-4.5.1/chart.umd.min.js');
   assert.equal(response.status,200);security(response.headers);assert.deepEqual(response.body,await readFile(new URL('chart.umd.min.js',directory)));
   assert.equal((await get(port,'/local-first/comparison.mjs')).status,200);
+  assert.equal((await get(port,'/local-first/income.mjs')).status,200);
   for(const path of ['/web/static/vendor/chartjs-4.5.1/','/local-first/vendor/chartjs-4.5.1/provenance.json','/local-first/vendor/chartjs-4.5.1/chart.umd.min.js.map'])assert.equal((await get(port,path)).status,404);
 }));
 
@@ -47,7 +48,7 @@ test('fixed entry constants and Windows launcher preserve failures without chang
   assert.ok(!/(?<!\r)\n/.test(text),'CMD must use CRLF');
 });
 test('required local assets are byte-identical, correctly typed and covered by CSP',async()=>withServer(async port=>{
-  const paths=['index.html','style.css','page.mjs','rules.mjs','browse.mjs','csv.mjs','ledger.mjs','idb.mjs','backup.mjs','backup-crypto.mjs','sw.js','vendor/lossless-json-4.3.1/lossless-json.js'];
+  const paths=['index.html','style.css','page.mjs','rules.mjs','income.mjs','annual.mjs','usage.mjs','browse.mjs','csv.mjs','ledger.mjs','idb.mjs','backup.mjs','backup-crypto.mjs','sw.js','vendor/lossless-json-4.3.1/lossless-json.js'];
   for(const name of paths){const response=await get(port,'/local-first/'+name);assert.equal(response.status,200,name);security(response.headers);
     assert.deepEqual(response.body,await readFile(new URL('../local-first/'+name,import.meta.url)),name);
     assert.match(response.headers['content-type'],name.endsWith('.css')?/^text\/css/:name.endsWith('.html')?/^text\/html/:/^text\/javascript/);

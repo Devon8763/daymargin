@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
 const source = await readFile(new URL('../local-first/sw.js', import.meta.url), 'utf8');
-const required = ['/local-first/', '/local-first/index.html', '/local-first/style.css', '/local-first/page.mjs', '/local-first/ledger.mjs', '/local-first/idb.mjs', '/local-first/rules.mjs', '/local-first/browse.mjs', '/local-first/csv.mjs', '/local-first/comparison.mjs', '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js', '/local-first/backup.mjs', '/local-first/backup-crypto.mjs', '/local-first/vendor/lossless-json-4.3.1/lossless-json.js'];
+assert.match(source, /const CACHE = 'local-first-offline-0\.16\.1-v1';/);
+const required = ['/local-first/', '/local-first/index.html', '/local-first/style.css', '/local-first/page.mjs', '/local-first/ledger.mjs', '/local-first/idb.mjs', '/local-first/rules.mjs', '/local-first/income.mjs', '/local-first/annual.mjs', '/local-first/usage.mjs', '/local-first/browse.mjs', '/local-first/csv.mjs', '/local-first/comparison.mjs', '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js', '/local-first/backup.mjs', '/local-first/backup-crypto.mjs', '/local-first/vendor/lossless-json-4.3.1/lossless-json.js'];
 
 function worker({ broken = '', existing = new Map() } = {}) {
   const handlers = new Map();
@@ -72,8 +73,8 @@ test('missing asset prevents readiness and failed update leaves old cache', asyn
   assert.ok(sw.storage.has('local-first-offline-previous'));
   assert.deepEqual([...sw.storage.get('local-first-offline-previous').keys()], ['/local-first/']);
 });
-test('missing comparison or Chart.js prevents offline readiness without touching the previous cache',async()=>{
-  for(const broken of ['/local-first/comparison.mjs','/local-first/vendor/chartjs-4.5.1/chart.umd.min.js']){
+test('missing income, comparison or Chart.js prevents offline readiness without touching the previous cache',async()=>{
+  for(const broken of ['/local-first/income.mjs', '/local-first/annual.mjs', '/local-first/usage.mjs','/local-first/comparison.mjs','/local-first/vendor/chartjs-4.5.1/chart.umd.min.js']){
     const old=new Map([['local-first-offline-previous',new Map([['/local-first/',{path:'/local-first/'}]])]]);
     const sw=worker({broken,existing:old});await assert.rejects(sw.run('install'));assert.equal(await sw.ready(),false);
     assert.deepEqual([...sw.storage.get('local-first-offline-previous').keys()],['/local-first/']);
