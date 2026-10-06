@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.16.1</p>
+  <p id="page-version">目前使用頁面版本：0.17.0</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -72,6 +72,28 @@
         <div class="buttons"><button type="submit" id="save">儲存消費</button><button type="button" id="cancel-edit" hidden>取消更改</button></div>
       </fieldset>
     </form>
+  </section>
+  <section aria-label="操作捷徑">
+    <div id="shortcut-quick" class="buttons"></div>
+    <details id="shortcut-settings">
+      <summary>操作捷徑管理</summary>
+      <p>首頁依手動順序顯示最多 3 個啟用捷徑。點選只替換未儲存的記帳欄位，不帶使用期間；請確認後記錄消費。設定與來源消費各自獨立。</p>
+      <form id="shortcut-form" novalidate>
+        <fieldset id="shortcut-fields">
+          <h3 id="shortcut-form-title">新增捷徑</h3>
+          <div class="form-grid">
+            <label>捷徑名稱<input name="name" type="text" autocomplete="off"></label>
+            <label>捷徑消費項目<input name="note" type="text" autocomplete="off"></label>
+            <label>捷徑分類<select name="category"></select></label>
+            <label>捷徑付款方式<select name="payment_source_id"></select></label>
+            <label>預設金額（元，選填）<input name="amount" type="text" inputmode="decimal" autocomplete="off"></label>
+          </div>
+          <div class="buttons"><button id="save-shortcut" type="submit">儲存捷徑</button><button id="cancel-shortcut" type="button">取消／清空捷徑草稿</button></div>
+        </fieldset>
+      </form>
+      <p id="shortcut-error" role="alert"></p>
+      <ul id="shortcut-list"></ul>
+    </details>
   </section>
   <section id="ending-soon" aria-labelledby="ending-soon-title" hidden>
     <details><summary id="ending-soon-title">快結束</summary>

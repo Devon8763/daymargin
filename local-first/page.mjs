@@ -1,7 +1,7 @@
-import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateRecurring, updateIncome, updateAllocation, excludeSuggestion, updateAnnual, processAnnual, taiwanToday, LedgerError } from './ledger.mjs';
+import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateRecurring, updateIncome, updateAllocation, excludeSuggestion, updateAnnual, processAnnual, updateShortcut, shortcutDraft, taiwanToday, LedgerError } from './ledger.mjs';
 import { readBackup, validateStorageLimits, MAX_BYTES, integerValue, storedInteger } from './backup.mjs';
 import {encryptBackup,decryptBackup,isEncryptedBackup,inspectEncryptedBackup,confirmBackupPassword,MAX_ENCRYPTED_BYTES,EncryptedBackupError} from './backup-crypto.mjs';
-import { categoryOptions, categoryName, cents, fixedNextMonth, fixedSettings, fixedView, recurringProgress, ValidationError } from './rules.mjs';
+import { categoryOptions, categoryName, cents, orderedShortcuts, fixedNextMonth, fixedSettings, fixedView, recurringProgress, ValidationError } from './rules.mjs';
 import { activeExpenses, validateSearch, searchExpenses, calendarMonth, monthBudget } from './browse.mjs';
 import { validateCsvRange, expenseCsv } from './csv.mjs';
 import {comparisonDefaults,comparisonCategories,validateComparison,compareExpenses,comparisonDay,canPlotComparison} from './comparison.mjs';
@@ -84,6 +84,92 @@ function node(tag, text, className) {
   if (className) element.className = className;
   return element;
 }
+const shortcutForm=document.querySelector('#shortcut-form'),shortcutError=document.querySelector('#shortcut-error');
+let shortcutEditing=null,shortcutSource=null,shortcutExpected=null,shortcutId=null;
+function shortcutChoices(target,snapshot,row=null,message=shortcutError) {
+  for(const [key,options,value] of [
+    ['category',categoryOptions(snapshot).filter(item=>item.active===1).map(item=>({value:item.name,name:item.name})),row?.category],
+    ['payment_source_id',snapshot.payment_sources.filter(item=>item.active===1).map(item=>({value:item.id,name:item.name})),row?.payment_source_id]]) {
+    const elements=options.map(item=>{const option=node('option',item.name);option.value=item.value;return option;});
+    if(row && !options.some(item=>item.value===value)) {
+      const missing=node('option',key==='category' ? value+'（已失效，請改選）' : '原付款方式已失效，請改選');
+      missing.value=value ?? '';missing.disabled=true;elements.push(missing);
+      message.textContent='分類或付款方式已失效，請改選有效選項；不會自動啟用。';
+    }
+    target.elements[key].replaceChildren(...elements);if(row)target.elements[key].value=value ?? '';
+  }
+}
+function resetShortcut() {
+  shortcutEditing=null;shortcutSource=null;shortcutId=null;shortcutForm.reset();
+  shortcutExpected=structuredClone(state.shortcuts);shortcutChoices(shortcutForm,state);
+  document.querySelector('#shortcut-form-title').textContent='新增捷徑';
+}
+async function shortcutRead(action,message=shortcutError) {
+  if(busy || writeBlocked)return;
+  busy=true;fields.disabled=true;document.querySelector('#shortcut-fields').disabled=true;message.textContent='';
+  try {action(await readLedger(db));}
+  catch(failure){message.textContent=failure instanceof LedgerError || failure instanceof ValidationError ? failure.message : '無法讀取捷徑，請重新載入後再試。';}
+  finally {busy=false;fields.disabled=writeBlocked;document.querySelector('#shortcut-fields').disabled=writeBlocked;}
+}
+function startShortcut(snapshot,values=null,id=null,source=null) {
+  shortcutEditing=id;shortcutSource=source;shortcutId=id || 's_'+crypto.randomUUID();shortcutExpected=structuredClone(snapshot.shortcuts);
+  shortcutForm.reset();shortcutChoices(shortcutForm,snapshot,values);
+  if(values)for(const key of ['name','note','amount'])shortcutForm.elements[key].value=values[key];
+  document.querySelector('#shortcut-form-title').textContent=id ? '更改捷徑' : '新增捷徑';
+  document.querySelector('#shortcut-settings').open=true;shortcutForm.elements.name.focus();
+}
+function applyShortcut(expected) {
+  if(editing || annualDraft)return;
+  shortcutRead(snapshot=>{
+    const row=snapshot.shortcuts.find(item=>item.id===expected.id&&item.active===1);
+    if(!row || Object.keys(expected).some(key=>key==='position' ? integerValue(row[key])!==integerValue(expected[key]) : row[key]!==expected[key]))
+      throw new LedgerError('conflict','捷徑已變更，請重新載入後再使用。');
+    resetForm();shortcutChoices(form,snapshot,row,error);
+    form.elements.amount.value=row.cents===null ? '' : amountText(row.cents,false);form.elements.note.value=row.note;
+    form.elements.spent_on.value=taiwanToday();usageFields();
+    document.querySelector('#save').textContent='記錄消費';document.querySelector('#cancel-edit').hidden=false;
+    form.elements.amount.focus();
+  },error);
+}
+function renderShortcuts() {
+  if(shortcutExpected===null) {shortcutExpected=structuredClone(state.shortcuts);shortcutChoices(shortcutForm,state);}
+  else shortcutChoices(shortcutForm,state,{category:shortcutForm.elements.category.value,payment_source_id:shortcutForm.elements.payment_source_id.value});
+  const active=orderedShortcuts(state),quick=document.querySelector('#shortcut-quick'),all=document.querySelector('#shortcut-list');
+  quick.replaceChildren();all.replaceChildren();
+  if(!active.length) {
+    const create=node('button','建立操作捷徑');create.type='button';create.onclick=()=>shortcutRead(snapshot=>startShortcut(snapshot));quick.append(create);
+  }
+  for(const row of active.slice(0,3)) {
+    const button=node('button',row.name);button.type='button';button.disabled=editing!==null||annualDraft!==null;
+    button.onclick=()=>applyShortcut(structuredClone(row));quick.append(button);
+  }
+  for(const row of [...active,...state.shortcuts.filter(item=>item.active!==1)]) {
+    const item=node('li');item.dataset.id=row.id;
+    const payment=state.payment_sources.find(option=>option.id===row.payment_source_id);
+    item.append(node('p',row.name+'｜'+row.note+'｜'+row.category+'｜'+payment.name+(payment.active!==1?'（已失效）':'')+'｜'+(row.cents===null?'金額未設定':amountText(row.cents)+' 元')+(row.active!==1?'｜已停用':'')));
+    if(row.active===1)for(const [operation,label] of [['update','更改'],['up','上移'],['down','下移'],['disable','停用']]) {
+      const button=node('button',label);button.type='button';button.dataset.operation=operation;
+      button.disabled=(operation==='up'&&active[0].id===row.id)||(operation==='down'&&active.at(-1).id===row.id);
+      const expected=structuredClone(state.shortcuts);
+      button.onclick=()=>{
+        if(busy||writeBlocked)return;
+        if(operation==='update') {shortcutError.textContent='';startShortcut(state,{...row,amount:row.cents===null?'':amountText(row.cents,false)},row.id);}
+        else {
+          const known=shortcutExpected.length===expected.length && shortcutExpected.every((item,index)=>
+            Object.keys(item).every(key=>key==='position' ? integerValue(item[key])===integerValue(expected[index][key]) : item[key]===expected[index][key]));
+          saving(()=>updateShortcut(db,expected,operation,row.id),()=>{if(known)shortcutExpected=structuredClone(state.shortcuts);},shortcutError);
+        }
+      };item.append(button);
+    }
+    all.append(item);
+  }
+}
+shortcutForm.onsubmit=event=>{
+  event.preventDefault();const expected=shortcutExpected,source=shortcutSource,operation=shortcutEditing?'update':'add';
+  shortcutId ??= 's_'+crypto.randomUUID();const id=shortcutId,input=Object.fromEntries(new FormData(shortcutForm));
+  saving(()=>updateShortcut(db,expected,operation,id,input,source),resetShortcut,shortcutError);
+};
+document.querySelector('#cancel-shortcut').onclick=()=>{if(!busy&&!writeBlocked){resetShortcut();shortcutError.textContent='';}};
 const annualForm=document.querySelector('#annual-form'),annualPanel=document.querySelector('#annual-management');
 const annualError=document.querySelector('#annual-error'),annualDialog=document.querySelector('#annual-dialog');
 let annualEditing=null,annualDraftId=null,annualDraft=null,annualAction=null,annualLimit=100;
@@ -439,6 +525,7 @@ function returnToExpense(origin) {
   target.focus();
 }
 function render() {
+  renderShortcuts();
   comparisonChoices();
   renderSettings();
   renderBudgets();
@@ -474,7 +561,13 @@ function expenseRow(entry) {
       document.querySelector('#delete-summary').textContent = `${entry.spent_on}｜${entry.note}｜${amountText(entry.cents)} 元｜${entry.category}｜${entry.payment_source_name}`;
       dialog.showModal();
     };
-    buttons.append(edit, remove);
+    buttons.append(edit);
+    if(entry.source==='manual' && !(state.annual_periods || []).some(item=>item.expense_id===entry.id)) {
+      const shortcut=node('button','建立捷徑');shortcut.type='button';shortcut.dataset.operation='shortcut';
+      shortcut.onclick=()=>shortcutRead(snapshot=>startShortcut(snapshot,shortcutDraft(snapshot,entry.id,entry.revision,taiwanToday()),null,{id:entry.id,revision:entry.revision}));
+      buttons.append(shortcut);
+    }
+    buttons.append(remove);
     row.append(buttons); return row;
 }
 function appendBatch(rows, listElement, more, shown) {
@@ -589,6 +682,7 @@ async function saving(operation, success, message = error) {
   const fixedControl = document.activeElement.closest('#fixed-fields') ? document.activeElement : null;
   const budgetRow = budgetControl?.closest('#budget-setting-list > li');
   busy = true; fields.disabled = true; error.textContent = '';
+  document.querySelector('#shortcut-fields').disabled=true;
   incomeBusy(true);
   document.querySelector('#annual-fields').disabled=true;
   document.querySelector('#confirm-annual').disabled=true;document.querySelector('#cancel-annual').disabled=true;
@@ -618,6 +712,7 @@ async function saving(operation, success, message = error) {
     status.textContent = committed ? message.textContent : '瀏覽器本機測試帳本；此次儲存未完成。';
   } finally {
     busy = false; fields.disabled = writeBlocked;
+    document.querySelector('#shortcut-fields').disabled=writeBlocked;
     incomeBusy(writeBlocked);
     document.querySelector('#annual-fields').disabled=writeBlocked;
     document.querySelector('#confirm-annual').disabled=writeBlocked;document.querySelector('#cancel-annual').disabled=writeBlocked;

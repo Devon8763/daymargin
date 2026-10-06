@@ -16,6 +16,7 @@ input, select { width: 100%; background: white; }
 button { cursor: pointer; background: #edf4ef; color: #20372f; }
 button:disabled { cursor: wait; opacity: .6; }
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+#shortcut-quick button, #shortcut-list, #shortcut-error { overflow-wrap: anywhere; }
 fieldset > .buttons { margin-top: 1rem; }
 #error, #delete-error { color: #a2241b; overflow-wrap: anywhere; }
 #search-error, #calendar-error { color: #a2241b; }

@@ -6,6 +6,7 @@ const name=ledger.DB_NAME+'-usage-ui-'+crypto.randomUUID(),open=indexedDB.open.b
 const db=await ledger.openDatabase(),lines=[],today=ledger.taiwanToday();await ledger.initializeLedger(db);
 try {
   await import('../local-first/page.mjs');await wait(()=>!q('#ledger-page').hidden);
+  const form=q('#expense-form');
   const usageInputs=q('#usage-inputs');
   check(usageInputs?.tagName==='DETAILS'&&!usageInputs.open&&!q('#fields').disabled,'Missing optional collapsed usage fields');
   usageInputs.open=true;
@@ -22,7 +23,7 @@ try {
   check(document.documentElement.scrollWidth<=window.innerWidth,'Usage form overflows viewport');
   usageInputs.open=false;
   check(q('#ending-soon').hidden,'Empty reminder area shown');
-  const form=q('#expense-form');form.elements.amount.value='100.01';form.elements.note.value='合成商品';form.requestSubmit();await wait(()=>q('#expenses').children.length===1);
+  form.elements.amount.value='100.01';form.elements.note.value='合成商品';form.requestSubmit();await wait(()=>q('#expenses').children.length===1);
   check((await ledger.readLedger(db)).usage_periods.length===0,'Quick add created tracking');lines.push('optional collapsed fields preserve fast add and hide empty reminders');
   q('#expenses button').click();check(form.elements.usage_started_on.value===today,'Start default differs');
   form.elements.spent_on.value=today.slice(0,7)+'-01';form.elements.spent_on.dispatchEvent(new Event('change'));
