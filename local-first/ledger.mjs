@@ -1,5 +1,5 @@
 import * as distribution from './vendor/lossless-json-4.3.1/lossless-json.js';
-import { validateInput, categoryOptions, categoryName, paymentName, budgetCents, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
+import { validateInput, categoryOptions, categoryName, paymentName, orderedShortcuts, budgetCents, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
 import { emptyData, readBackup, writeBackup, integerValue, storedInteger, MAX_INTEGER, MAX_BYTES } from './backup.mjs';
 import { STORES, openLedgerDatabase, readSnapshot, scanTransaction, addState, portable, metadata, rowKey } from './idb.mjs';
 import {annualInput,annualItem,annualDefaults} from './annual.mjs';
@@ -61,7 +61,7 @@ export function restorePortableBackup(db, payload, confirmedMain = false) {
 }
 export const exportPortableBackup = async db => writeBackup(portable(await readSnapshot(db)));
 
-function current(state, id, expectedRevision) {
+function current(state, id, expectedRevision, changing = true) {
   const position = state.expenses.findIndex(row => row.id === id && row.kind === 'consumption' &&
     ['manual', '固定', '訂閱', '分期'].includes(row.source) && row.voided === 0);
   if (position < 0) throw new LedgerError('unavailable', '此筆消費無法操作，請重新載入。');
@@ -70,7 +70,7 @@ function current(state, id, expectedRevision) {
   try { expected = integerValue(expectedRevision); }
   catch { throw new LedgerError('conflict', '資料已變更，請重新載入後再操作。'); }
   if (integerValue(entry.revision) !== expected) throw new LedgerError('conflict', '資料已變更，請重新載入後再操作。');
-  if (expected === MAX_INTEGER) throw new LedgerError('limit', '版本已達 signed 64-bit 上限，請停止操作。');
+  if (changing && expected === MAX_INTEGER) throw new LedgerError('limit', '版本已達 signed 64-bit 上限，請停止操作。');
   return { entry, position };
 }
 
@@ -215,6 +215,52 @@ const financeWrite = (db, change) => transaction(db,(tx,state) => {
 export const updateIncome = (db,operation,id,expected,form) => financeWrite(db,state => changeIncome(state,operation,id,expected,form,taiwanToday()));
 export const updateAllocation = (db,month,expected,items) => financeWrite(db,state => changeAllocation(state,month,expected,items));
 export const excludeSuggestion = (db,month,id,scope,expected) => financeWrite(db,state => changeSuggestion(state,month,id,scope,expected,taiwanToday()));
+
+export function shortcutDraft(state,id,expectedRevision,today) {
+  metadata(state);
+  const {entry}=current(state,id,expectedRevision,false);
+  if (entry.source!=='manual' || entry.spent_on>isoDate(today) ||
+      (state.annual_periods || []).some(row=>row.expense_id===id))
+    throw new LedgerError('unavailable','只有有效的手動生活消費可建立捷徑；年度費用不適用。');
+  const value=cents(entry.cents),fraction=(value%100n).toString().padStart(2,'0').replace(/0+$/,'');
+  return {name:[...entry.note].slice(0,30).join(''),note:entry.note,category:entry.category,
+    payment_source_id:entry.payment_source_id ?? '',amount:(value/100n).toString()+(fraction ? '.'+fraction : '')};
+}
+export function changeShortcut(state,expected,operation,id,form,source=null,today=taiwanToday()) {
+  metadata(state);
+  if (stringify(state.shortcuts)!==stringify(expected)) throw new LedgerError('conflict','捷徑已變更，請重新載入後再操作。');
+  const changed=structuredClone(state),row=changed.shortcuts.find(item=>item.id===id);
+  if (operation!=='add' && (!row || row.active!==1)) throw new LedgerError('unavailable','此捷徑無法操作，請重新載入。');
+  if (source!==null) {
+    if(operation!=='add')throw new ValidationError('請選擇有效的捷徑操作。');
+    shortcutDraft(state,source.id,source.revision,today); // Recheck source in the same write transaction; no saved source link.
+  }
+  if (operation==='add' || operation==='update') {
+    const keys=['name','note','category','payment_source_id','amount'];
+    if(!form || Object.keys(form).length!==keys.length || keys.some(key=>!Object.hasOwn(form,key)) || typeof form.amount!=='string')
+      throw new ValidationError('捷徑欄位不符合規則。');
+    let name;
+    try {name=paymentName(form.name);} catch {throw new ValidationError('捷徑名稱需 1～30 字，不可包含換行或控制字元。');}
+    const optional=form.amount.trim()==='';
+    const validated=validateInput({...form,spent_on:today,amount:optional?'1':form.amount},changed,today);
+    const fields={name,note:validated.note,category:validated.category,payment_source_id:validated.payment_source_id,cents:optional?null:validated.cents};
+    if(operation==='add') {
+      if (STORES.some(section=>Array.isArray(changed[section])&&changed[section].some(item=>item.id===id)))
+        throw new LedgerError('conflict','此操作已處理，請重新載入後確認。');
+      const active=orderedShortcuts(changed);active.forEach((item,index)=>{item.position=index;});
+      changed.shortcuts.push({id,...fields,position:active.length,active:1});
+    } else Object.assign(row,fields);
+  } else if(operation==='disable')row.active=0;
+  else if(operation==='up' || operation==='down') {
+    const active=orderedShortcuts(changed),index=active.findIndex(item=>item.id===id),target=index+(operation==='up'?-1:1);
+    if(target>=0 && target<active.length) {
+      [active[index],active[target]]=[active[target],active[index]];
+      active.forEach((item,position)=>{item.position=position;}); // Also resolves equal legacy positions without losing manual order.
+    }
+  } else throw new ValidationError('請選擇有效的捷徑操作。');
+  metadata(changed);return changed;
+}
+export const updateShortcut=(db,expected,operation,id,form=null,source=null)=>financeWrite(db,state=>changeShortcut(state,expected,operation,id,form,source,taiwanToday()));
 
 export function changeAnnual(state,operation,id,expected,form,today) {
   const meta = metadata(state), changed = {...emptyData(3),...structuredClone(state)};

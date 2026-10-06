@@ -31,6 +31,45 @@ def synthetic_payload(helper):
 
 
 class BrowserPortableBackupTests(unittest.TestCase):
+    def test_local_shortcuts_restore_to_python_without_format_or_history_changes(self):
+        code = """
+import {emptyData,writeBackup} from './local-first/backup.mjs';
+import {changeShortcut} from './local-first/ledger.mjs';
+import {portable} from './local-first/idb.mjs';
+let state={...emptyData(4),payment_sources:[{id:'p_cash',name:'現金',active:1}]};
+const form={name:'合成早餐',note:'<img src=x onerror=alert(1)>',category:'餐飲',payment_source_id:'p_cash',amount:'.29'};
+state=changeShortcut(state,[],'add','s_one',form,null,'2026-10-06');
+state=changeShortcut(state,state.shortcuts,'add','s_two',{...form,name:'合成午餐',amount:''},null,'2026-10-06');
+state=changeShortcut(state,state.shortcuts,'up','s_two',null,null,'2026-10-06');
+state=changeShortcut(state,state.shortcuts,'disable','s_one',null,null,'2026-10-06');
+process.stdout.write(writeBackup(portable(state)));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        original = self.helper.bk.read_backup(result.stdout)
+        self.assertEqual(original['version'], 1)
+        self.assertEqual(len(original['data']), 9)
+        before = self.helper.snapshot()
+        existing.service.restore_portable_backup('shortcut-target', result.stdout)
+        restored = self.helper.bk.read_backup(self.helper.bk.export_backup('shortcut-target'))
+        for section in original['data']:
+            if section not in ('shortcuts', 'payment_sources'):
+                self.assertEqual(restored['data'][section], original['data'][section])
+        self.assertEqual([(r['name'], r['active']) for r in restored['data']['payment_sources']],
+                         [(r['name'], r['active']) for r in original['data']['payment_sources']])
+        self.assertEqual([{k: v for k, v in r.items() if k not in ('id', 'payment_source_id')}
+                          for r in restored['data']['shortcuts']],
+                         [{k: v for k, v in r.items() if k not in ('id', 'payment_source_id')}
+                          for r in original['data']['shortcuts']])
+        payment_id = restored['data']['payment_sources'][0]['id']
+        self.assertTrue(all(r['payment_source_id'] == payment_id for r in restored['data']['shortcuts']))
+        rows = existing.sp.shortcuts('shortcut-target', include_inactive=True)
+        self.assertEqual([(r['name'], r['cents'], r['active'], r['position']) for r in rows],
+                         [('合成午餐', None, 1, 0), ('合成早餐', 29, 0, 1)])
+        after = self.helper.snapshot()
+        for table in ('expenses', 'expense_actions', 'assets', 'ai_preferences', 'users'):
+            self.assertEqual(after[table], before[table])
+
     def test_usage_json_v4_safely_rejects_in_python_without_changes(self):
         code = """
 import {emptyData,writeBackup} from './local-first/backup.mjs';

@@ -75,6 +75,13 @@ export function categoryOptions(state) {
   return [...options.values()];
 }
 
+export function orderedShortcuts(state) {
+  return state.shortcuts.filter(row=>row.active===1).slice().sort((a,b)=> {
+    const left=BigInt(a.position),right=BigInt(b.position);
+    return left<right ? -1 : left>right ? 1 : a.id<b.id ? -1 : a.id>b.id ? 1 : 0;
+  });
+}
+
 export function validateInput(form, state, today, previous = null) {
   const spent_on = isoDate(form.spent_on);
   if (previous?.source && previous.source !== 'manual' && spent_on !== previous.spent_on) {

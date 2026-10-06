@@ -35,7 +35,7 @@ const worker = state => Object.assign(new Events(), {state});
 const waitingText = '新版已下載，關閉此來源所有頁籤／視窗後重新開啟才會使用新版';
 
 test('loaded HTML owns the page version and recovery guidance has no destructive shortcut', () => {
-  assert.match(html, /id="page-version"[^>]*>目前使用頁面版本：0\.16\.1</);
+  assert.match(html, /id="page-version"[^>]*>目前使用頁面版本：0\.17\.0</);
   const guidance = html.match(/<div id="recovery-guidance"[^>]*>[\s\S]*?<\/div>/)?.[0];
   assert.ok(guidance, 'Missing recovery guidance');
   for (const text of ['不要清除', '覆蓋', '原瀏覽器設定檔', '全新', '空白', '同一個固定網址', '沒有可用備份', '停止操作']) assert.ok(guidance.includes(text), text);
