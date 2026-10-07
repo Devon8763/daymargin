@@ -1,4 +1,5 @@
 import {isoDate,cents,recurringProgress,fixedSettings,ValidationError} from './rules.mjs';
+import {scheduleRules} from './schedule.mjs';
 
 export const MAX_USAGE_DAYS = 36500;
 const dayNumber = date => Date.parse(isoDate(date)+'T00:00:00Z') / 86400000;
@@ -36,10 +37,12 @@ export function endingSoon(state,today) {
     if (!posted.has(entry.recurring_id)) posted.set(entry.recurring_id,new Set());
     posted.get(entry.recurring_id).add(entry.period);
   }
+  const unified=state.scheduled_periods?.length||state.recurring_versions.some(row=>Object.hasOwn(row,'from_index'));
+  const views=unified?new Map(scheduleRules(state,today).map(row=>[row.id,row])):null;
   for (const rule of state.recurring_rules) {
     if (rule.kind!=='分期' || rule.active!==1) continue;
     const progress=recurringProgress(state,rule,BigInt(posted.get(rule.id)?.size || 0));
-    if (!progress.complete && progress.total-progress.posted===1n) items.push({kind:'installment',id:rule.id,name:fixedSettings(state,rule,today.slice(0,7)).name,text:'剩 1 期'});
+    if (!progress.complete && progress.total-progress.posted===1n) items.push({kind:'installment',id:rule.id,name:views?.get(rule.id)?.name??fixedSettings(state,rule,today.slice(0,7)).name,text:'剩 1 期'});
   }
   return items;
 }

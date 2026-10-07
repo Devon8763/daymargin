@@ -45,9 +45,12 @@ try {
   IDBDatabase.prototype.transaction=function(...args){if(this.name===name&&args[1]==='readwrite')throw new DOMException('PRIVATE','QuotaExceededError');return transaction.apply(this,args);};
   try{q('#shortcut-form').requestSubmit();await wait(()=>q('#shortcut-error').textContent.length>0);check(fields.name.value==='故障保留'&&!q('#shortcut-error').textContent.includes('PRIVATE'),'Unsafe failure/lost input');}finally{IDBDatabase.prototype.transaction=transaction;}
   check(new TextDecoder().decode(await ledger.exportPortableBackup(db))===failureBefore,'Failure changed setting');q('#cancel-shortcut').click();lines.push('storage failure preserves shortcut draft and fixed safe error with exact rollback');
-  for(const kind of ['固定','訂閱','分期'])await ledger.updateRecurring(db,'add',null,null,{kind,name:'合成'+kind,amount:'.29',category:'交通',start_month:today.slice(0,7),due_day:1,periods:kind==='分期'?2:0});await ledger.updateRecurring(db,'sync');
-  s=await ledger.updateAnnual(db,'add','ar_source',null,{name:'合成年費',amount:'.29',category:'交通',payment_source_id:'p_cash',first_year:Number(today.slice(0,4)),due_month:Number(today.slice(5,7)),due_day:1});await ledger.processAnnual(db,'record','ar_source',Number(today.slice(0,4)),0,null,{amount:'.29',note:'合成年費',category:'交通',payment_source_id:'p_cash',spent_on:today});
-  await save('回歸入口');s=await ledger.readLedger(db);const annualId=s.annual_periods[0].expense_id;
+  for(const kind of ['固定','訂閱','分期','年度費用']) {
+    const id=kind==='年度費用'?'ar_source':'r_source_'+['固定','訂閱','分期'].indexOf(kind);
+    await ledger.updateSchedule(db,'add',id,null,{kind,name:'合成'+kind,amount:'.29',category:'交通',payment_source_id:'p_cash',first_due_on:today,unit:'month',every:1,periods:kind==='分期'?2:0});
+    await ledger.processSchedule(db,'record',id,0,0,null);
+  }
+  await save('回歸入口');s=await ledger.readLedger(db);const annualId=s.scheduled_periods.find(row=>row.rule_id==='ar_source').expense_id;
   for(const entry of s.expenses.filter(row=>row.source!=='manual'||row.id===annualId))check(!document.querySelector('#expenses [data-expense-id="'+entry.id+'"] [data-operation=shortcut]'),'Automatic/annual source offered');lines.push('fixed, subscription, installment and annual-linked manual consumption never offer source creation');
   s=await ledger.readLedger(db);const first=s.shortcuts.find(row=>row.active===1),peer=await ledger.openDatabase();await ledger.updateShortcut(peer,s.shortcuts,'update',first.id,{name:'另一頁',note:'合成新用途',amount:'1',category:'交通',payment_source_id:'p_cash'});peer.close();
   q('#shortcut-list [data-operation=update]').click();fields.name.value='保留草稿';fields.category.value='交通';fields.payment_source_id.value='p_cash';

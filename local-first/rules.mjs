@@ -145,6 +145,13 @@ export function fixedSettings(state, rule, month) {
 export function recurringProgress(state, rule, posted = null) {
   const total = BigInt(rule.periods);
   if (rule.kind !== '分期') return {posted:0n, total, complete:false};
+  const scheduled=(state.scheduled_periods||[]).filter(row=>row.rule_id===rule.id);
+  if(scheduled.length||state.recurring_versions?.some(row=>row.recurring_id===rule.id&&Object.hasOwn(row,'from_index'))) {
+    const linked=new Set(scheduled.filter(row=>row.expense_id!==null).map(row=>row.expense_id));
+    const indices=new Set(scheduled.filter(row=>row.status==='recorded'||row.status==='skipped').map(row=>Number(row.index)));
+    for(const entry of state.expenses)if(entry.recurring_id===rule.id&&!linked.has(entry.id))indices.add((Number(entry.period.slice(0,4))-Number(rule.start_month.slice(0,4)))*12+Number(entry.period.slice(5))-Number(rule.start_month.slice(5)));
+    posted=BigInt(indices.size);
+  }
   posted ??= BigInt(new Set(state.expenses.filter(row => row.recurring_id === rule.id).map(row => row.period)).size);
   return {posted, total, complete:rule.kind === '分期' && posted === total};
 }

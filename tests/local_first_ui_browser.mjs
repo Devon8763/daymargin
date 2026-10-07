@@ -1,4 +1,4 @@
-import { DB_NAME, openDatabase, initializeLedger, readLedger, editExpense } from '../local-first/ledger.mjs';
+import { DB_NAME, openDatabase, initializeLedger, readLedger, editExpense, taiwanToday } from '../local-first/ledger.mjs';
 import { SECTIONS, writeBackup } from '../local-first/backup.mjs';
 import { portable } from '../local-first/idb.mjs';
 const lines = [];
@@ -133,7 +133,7 @@ try {
   } else if (modal === 'fixed-dialog') {
     document.querySelector('[data-view-button="planning"]').click(); document.querySelector('#fixed-settings').open = true;
     const fixed = document.querySelector('#fixed-form');
-    fixed.elements.name.value = '確認停用故障合成規則'; fixed.elements.amount.value = '1'; fixed.elements.due_day.value = '1';
+    fixed.elements.name.value = '確認停用故障合成規則'; fixed.elements.amount.value = '1'; fixed.elements.first_due_on.value = taiwanToday();
     await done(() => fixed.requestSubmit());
     document.querySelector('#fixed-list [data-operation="update"]').click();
     document.querySelector('#fixed-list [data-operation="stop"]').click();

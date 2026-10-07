@@ -36,7 +36,10 @@ export const V3_SECTIONS = [...V2_SECTIONS,...ANNUAL_SECTIONS];
 const USAGE_FIELDS = {usage_periods:['expense_id','started_on','days','remind','reminder_days','show_daily_cost','active','revision']};
 export const V4_SECTIONS = [...V3_SECTIONS,...Object.keys(USAGE_FIELDS)];
 const TAG_FIELDS = {tags:['id','name','hidden','revision'],expense_tags:['expense_id','tag_id']};
-export const ALL_SECTIONS = [...V4_SECTIONS,...Object.keys(TAG_FIELDS)];
+export const V5_SECTIONS = [...V4_SECTIONS,...Object.keys(TAG_FIELDS)];
+const SCHEDULE_FIELDS = {scheduled_periods:['rule_id','index','defaults','status','expense_id','revision']};
+const SCHEDULE_VERSION_FIELDS = ['id','recurring_id','from_index','first_due_on','unit','every','name','cents','category','payment_source_id','payment_source_name'];
+export const ALL_SECTIONS = [...V5_SECTIONS,...Object.keys(SCHEDULE_FIELDS)];
 export class BackupError extends Error {
   constructor(kind) { super('生活帳本備份資料異常：' + kind); this.code = 'backup'; }
 }
@@ -72,7 +75,7 @@ function amount(value, zero = false) {
   integerValue(BigInt(value), zero ? 0n : 1n);
 }
 function unique(values, kind) { if (new Set(values).size !== values.length) invalid(kind + '重複'); }
-function expense(row, payments, rules) {
+function expense(row, payments, rules, scheduled) {
   shape(row, EXPENSE_FIELDS, '消費'); iso(row.spent_on); amount(row.cents);
   text(row.category); text(row.payment_source_name); text(row.note, true);
   integerValue(row.voided, 0n, 1n); integerValue(row.revision);
@@ -85,6 +88,10 @@ function expense(row, payments, rules) {
   const rule = rules.get(row.recurring_id);
   if (typeof row.recurring_id !== 'string' || !rule || row.source !== rule.kind) invalid('規則引用');
   iso(row.period, true);
+  if (scheduled) {
+    if (row.period !== scheduled.defaults.due_on.slice(0,7)) invalid('排程預定月份');
+    return;
+  }
   if (row.spent_on.slice(0, 7) !== row.period || row.period < rule.start_month) invalid('已入帳月份');
   const periods = integerValue(rule.periods);
   const offset = (Number(row.period.slice(0, 4)) - Number(rule.start_month.slice(0, 4))) * 12 + Number(row.period.slice(5)) - Number(rule.start_month.slice(5));
@@ -95,21 +102,22 @@ export function emptyData(version = 1) {
   return { expenses: [], categories: [], payment_sources: [], budgets: [], recurring_rules: [], recurring_versions: [], shortcuts: [], actions: [], settings: { reminder_levels: null, recording_started_on: null },
     ...(version >= 2 ? Object.fromEntries(FINANCE_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 3 ? Object.fromEntries(ANNUAL_SECTIONS.map(section => [section, []])) : {}),
-    ...(version >= 4 ? {usage_periods:[]} : {}), ...(version >= 5 ? {tags:[],expense_tags:[]} : {}) };
+    ...(version >= 4 ? {usage_periods:[]} : {}), ...(version >= 5 ? {tags:[],expense_tags:[]} : {}),
+    ...(version >= 6 ? {scheduled_periods:[]} : {}) };
 }
 export function validateBackup(bundle) {
   shape(bundle, ['format', 'version', 'data'], '格式');
   if (bundle.format !== 'life-ledger-backup') invalid('格式／版本');
-  const version = integerValue(bundle.version, 1n, 5n);
-  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : ALL_SECTIONS, '生活帳本');
+  const version = integerValue(bundle.version, 1n, 6n);
+  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : version===5n ? V5_SECTIONS : ALL_SECTIONS, '生活帳本');
   let count = 0;
   const ids = [];
-  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {})})) {
+  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {}),...(version>=6n ? SCHEDULE_FIELDS : {})})) {
     const rows = data[section];
     if (!Array.isArray(rows)) invalid(section + '結構');
     count += rows.length; if (count > 100000) invalid('資料筆數上限');
     for (const row of rows) {
-      shape(row, fields, section);
+      shape(row, version>=6n && section==='recurring_versions' && Object.hasOwn(row??{},'from_index') ? SCHEDULE_VERSION_FIELDS : fields, section);
       if (Object.hasOwn(row, 'id')) {
         if (typeof row.id !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(row.id)) invalid('識別');
         ids.push(row.id);
@@ -125,6 +133,11 @@ export function validateBackup(bundle) {
   if (data.payment_sources.some(row => ['現金', '未指定'].includes(row.name) && integerValue(row.active) === 0n)) invalid('保留付款方式');
   const payments = new Set(data.payment_sources.map(row => row.id));
   const rules = new Map(data.recurring_rules.map(row => [row.id, row]));
+  const annualRules = new Map((data.annual_rules || []).map(row=>[row.id,row]));
+  const scheduleDefaults = row => {
+    text(row.name); text(row.category); text(row.payment_source_name); amount(row.cents);
+    if (row.payment_source_id !== null && (typeof row.payment_source_id !== 'string' || !payments.has(row.payment_source_id))) invalid('排程付款引用');
+  };
   for (const row of rules.values()) {
     text(row.name); text(row.category); amount(row.cents); iso(row.start_month, true);
     const periods = integerValue(row.periods);
@@ -133,6 +146,13 @@ export function validateBackup(bundle) {
     if (row.due_day !== null) integerValue(row.due_day, 1n, 31n);
   }
   for (const row of data.recurring_versions) {
+    if (version>=6n && Object.hasOwn(row,'from_index')) {
+      if (typeof row.recurring_id!=='string' || (!rules.has(row.recurring_id) && !annualRules.has(row.recurring_id))) invalid('排程版本規則引用');
+      integerValue(row.from_index,0n,3652058n); iso(row.first_due_on); integerValue(row.every,1n,BigInt(Number.MAX_SAFE_INTEGER));
+      if (!['day','week','month','year'].includes(row.unit)) invalid('排程頻率');
+      scheduleDefaults(row);
+      continue;
+    }
     const rule = rules.get(row.recurring_id);
     if (typeof row.recurring_id !== 'string' || !rule) invalid('版本規則引用');
     iso(row.effective_month, true);
@@ -140,23 +160,56 @@ export function validateBackup(bundle) {
     text(row.name); text(row.category); amount(row.cents); integerValue(row.due_day, 1n, 31n);
     if (rule.kind !== '固定' && (row.name !== rule.name || row.due_day !== (rule.due_day ?? 1))) invalid('版本不可更改欄位');
   }
-  unique(data.recurring_versions.map(row => row.recurring_id + '\0' + row.effective_month), '生效版本');
+  unique(data.recurring_versions.filter(row=>!Object.hasOwn(row,'from_index')).map(row => row.recurring_id + '\0' + row.effective_month), '生效版本');
+  unique(data.recurring_versions.filter(row=>Object.hasOwn(row,'from_index')).map(row=>row.recurring_id+'\0'+row.from_index),'排程版本');
   for (const row of data.budgets) { iso(row.month, true); text(row.category); amount(row.cents, true); }
   unique(data.budgets.map(row => row.month + '\0' + row.category), '預算');
-  for (const row of data.expenses) expense(row, payments, rules);
-  unique(data.expenses.filter(row => row.recurring_id !== null).map(row => row.recurring_id + '\0' + row.period), '規則月份');
+  const expenses = new Map(data.expenses.map(row => [row.id, row]));
+  const scheduled = new Map();
+  if (version>=6n) {
+    for (const row of data.scheduled_periods) {
+      const rule=rules.get(row.rule_id),annual=annualRules.get(row.rule_id);
+      if (typeof row.rule_id!=='string' || (!rule && !annual)) invalid('排程規則引用');
+      const index=integerValue(row.index,0n,3652058n); integerValue(row.revision);
+      if (rule?.kind==='分期' && index>=integerValue(rule.periods)) invalid('排程分期期數');
+      shape(row.defaults,['due_on','name','cents','category','payment_source_id','payment_source_name'],'排程草稿');
+      scheduleDefaults(row.defaults); iso(row.defaults.due_on);
+      if (!['pending','skipped','recorded'].includes(row.status)) invalid('排程處理狀態');
+      if (row.status==='recorded') {
+        const entry=expenses.get(row.expense_id);
+        if (typeof row.expense_id!=='string' || !entry || scheduled.has(row.expense_id)) invalid('排程消費引用');
+        if (rule ? entry.source!==rule.kind || entry.recurring_id!==rule.id || entry.period!==row.defaults.due_on.slice(0,7)
+          : entry.source!=='manual' || entry.recurring_id!==null || entry.period!==null) invalid('排程消費來源');
+        scheduled.set(row.expense_id,row);
+      } else if (row.expense_id!==null) invalid('排程消費引用');
+    }
+    unique(data.scheduled_periods.map(row=>row.rule_id+'\0'+row.index),'排程期數');
+  }
+  const months=new Map();
+  const scheduledIndices=new Set((data.scheduled_periods||[]).map(row=>row.rule_id+'\0'+row.index));
+  for (const row of data.expenses) {
+    expense(row,payments,rules,scheduled.get(row.id));
+    if (row.recurring_id===null) continue;
+    if (!scheduled.has(row.id)) {
+      const start=rules.get(row.recurring_id).start_month;
+      const index=(Number(row.period.slice(0,4))-Number(start.slice(0,4)))*12+Number(row.period.slice(5))-Number(start.slice(5));
+      if (scheduledIndices.has(row.recurring_id+'\0'+index)) invalid('排程歷史期數衝突');
+    }
+    const key=row.recurring_id+'\0'+row.period,previous=months.get(key);
+    if (previous && (!previous.linked || !scheduled.has(row.id))) invalid('規則月份重複');
+    months.set(key,{linked:scheduled.has(row.id)});
+  }
   for (const row of data.shortcuts) {
     text(row.name); text(row.category); text(row.note, true);
     if (typeof row.payment_source_id !== 'string' || !payments.has(row.payment_source_id)) invalid('捷徑付款引用');
     if (row.cents !== null) amount(row.cents);
     integerValue(row.position); integerValue(row.active, 0n, 1n);
   }
-  const expenses = new Map(data.expenses.map(row => [row.id, row]));
   for (const row of data.actions) {
     if (typeof row.expense_id !== 'string' || !expenses.has(row.expense_id)) invalid('操作消費引用');
     integerValue(row.undone, 0n, 1n);
     if (row.before !== null) {
-      expense(row.before, payments, rules);
+      expense(row.before, payments, rules, scheduled.get(row.expense_id));
       if (row.before.id !== row.expense_id) invalid('操作快照引用');
       const current = expenses.get(row.expense_id);
       if (['source', 'recurring_id', 'period', 'kind'].some(field => row.before[field] !== current[field])) invalid('操作快照不可變欄位');
@@ -224,10 +277,22 @@ export function validateBackup(bundle) {
       if (row.status === 'recorded') {
         const entry = expenses.get(row.expense_id);
         if (typeof row.expense_id !== 'string' || !entry || entry.source !== 'manual' || entry.recurring_id !== null || entry.period !== null) invalid('年度消費引用');
+        const linked=scheduled.get(row.expense_id);
+        if (linked && (linked.rule_id!==row.annual_id || Number(linked.defaults.due_on.slice(0,4))!==Number(row.year))) invalid('年度排程消費引用');
       } else if (row.expense_id !== null) invalid('年度消費引用');
     }
     unique(data.annual_periods.map(row => row.annual_id+'\0'+row.year),'年度期數');
     unique(data.annual_periods.filter(row => row.status === 'recorded').map(row => row.expense_id),'年度消費');
+    if(version>=6n) {
+      const firstYears=new Map(data.annual_rules.map(row=>[row.id,Number(row.first_year)]));
+      for(const row of data.annual_periods)firstYears.set(row.annual_id,Math.min(firstYears.get(row.annual_id),Number(row.year)));
+      const history=new Map(data.annual_periods.map(row=>[row.annual_id+'\0'+(Number(row.year)-firstYears.get(row.annual_id)),row]));
+      for(const row of data.scheduled_periods) {
+        const previous=history.get(row.rule_id+'\0'+row.index);if(!previous)continue;
+        if(['due_on','name','cents','category','payment_source_id','payment_source_name'].some(key=>row.defaults[key]!==previous.defaults[key]))invalid('已形成年度草稿');
+        if(previous.status==='recorded'&&(row.status!=='recorded'||row.expense_id!==previous.expense_id))invalid('已記錄年度期數不可重建');
+      }
+    }
   }
   if (version >= 4n) {
     for (const row of data.usage_periods) {

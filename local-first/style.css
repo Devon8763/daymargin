@@ -43,6 +43,8 @@ fieldset > .buttons { margin-top: 1rem; }
 .backup-risk input { width: auto; flex-shrink: 0; }
 #fixed-list li { padding: .6rem 0; border-bottom: 1px solid #dce5df; overflow-wrap: anywhere; }
 #fixed-list h3 { font-size: 1rem; }
+#schedule-periods li, #schedule-month-items li { padding: .6rem 0; overflow-wrap: anywhere; }
+#schedule-periods button { margin: .2rem; }
 #budget-setting-list li, #category-budget-list li { padding: .6rem 0; border-bottom: 1px solid #dce5df; overflow-wrap: anywhere; }
 #budget-setting-list form { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin-bottom: .5rem; }
 #budget-setting-list label { flex: 1 1 180px; }

@@ -12,7 +12,7 @@ indexedDB.open=(value,version)=>{const request=open(value===DB_NAME?name:value,v
 const db=await openDatabase(),choose=payload=>{const transfer=new DataTransfer();transfer.items.add(payload instanceof File?payload:new File([payload],'synthetic.backup'));q('#restore-file').files=transfer.files;q('#restore-file').dispatchEvent(new Event('change'));};
 const password='合成 encrypted password 123',legacyPayload=new Uint8Array(await (await fetch('/tests/fixtures/portable_life_ledger.json')).arrayBuffer());
 let payload=legacyPayload;
-if(['v2','v3','v4','v5'].includes(new URLSearchParams(location.search).get('finance'))){
+if(['v2','v3','v4','v5','v6'].includes(new URLSearchParams(location.search).get('finance'))){
   const original=readBackup(legacyPayload),rule=original.data.recurring_rules[0].id;
   payload=writeBackup({format:original.format,version:2,data:{...emptyData(2),...original.data,
     incomes:[{id:'i_finance',received_on:'2025-02-28',cents:'29',name:'<img src=x onerror=alert(3)>合成收入',voided:1,revision:1}],
@@ -20,7 +20,7 @@ if(['v2','v3','v4','v5'].includes(new URLSearchParams(location.search).get('fina
     monthly_allocations:[{month:'2025-02',items:[{id:'living',name:'生活開銷',cents:'10'},{id:'custom',name:'<img src=x onerror=alert(4)>',cents:'20'}],excluded_recurring_ids:[rule],revision:1}],
     allocation_preferences:[{recurring_id:rule,excluded_from_month:'2025-03',revision:0}]}});
 }
-if(['v3','v4','v5'].includes(new URLSearchParams(location.search).get('finance'))){
+if(['v3','v4','v5','v6'].includes(new URLSearchParams(location.search).get('finance'))){
   const original=readBackup(payload),payment=original.data.payment_sources.find(row=>row.active===1),entry=original.data.expenses.find(row=>row.source==='manual');
   const defaults=year=>({name:'<img src=x onerror=alert(5)>合成年度',cents:'120001',category:'餐飲',payment_source_id:payment.id,payment_source_name:payment.name,due_on:year+'-02-'+(year===2024?'29':'28')});
   payload=writeBackup({format:original.format,version:3,data:{...emptyData(3),...original.data,
@@ -29,16 +29,22 @@ if(['v3','v4','v5'].includes(new URLSearchParams(location.search).get('finance')
       {annual_id:'y_crypto',year:2025,defaults:defaults(2025),status:'skipped',expense_id:null,revision:0},
       {annual_id:'y_crypto',year:2026,defaults:defaults(2026),status:'pending',expense_id:null,revision:0}]}});
 }
-if(['v4','v5'].includes(new URLSearchParams(location.search).get('finance'))){
+if(['v4','v5','v6'].includes(new URLSearchParams(location.search).get('finance'))){
   const original=readBackup(payload),entry=original.data.expenses[0];
   payload=writeBackup({format:original.format,version:4,data:{...emptyData(4),...original.data,
     usage_periods:[{expense_id:entry.id,started_on:'2025-02-28',days:180,remind:1,reminder_days:7,show_daily_cost:1,active:0,revision:3}]}});
 }
-if(new URLSearchParams(location.search).get('finance')==='v5'){
+if(new URLSearchParams(location.search).get('finance')==='v5'||new URLSearchParams(location.search).get('finance')==='v6'){
   const original=readBackup(payload),entry=original.data.expenses[0];
   payload=writeBackup({format:original.format,version:5,data:{...emptyData(5),...original.data,
     tags:[{id:'t_crypto',name:'<img src=x onerror=alert(6)>',hidden:1,revision:2}],
     expense_tags:[{expense_id:entry.id,tag_id:'t_crypto'}]}});
+}
+if(new URLSearchParams(location.search).get('finance')==='v6'){
+  const original=readBackup(payload),entry=original.data.expenses.find(row=>row.source==='固定'&&row.recurring_id!==null),due=entry.spent_on;
+  original.data.scheduled_periods=[{rule_id:entry.recurring_id,index:0,defaults:{due_on:due,name:entry.note,cents:entry.cents,category:entry.category,payment_source_id:entry.payment_source_id,payment_source_name:entry.payment_source_name},status:'recorded',expense_id:entry.id,revision:1}];
+  entry.spent_on='2025-02-01';
+  payload=writeBackup({format:original.format,version:6,data:{...emptyData(6),...original.data}});
 }
 const encrypted=await encryptBackup(payload,password),blobs=[],create=URL.createObjectURL,click=HTMLAnchorElement.prototype.click;
 URL.createObjectURL=blob=>{blobs.push(blob);return create(blob);};HTMLAnchorElement.prototype.click=function(){};

@@ -19,14 +19,14 @@ try {
   check(!q('#welcome').hidden&&!q('#start-ledger').disabled&&reads===0,'First-use privacy writes or blocks start');armed=false;check(await raw()===blank,'Privacy initialized blank ledger');lines.push('first-use privacy is optional, independent and returns to untouched blank ledger');
   q('#start-ledger').click();await wait(()=>!q('#ledger-page').hidden);
   check(!q('#view-record').hidden&&q('#view-planning').hidden&&q('#view-analysis').hidden&&q('#view-settings').hidden,'Recording is not the default');
-  for(const [view,ids]of [['record',['expense-form','shortcut-quick','ending-soon','budget-overview','expenses','search-form','calendar-grid']],['planning',['budget-settings','fixed-settings','income-planning','annual-management']],['analysis',['expense-comparison']],['settings',['settings-fields','data-management']]])for(const id of ids)check(q('#'+id).closest('[data-view]')?.dataset.view===view,'Feature in wrong view: '+id);
+  for(const [view,ids]of [['record',['expense-form','shortcut-quick','ending-soon','budget-overview','schedule-overview','expenses','search-form','calendar-grid']],['planning',['budget-settings','fixed-settings','income-planning']],['analysis',['expense-comparison']],['settings',['settings-fields','data-management']]])for(const id of ids)check(q('#'+id).closest('[data-view]')?.dataset.view===view,'Feature in wrong view: '+id);
   lines.push('exact four regions; recording default; all existing features reachable in assigned view');
   nav('planning');
   const budget=q('#budget-settings'),recurring=q('#fixed-settings'),category=q('#settings-fields');
   check(budget.parentElement===recurring.parentElement&&!budget.parentElement.closest('details'),'Budget and recurring still share an outer disclosure');
   check(budget.querySelector('summary').textContent==='預算'&&recurring.querySelector('summary').textContent==='定期支出','Independent planning entries missing');
-  check(!q('#annual-management').open&&q('#annual-management').closest('[data-view]').dataset.view==='planning','Annual position or disclosure changed');
-  lines.push('budget and recurring are independent same-level disclosures; annual position retained');
+  check(!q('#annual-management')&&!q('#annual-entry')&&!q('#fixed-settings').open,'Unified recurring disclosure changed');
+  lines.push('budget and recurring are independent same-level disclosures; annual unified into recurring');
   budget.open=true;recurring.open=true;
   budget.querySelector('input').value='1250';q('#fixed-form').elements.name.value='定期未儲存草稿';q('#category-add').elements.name.value='分類未儲存草稿';
   const planningDraft=JSON.stringify([...budget.querySelectorAll('input'),...q('#fixed-form').elements,...q('#category-add').elements].map(el=>[el.name,el.value]));
@@ -42,7 +42,7 @@ try {
   budget.open=false;recurring.open=false;nav('record');
   lines.push('category link and return retain original nodes, drafts and disclosures; focused headings; zero transactions and unchanged full ledger');
   q('#expense-form').elements.amount.value='100.01';q('#expense-form').elements.note.value='<img src=x onerror=alert(1)>合成草稿';q('#expense-form').elements.usage_days.value='180';
-  q('#fixed-form').elements.name.value='定期草稿';q('#income-form').elements.name.value='收入草稿';q('#annual-form').elements.name.value='年度草稿';q('#comparison-form').elements.keyword.value='分析草稿';q('#category-add').elements.name.value='設定草稿';
+  q('#fixed-form').elements.name.value='定期草稿';q('#income-form').elements.name.value='收入草稿';q('#comparison-form').elements.keyword.value='分析草稿';q('#category-add').elements.name.value='設定草稿';
   const formValues=()=>JSON.stringify([...document.querySelectorAll('form')].map(form=>[form.id,[...form.elements].filter(el=>el.name).map(el=>[el.name,el.value,el.checked])]));
   const draft=formValues(),baseline=await bytes(),rawBefore=await raw();reads=0;armed=true;
   for(let i=0;i<3;i++)for(const view of ['planning','analysis','settings','record']){nav(view);check(!q('#view-'+view).hidden&&q('[data-view-button="'+view+'"]').getAttribute('aria-current')==='page','Current view not announced');check(document.activeElement===q('#view-'+view+'-title'),'Navigation focus not on region heading');check([...document.querySelectorAll('[data-view]')].filter(el=>!el.hidden).length===1,'Multiple views visible');}
@@ -60,6 +60,6 @@ try {
   check(document.activeElement.closest('#calendar-day-results')&&!q('#calendar-day-details').hidden,'Calendar save did not return to selected day');lines.push('search/calendar reuse original edit and keep origin focus, conditions and selected day');
   q('#search-results button:last-child').click();check(q('#delete-dialog').open,'Delete dialog inaccessible');q('#cancel-delete').click();check(!q('#delete-dialog').open,'Delete cancel failed');
   q('#search-results button:last-child').click();q('#confirm-delete').click();await wait(()=>q('#search-results').children.length===0);check(!q('#delete-dialog').open&&!q('#view-record').hidden,'Delete leaves wrong view');lines.push('global delete dialog remains reachable; confirmation refreshes original search/calendar');
-  armed=true;nav('planning');q('#annual-entry').click();check(q('#annual-management').open&&!q('#view-planning').hidden,'Annual anchor hidden');nav('analysis');nav('settings');q('#csv-export').open=true;nav('record');nav('settings');check(q('#csv-export').open&&reads===0,'CSV disclosure lost or navigation exported');armed=false;lines.push('existing anchors/disclosures remain usable without automatic posting or export');
+  armed=true;nav('planning');q('#fixed-settings').open=true;check(q('#fixed-settings').open&&!q('#view-planning').hidden,'Recurring disclosure hidden');nav('analysis');nav('settings');q('#csv-export').open=true;nav('record');nav('settings');check(q('#csv-export').open&&reads===0,'CSV disclosure lost or navigation exported');armed=false;lines.push('existing anchors/disclosures remain usable without automatic posting or export');
   report.textContent='PASS：'+lines.length+' 組四區導覽／隱私驗證\n'+lines.join('\n');
 }catch(error){report.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{armed=false;IDBDatabase.prototype.transaction=transaction;db.close();}

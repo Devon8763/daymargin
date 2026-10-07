@@ -1,4 +1,5 @@
 import {isoDate, money, pythonStrip, cents, fixedSettings, fixedDueDate, recurringProgress, ValidationError} from './rules.mjs';
+import {scheduleRules,scheduleMonth} from './schedule.mjs';
 
 export const allocationMonth = value => { isoDate(value + '-01'); return value; };
 export const defaultAllocation = () => [{id:'living', name:'生活開銷', cents:'0'}];
@@ -29,11 +30,20 @@ export function incomeMonth(state, month, today = '9999-12-31') {
   const allocated = (plan?.items || []).reduce((sum,row) => sum + cents(row.cents),0n);
   return {entries, plan, received, allocated, difference:received-allocated};
 }
-export function recurringSuggestions(state, month) {
+export function recurringSuggestions(state, month, today='9999-12-31') {
   allocationMonth(month);
   const monthly = new Set(state.monthly_allocations?.find(row => row.month === month)?.excluded_recurring_ids || []);
   const future = new Set((state.allocation_preferences || []).filter(row => row.excluded_from_month <= month).map(row => row.recurring_id));
   const items = [];
+  if(state.scheduled_periods?.length||state.recurring_versions.some(row=>Object.hasOwn(row,'from_index'))) {
+    const rules=new Map(scheduleRules(state,today).map(row=>[row.id,row])),groups=new Map();
+    for(const item of scheduleMonth(state,month,today).items) {
+      const rule=rules.get(item.rule_id);if(!rule||rule.kind==='年度費用'||rule.active!==1||rule.complete||item.status==='skipped')continue;
+      const current=groups.get(item.rule_id)??{id:item.rule_id,kind:rule.kind,name:item.defaults.name,cents:'0',due_on:item.defaults.due_on,excluded:monthly.has(item.rule_id)||future.has(item.rule_id),future:future.has(item.rule_id)};
+      current.cents=(cents(current.cents)+item.contribution).toString();groups.set(item.rule_id,current);
+    }
+    return {items:[...groups.values()],total:[...groups.values()].filter(row=>!row.excluded).reduce((sum,row)=>sum+cents(row.cents),0n)};
+  }
   for (const rule of state.recurring_rules) {
     if (rule.active !== 1 || rule.start_month > month || recurringProgress(state,rule).complete) continue;
     const offset = (Number(month.slice(0,4))-Number(rule.start_month.slice(0,4)))*12 + Number(month.slice(5))-Number(rule.start_month.slice(5));
