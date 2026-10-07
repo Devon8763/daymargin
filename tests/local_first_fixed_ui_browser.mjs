@@ -17,7 +17,7 @@ try {
   document.querySelector('[data-view-button="planning"]').click();
   check(document.querySelector('#fixed-settings')?.tagName==='DETAILS'&&!document.querySelector('#fixed-settings').open,'Missing native collapsed fixed settings');
   check((await exportPortableBackup(db)).toString()===before,'Page implicitly posted/wrote');
-  document.querySelector('#ledger-settings').open=true;document.querySelector('#fixed-settings').open=true;
+  document.querySelector('#fixed-settings').open=true;
   const form=document.querySelector('#fixed-form');
   form.elements.name.value='<img src=x onerror="window.fixedXss=1">';form.elements.amount.value='12.34';form.elements.category.value='居住';form.elements.due_day.value='1';
   form.elements.name.focus();

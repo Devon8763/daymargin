@@ -29,6 +29,7 @@ let privacyReturn=null;
 const categorySection=document.createElement('section');categorySection.setAttribute('aria-label','分類與付款方式');
 categorySection.append(document.querySelector('#settings-fields'),document.querySelector('#settings-error'));
 document.querySelector('#view-settings').append(categorySection);
+document.querySelector('#ledger-settings').prepend(document.querySelector('#budget-settings'));
 for(const [view,selectors] of [
   ['record',['#expense-form','#shortcut-quick','#ending-soon','#budget-overview','#expenses','#search-form','#calendar-grid']],
   ['planning',['#ledger-settings','#income-planning','#annual-management']],
@@ -58,8 +59,13 @@ for(const link of document.querySelectorAll('a[href^="#"]'))link.addEventListene
     document.querySelector('#privacy-back').textContent=privacyReturn.ledgerHidden?'返回首次使用':'返回設定';
     document.querySelector('#privacy-title').focus();return;
   }
-  const view=document.getElementById(link.getAttribute('href').slice(1))?.closest('[data-view]');
+  const target=document.getElementById(link.getAttribute('href').slice(1));
+  const view=target?.closest('[data-view]');
   if(view)showView(view.dataset.view,false);
+  if(link.id==='budget-category-link'||link.id==='category-budget-back') {
+    event.preventDefault();
+    (target.id==='budget-settings'?target.querySelector('summary'):target).focus();
+  }
 });
 document.querySelector('#privacy-back').onclick=()=>closePrivacy();
 let pendingBackup = null, selection = 0;
@@ -598,7 +604,7 @@ function renderEndingSoon() {
       row.dataset.expenseId=item.id;button.onclick=()=>beginExpenseEdit(state.expenses.find(entry=>entry.id===item.id),{listId:'ending-soon-list',id:item.id});
     } else button.onclick=()=>{
       showView('planning',false);
-      document.querySelector('#ledger-settings').open=true;document.querySelector('#fixed-settings').open=true;
+      document.querySelector('#fixed-settings').open=true;
       const target=[...document.querySelector('#fixed-list').children].find(entry=>entry.dataset.id===item.id);
       if(target){target.tabIndex=-1;target.focus();}
     };

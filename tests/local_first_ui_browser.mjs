@@ -126,12 +126,12 @@ try {
   lines.push('two connections stale expense revision preserves draft and newer data');
   const modal = new URLSearchParams(location.search).get('case');
   if (modal === 'settings-dialog') {
-    document.querySelector('#ledger-settings').open = true;
+    document.querySelector('[data-view-button="settings"]').click();
     const row = [...document.querySelectorAll('#category-list li')].find(row => row.querySelector('span').textContent === maliciousCategory);
     row.querySelector('[data-operation="rename"]').click();
     document.querySelector('#setting-name').value = '更改後合成分類';
   } else if (modal === 'fixed-dialog') {
-    document.querySelector('#ledger-settings').open = true; document.querySelector('#fixed-settings').open = true;
+    document.querySelector('[data-view-button="planning"]').click(); document.querySelector('#fixed-settings').open = true;
     const fixed = document.querySelector('#fixed-form');
     fixed.elements.name.value = '確認停用故障合成規則'; fixed.elements.amount.value = '1'; fixed.elements.due_day.value = '1';
     await done(() => fixed.requestSubmit());

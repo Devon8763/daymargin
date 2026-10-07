@@ -5,6 +5,7 @@ const port = Number(process.argv[2] ?? 8767);
 const secureHeaders=process.argv[3]==='--secure'?securityHeaders:{}; // Test-only CSP source; fixed entry has no port option.
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid local preview port');
 const files = new Map([
+  ['/tests/local-first-product-frame.html', ['../local-first/index.html','text/html']],
   ['/tests/local-first-tags.html', ['../local-first/index.html','text/html']],
   ['/tests/local_first_tags_ui_browser.mjs', ['local_first_tags_ui_browser.mjs','text/javascript']],
   ['/tests/local_first_tags_browser.html', ['local_first_tags_browser.html','text/html']],
@@ -92,7 +93,7 @@ createServer(async (request, response) => {
   console.log(request.method, path);
   if (request.method === 'GET' && path === '/tests/local-first-narrow.html') {
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 合成頁面布局驗證</title><h1>375px 瀏覽器子頁面驗證</h1><iframe title="本機記帳驗證" src="/local-first/" width="375" height="1100" style="border:0"></iframe></html>');
+    response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 合成頁面布局驗證</title><h1>375px 瀏覽器子頁面驗證</h1><iframe title="本機記帳驗證" src="/tests/local-first-product-frame.html" width="375" height="1100" style="border:0"></iframe></html>');
     return;
   }
   const file = files.get(path);
@@ -100,15 +101,21 @@ createServer(async (request, response) => {
   if (request.method !== 'GET' || !file) { response.writeHead(404); response.end(); return; }
   try {
     let body = await readFile(new URL(file[0], import.meta.url));
+    if(path==='/tests/local-first-product-frame.html') {
+      body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/local-first/page.mjs"');
+      response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',
+        'X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});
+      response.end(body);return;
+    }
     if(path==='/tests/local-first-tags.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_tags_ui_browser.mjs"');
     if(path==='/tests/local-first-navigation.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_navigation_browser.mjs"');
     if(path==='/tests/local-first-shortcuts.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_shortcuts_ui_browser.mjs"');
     if(path==='/tests/local-first-usage.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_usage_ui_browser.mjs"');
     // Isolated update tests only; these flags do not exist in the fixed production entry.
-    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.18.0-v1','0.13.11-v1')
+    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.18.1-v1','0.13.11-v1')
       .replace("  '/local-first/comparison.mjs',\n",'').replace("  '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js',\n",'');
     if(process.argv[4]==='--next-worker'&&(path==='/local-first/sw.js'||path==='/local-first/'||path==='/local-first/index.html'))
-      body=body.toString('utf8').replace('0.18.0','0.18.1'); // Synthetic next-version label, not a release.
+      body=body.toString('utf8').replace('0.18.1','0.18.2'); // Synthetic next-version label, not a release.
     if(path==='/tests/local-first-comparison.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_comparison_ui_browser.mjs"');
     if (path === '/tests/local-first-recurring.html') {
       body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"')

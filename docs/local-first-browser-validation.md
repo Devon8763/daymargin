@@ -1,3 +1,25 @@
+# 0.18.1 第 1 階段：規劃分流與分類管理連結 — 2026-10-07
+
+**僅供合成資料測試；IndexedDB 未加密，Python Web 尚未被取代。**本節為代理工具本輪觀測；下方第 0 階段的使用者手動驗收保留，不冒稱本輪重新驗證下載落地或獨立設定檔還原。
+
+「規劃」直接提供同層的原生收合入口「預算」「定期支出」，沒有共同收合外層；預算 →「更改分類名稱」切到設定的唯一分類管理並聚焦標題，Tab 可接續到「返回預算」，返回聚焦預算 summary。只移動原節點、不複製表單／事件、不清空草稿或補記。首頁概況卡、年度費用位置及其規則、定期頻率、收入分配、備份及 IndexedDB 結構均保持原樣，沒有 CSS、依賴或資料庫初始化變更。
+
+## 本輪驗證與重跑方式
+
+- 在**全新隔離來源**執行 `node tests/local_first_preview.mjs 20231 --secure`，不要使用已有帳本的來源。`/tests/local-first-navigation.html` 以新隨機後綴的合成 IndexedDB 執行真正頁面；新增斷言先失敗於共同收合外層，再通過 **10 組**。包含原表單物件不變、個別 disclosure、所有表單／選項草稿、連結聚焦與返回；純導覽期間拒絕任何 IndexedDB 交易，前後原始列／metadata 與完整備份相同。既有收入分配草稿、隱私、搜尋／月曆更改與取消／刪除回歸保留。
+- 同一全新來源 `/tests/local-first-budgets.html` **4 組**、`/tests/local-first-recurring.html` **5 組**通過；只初始化各 fixture 的專用合成資料庫，涵蓋預算設定／清除／下限／歷史零元、固定／訂閱／分期原型別與期數、更改／取消／停用、精確統計、競態及配額 rollback。不能將這些合成流程當成正式帳本測試。
+- 審查在第二個新來源 `127.0.0.1:20233` 重現 `/tests/local-first-settings.html` 對舊共同 details 的過時斷言失敗；改為實際設定區／獨立入口後 **6 組**通過，保留分類／付款交易、草稿、歷史快照、取消、跨分頁衝突及移動後 XSS 檢查。`/tests/local-first-fixed.html` **5 組**通過；`/tests/local-first-ui.html?case=settings-dialog` 及 `?case=fixed-dialog` **各 11 組**故障保護通過。保留未知儲存錯誤、quota、abort、重複提交、舊 revision 與提交後畫面故障的原有規則，沒有修改核心。版本強斷言曾在升版後失敗，同步當前頁面／快取及假下一版 fixture 後完整 Node 套件重新通過。
+- 全部 `tests/test_local_first*.mjs` 中非入口檔 **139／139**，入口服務另跑 **8／8**；正式檔案 audit 防護啟動器執行既有 `tests/run_discord_validation.py` **458／458，37.154 秒**，禁止正式 data.db／Token／.env 開檔、非暫存 SQLite，隔離真 dotenv，保留測試自己的暫存設定。Ruff、**71** 個本機／測試 JS 語法與 `git diff --check` 通過。受限環境停滯後停止自己的程序，以相同防護重跑成功；未停用測試、放寬帳務規則或更換依賴。
+- 實際產品 `/local-first/` 的全新合成帳本：桌面 Enter 展開預算，輸入未儲存總預算 `1500` 與定期草稿後，用鍵盤／滑鼠切分類、Tab 到返回連結及返回預算；焦點正確、兩份草稿及原收合狀態保持。桌面實際可用寬／scrollWidth 均 1265px。這些值只存在頁面草稿，沒有按儲存。
+- 瀏覽器 viewport 覆寫沒有改變實際寬度，故改用既有 `/tests/local-first-narrow.html` 的 **375px 原生 iframe**；新增的 `/tests/local-first-product-frame.html` 只由測試預覽提供、讀原 index 及 page.mjs，不複製產品。該測試路由保留 CSP 且僅把 frame-ancestors／X-Frame-Options 改成同來源；正式 `/local-first/` 及固定服務維持 DENY，測試頁不在 SW 白名單。子頁可用寬／scrollWidth 均 **360px**，預算 `3750` 及定期草稿往返保留，鍵盤焦點落在原預算入口；截圖在忽略的 `.tmp/planning-375-proof.jpg`。不是實體手機或瀏覽器全部政策驗證。
+- `/tests/local_first_offline_settings_browser.html` 核對新版 `local-first-offline-0.18.1-v1` 及 **17** 個必要同來源靜態資源，包含分流入口、分類標題及導覽程式；沒有測試頁、帳目、備份或 query 快取。桌面／窄版純導覽後，原始列／metadata／完整備份仍逐位元組不變。停止本輪自己的 20231 服務並確認無監聽，關閉產品及全部窄版子頁，再同網址新頁冷啟動：離線預算、分類連結及返回正常，再次唯讀檢查 PASS，產品頁無 error／warn。
+
+## 更新與尚未驗證
+
+固定啟動方式不變；先自行保留未儲存草稿，保持服務在線至必要資源完整下載，關閉同來源全部舊頁後再開。沒有強制刷新、skipWaiting、新 schema 或資料初始化。更新 fixture 只將當前基準設 0.18.1、合成假下一版設 0.18.2，不表示已有下一版產品；本輪未重跑兩舊頁等待／自然啟用的完整原生演練。
+
+未驗證實體手機、其他瀏覽器、真螢幕閱讀器、正式帳本／備份、真 OAuth、整個瀏覽器程序退出或裝置故障。未讀取或修改正式 data.db、Token、.env、既有備份／匯出或使用者來源；未 stage、commit、push。工作起點為乾淨的 `codex/localhost-web-auth`／`f63bc8175cf8b8ae9a68487bd644864bc5284108`，僅本輪介面、相關測試與文件修改；不以這次 UI 驗證宣稱可安全搬移正式帳本。
+
 # 0.18.0 第 0 階段：使用者手動驗收與本機版本保存 — 2026-10-07（回報日）
 
 **僅供合成資料測試，請勿輸入真實帳目；IndexedDB 未加密，Python Web 尚未被取代。** 本節只補充驗收來源及本機版本保存，不新增功能、不升版本、不宣稱正式帳本已可安全搬移。

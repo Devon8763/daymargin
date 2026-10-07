@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.18.0</p>
+  <p id="page-version">目前使用頁面版本：0.18.1</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -131,10 +131,9 @@
     </details>
   </section>
   <section aria-label="本機帳本設定">
-    <details id="ledger-settings">
-      <summary>本月預算與定期支出設定</summary>
+    <div id="ledger-settings">
       <details id="fixed-settings">
-        <summary>固定支出／訂閱／分期</summary>
+        <summary>定期支出</summary>
         <p>每月扣款；訂閱持續到停用，分期到總期數為止。更改從下月生效；訂閱／分期只可更改金額及分類，名稱、扣款日、類型及總期數不變。開始月份建立後不可更改，短月扣款日取月底。</p>
         <p>只有按下補記或確認停用才入帳。這是記帳，不代表銀行已扣款；開頁、搜尋、月曆及匯出不會補記。</p>
         <form id="fixed-form" novalidate>
@@ -157,7 +156,8 @@
         <ul id="fixed-list"></ul><p id="fixed-empty">尚無固定支出、訂閱或分期。</p>
       </details>
       <details id="budget-settings">
-        <summary>本月預算設定</summary>
+        <summary>預算</summary>
+        <p><a id="budget-category-link" href="#category-management-title">更改分類名稱</a></p>
         <p>新預算限正整數台幣，最多十億元。總預算須至少等於所有分類預算加總（含停用分類）；未設定總預算時可單獨設定分類預算。</p>
         <fieldset id="budget-fields">
           <ul id="budget-setting-list"></ul>
@@ -166,7 +166,8 @@
         <p id="budget-error" role="alert"></p>
       </details>
       <fieldset id="settings-fields">
-        <h3>分類</h3>
+        <h3 id="category-management-title" tabindex="-1">分類管理</h3>
+        <p><a id="category-budget-back" href="#budget-settings">返回預算</a></p>
         <form id="category-add" novalidate>
           <label>新增分類名稱<input name="name" type="text" autocomplete="off"></label>
           <button type="submit">新增分類</button>
@@ -180,7 +181,7 @@
         <ul id="payment-list" class="settings-list"></ul>
       </fieldset>
       <p id="settings-error" role="alert"></p>
-    </details>
+    </div>
   </section>
   <section aria-labelledby="list-title"><h2 id="list-title">有效消費</h2><ul id="expenses"></ul><p id="empty" hidden>尚無有效消費。</p></section>
   <section aria-labelledby="search-title">

@@ -41,7 +41,7 @@ try {
   check(!row('居住').querySelector('input') && !row('交通').querySelector('input'),'Clear-only budget exposes set');
   check(await exportPortableBackup(db).then(value=>value.toString())===before.toString(),'Page read wrote');
   lines.push('read-only exact four-source expenses, explicit zero/no progress, inactive zero-spent and clear-only fractional history');
-  document.querySelector('#ledger-settings').open=true;document.querySelector('#budget-settings').open=true;
+  document.querySelector('#budget-settings').open=true;
   await wait(()=>clear('居住'));await wait(()=>clear('總額'));
   check(document.querySelector('#budget-total').textContent.includes('尚未設定總預算'),'Missing total shown as zero');
   await wait(()=>clear('交通'));await wait(()=>clear(initial.categories[0].name));
