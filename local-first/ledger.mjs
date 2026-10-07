@@ -1,10 +1,11 @@
 import * as distribution from './vendor/lossless-json-4.3.1/lossless-json.js';
-import { validateInput, categoryOptions, categoryName, paymentName, orderedShortcuts, tagName, budgetCents, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
+import { validateInput, categoryOptions, categoryName, paymentName, orderedShortcuts, tagName, budgetCents, money, pythonStrip, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
 import { emptyData, readBackup, writeBackup, integerValue, storedInteger, MAX_INTEGER, MAX_BYTES } from './backup.mjs';
 import { STORES, openLedgerDatabase, readSnapshot, scanTransaction, addState, portable, metadata, rowKey } from './idb.mjs';
 import {annualInput,annualItem,annualDefaults} from './annual.mjs';
 import {incomeInput, allocationInput, allocationMonth, defaultAllocation} from './income.mjs';
 import {usageInput} from './usage.mjs';
+import {scheduleDue,scheduleModels,schedulePeriod,scheduleNext,scheduleDuePeriods} from './schedule.mjs';
 
 export const DB_NAME = 'discordbot-localfirst-synthetic-v1';
 const { stringify } = distribution.default ?? globalThis.LosslessJSON;
@@ -40,7 +41,7 @@ function transaction(db, operation) {
 export function initializeLedger(db) {
   return transaction(db, (tx, state) => {
     if (state !== null) return state;
-    const initial = { format:'local-first-test-ledger', version:6, owner:'local-test-owner', ...emptyData(5),
+    const initial = { format:'local-first-test-ledger', version:7, owner:'local-test-owner', ...emptyData(6),
       payment_sources:[{ id:'p_cash', name:'現金', active:1 }, { id:'p_unspecified', name:'未指定', active:1 }] };
     addState(tx, initial);
     return initial;
@@ -54,7 +55,7 @@ export function restorePortableBackup(db, payload, confirmedMain = false) {
   const parsed = readBackup(payload);
   return transaction(db, (tx, state) => {
     if (state !== null) throw new LedgerError('nonempty', '目標測試帳本已有資料或建立標記，無法還原。');
-    const restored = { format:'local-first-test-ledger', version:6, owner:'local-test-owner', ...emptyData(5), ...parsed.data };
+    const restored = { format:'local-first-test-ledger', version:7, owner:'local-test-owner', ...emptyData(6), ...parsed.data };
     addState(tx, restored);
     return restored;
   });
@@ -262,7 +263,7 @@ export function shortcutDraft(state,id,expectedRevision,today) {
   metadata(state);
   const {entry}=current(state,id,expectedRevision,false);
   if (entry.source!=='manual' || entry.spent_on>isoDate(today) ||
-      (state.annual_periods || []).some(row=>row.expense_id===id))
+      [...(state.annual_periods || []),...(state.scheduled_periods || [])].some(row=>row.expense_id===id))
     throw new LedgerError('unavailable','只有有效的手動生活消費可建立捷徑；年度費用不適用。');
   const value=cents(entry.cents),fraction=(value%100n).toString().padStart(2,'0').replace(/0+$/,'');
   return {name:[...entry.note].slice(0,30).join(''),note:entry.note,category:entry.category,
@@ -355,8 +356,88 @@ export function changeAnnualPeriod(state,operation,id,year,expectedRule,expected
   else throw new ValidationError('請選擇有效的年度期數操作。');
   metadata(changed); return changed;
 }
-export const updateAnnual = (db,op,id,expected,form) => financeWrite(db,state => changeAnnual(state,op,id,expected,form,taiwanToday()));
-export const processAnnual = (db,op,id,year,expectedRule,expectedPeriod,form) => financeWrite(db,state => changeAnnualPeriod(state,op,id,year,expectedRule,expectedPeriod,form,taiwanToday()));
+const legacyScheduleOnly=state=>{if(state.version>=7)throw new LedgerError('unavailable','請使用統一定期支出，逐期確認記錄。');};
+export const updateAnnual = (db,op,id,expected,form) => financeWrite(db,state => {legacyScheduleOnly(state);return changeAnnual(state,op,id,expected,form,taiwanToday());});
+export const processAnnual = (db,op,id,year,expectedRule,expectedPeriod,form) => financeWrite(db,state => {legacyScheduleOnly(state);return changeAnnualPeriod(state,op,id,year,expectedRule,expectedPeriod,form,taiwanToday());});
+
+function scheduleInput(form,state,today,model=null) {
+  const keys=['kind','name','amount','category','payment_source_id','first_due_on','unit','every','periods'];
+  if(!form||Object.keys(form).length!==keys.length||keys.some(key=>!Object.hasOwn(form,key)))throw new ValidationError('定期支出欄位不符合規則。');
+  if(!['固定','訂閱','分期','年度費用'].includes(form.kind))throw new ValidationError('請選擇有效的支出類型。');
+  if(model&&(form.kind!==model.kind||integerValue(form.periods)!==model.total))throw new ValidationError('建立後不能更改支出類型或分期總期數。');
+  if(!model&&(!Number.isInteger(form.periods)||(form.kind==='分期'?form.periods<1||form.periods>600:form.periods!==0)))throw new ValidationError('分期總期數須為 1～600。');
+  if(typeof form.name!=='string'||!pythonStrip(form.name)||[...form.name].length>100)throw new ValidationError('消費項目需填寫，且最多 100 字。');
+  const first_due_on=isoDate(form.first_due_on);
+  if(model&&first_due_on<=today)throw new ValidationError('更改後的首期日期必須晚於台灣今天。');
+  const next=model?scheduleNext(model,today):null,remaining=model?.total?model.total-BigInt(next?.index??0):BigInt(form.periods);
+  scheduleDue(first_due_on,form.unit,form.every,(model?model.total===0n||remaining>1n:form.kind!=='分期'||form.periods>1)?1:0);
+  const previous=model?next?.defaults??model.known.values().next().value?.defaults??model.root:null;
+  if(!categoryOptions(state).some(row=>row.active===1&&row.name===form.category)&&form.category!==previous?.category)throw new ValidationError('請選擇有效分類；更改時可保留原停用分類。');
+  let payment;
+  if(model&&form.payment_source_id==='')payment={id:previous?.payment_source_id??null,name:previous?.payment_source_name??'未指定'};
+  else {
+    payment=state.payment_sources.find(row=>row.id===form.payment_source_id);
+    if(!payment||(payment.active!==1&&payment.id!==previous?.payment_source_id))throw new ValidationError('請選擇有效付款方式。');
+    if(payment.id===previous?.payment_source_id)payment={id:payment.id,name:previous.payment_source_name};
+  }
+  return {first_due_on,unit:form.unit,every:form.every,name:form.name,cents:money(form.amount),category:form.category,payment_source_id:payment.id,payment_source_name:payment.name};
+}
+function persistSchedulePeriod(state,item,count) {
+  count.rows??=new Map(state.scheduled_periods.map(row=>[row.rule_id+'\0'+row.index,row]));
+  const key=item.rule_id+'\0'+item.index;let row=count.rows.get(key);
+  if(row)return row;
+  if(++count.value>100000)throw new LedgerError('limit','本機帳本已達完整備份容量上限，資料沒有變更。');
+  row={rule_id:item.rule_id,index:item.index,defaults:structuredClone(item.defaults),status:item.status==='upcoming'?'pending':item.status,expense_id:item.expense_id,revision:item.revision??0};state.scheduled_periods.push(row);count.rows.set(key,row);return row;
+}
+function captureSchedule(state,model,count,freezeDue=false) {
+  for(const item of model.known.values())persistSchedulePeriod(state,item,count);
+  if(freezeDue)for(const item of scheduleDuePeriods(model,count.today))persistSchedulePeriod(state,item,count);
+}
+export function changeSchedule(state,operation,id,expected,form,today) {
+  const meta=metadata(state),changed={...emptyData(6),...structuredClone(state)};isoDate(today);
+  const model=scheduleModels(changed).find(row=>row.root.id===id);
+  if(operation==='add') {
+    if(model||expected!==null)throw new LedgerError('conflict','此操作已處理，請重新載入。');
+    const fields=scheduleInput(form,changed,today),month=fields.first_due_on.slice(0,7);
+    if(form.kind==='年度費用')changed.annual_rules.push({id,name:fields.name,cents:fields.cents,category:fields.category,payment_source_id:fields.payment_source_id,payment_source_name:fields.payment_source_name,first_year:Number(fields.first_due_on.slice(0,4)),due_month:Number(fields.first_due_on.slice(5,7)),due_day:Number(fields.first_due_on.slice(8)),effective_month:month,active:1,revision:0});
+    else changed.recurring_rules.push({id,name:fields.name,cents:fields.cents,category:fields.category,kind:form.kind,start_month:month,periods:form.periods,due_day:Number(fields.first_due_on.slice(8)),active:1,revision:0});
+    changed.recurring_versions.push({id:identifier('v_'),recurring_id:id,from_index:0,...fields});
+  } else {
+    if(!model||model.root.active!==1)throw new LedgerError('unavailable','此定期支出無法操作，請重新載入。');
+    financeRevision(model.root,expected);
+    if(!['update','disable'].includes(operation))throw new ValidationError('請選擇有效定期支出操作。');
+    const next=scheduleNext(model,today);
+    if(operation==='update'&&!next)throw new LedgerError('unavailable','沒有可更改的未來期數。');
+    const fields=operation==='update'?scheduleInput(form,changed,today,model):null;
+    captureSchedule(changed,model,{value:meta.row_count,today},true);incrementRevision(model.root);
+    if(operation==='disable')model.root.active=0;
+    else {
+      const version=changed.recurring_versions.find(row=>row.recurring_id===id&&row.from_index===next.index);
+      if(version)Object.assign(version,fields);else changed.recurring_versions.push({id:identifier('v_'),recurring_id:id,from_index:next.index,...fields});
+    }
+  }
+  metadata(changed);return changed;
+}
+const amountInput=value=>{const exact=cents(value);return (exact/100n).toString()+'.'+(exact%100n).toString().padStart(2,'0');};
+export function changeScheduledPeriod(state,operation,id,index,expectedRule,expectedPeriod,form,today) {
+  const meta=metadata(state),changed={...emptyData(6),...structuredClone(state)};isoDate(today);
+  const model=scheduleModels(changed).find(row=>row.root.id===id);
+  if(!model)throw new LedgerError('unavailable','找不到此定期支出。');financeRevision(model.root,expectedRule);
+  const item=schedulePeriod(model,index,today);
+  if(!item||item.defaults.due_on>today||item.status==='recorded'||(operation==='resume'?item.status!=='skipped':item.status!=='pending'))throw new LedgerError('unavailable','此期已處理或尚未到期，請重新載入。');
+  financeRevision(item.revision===null?null:item,expectedPeriod);
+  const count={value:meta.row_count,today};captureSchedule(changed,model,count);
+  const row=persistSchedulePeriod(changed,item,count);if(item.revision!==null)incrementRevision(row);
+  if(operation==='record') {
+    const defaultPayment=item.defaults.payment_source_id??changed.payment_sources.find(row=>row.active===1&&row.name==='未指定')?.id;
+    const input=form??{spent_on:item.defaults.due_on,amount:amountInput(item.defaults.cents),note:item.defaults.name,category:item.defaults.category,payment_source_id:defaultPayment};
+    const entry={id:identifier('e_'),...validateInput(input,changed,today),source:model.annual?'manual':model.root.kind,recurring_id:model.annual?null:id,period:model.annual?null:item.defaults.due_on.slice(0,7),voided:0,kind:'consumption',revision:0};
+    changed.expenses.push(entry);applyUsage(changed,entry.id,input.usage);applyTags(changed,entry.id,input.tags);changed.actions.push({id:identifier('a_'),expense_id:entry.id,before:null,undone:0});row.status='recorded';row.expense_id=entry.id;
+  }else if(operation==='skip')row.status='skipped';else if(operation==='resume')row.status='pending';else throw new ValidationError('請選擇有效期數操作。');
+  metadata(changed);return changed;
+}
+export const updateSchedule=(db,op,id=null,expected=null,form=null)=>financeWrite(db,state=>changeSchedule(state,op,id,expected,form,taiwanToday()));
+export const processSchedule=(db,op,id,index,expectedRule,expectedPeriod,form=null)=>financeWrite(db,state=>changeScheduledPeriod(state,op,id,index,expectedRule,expectedPeriod,form,taiwanToday()));
 
 export function changeCategory(state, operation, oldName, value) {
   metadata(state); // Reject corrupt or over-limit history before preparing any changes.
@@ -377,6 +458,7 @@ export function changeCategory(state, operation, oldName, value) {
       const references = ['expenses', 'budgets', 'recurring_rules', 'recurring_versions', 'shortcuts', 'annual_rules'];
       if (options.some(row => row.name === name) || references.some(section => (state[section] || []).some(row => row.category === name)) ||
           (state.annual_periods || []).some(row => row.defaults.category === name) ||
+          (state.scheduled_periods || []).some(row => row.defaults.category === name) ||
           state.actions.some(row => row.before?.category === name)) {
         throw new ValidationError('已有同名分類或歷史，不能合併分類。');
       }
@@ -390,6 +472,7 @@ export function changeCategory(state, operation, oldName, value) {
       for (const row of changed.recurring_rules) {
         if (row.category === oldName || versionRules.has(row.id)) incrementRevision(row);
       }
+      for(const row of changed.annual_rules||[])if(row.category!==oldName&&versionRules.has(row.id))incrementRevision(row);
       for (const section of references) for (const row of changed[section] || []) {
         if (row.category !== oldName) continue;
         row.category = name;
@@ -398,6 +481,7 @@ export function changeCategory(state, operation, oldName, value) {
       for (const row of changed.annual_periods || []) if (row.defaults.category === oldName) {
         row.defaults.category = name; incrementRevision(row);
       }
+      for(const row of changed.scheduled_periods||[])if(row.defaults.category===oldName){row.defaults.category=name;incrementRevision(row);}
       for (const row of changed.actions) if (row.before?.category === oldName) row.before.category = name;
     } else throw new ValidationError('請選擇有效的分類操作。');
   }
@@ -603,6 +687,7 @@ export function changeFixed(state, operation, id, expectedRevision, form, today)
 export function updateRecurring(db, operation, id = null, expectedRevision = null, form = null, fixedOnly = false) {
   return transaction(db, (tx, state) => {
     if (state === null) throw new LedgerError('uninitialized', '測試帳本尚未建立。');
+    legacyScheduleOnly(state);
     const changed = changeRecurring(state, operation, id, expectedRevision, form, taiwanToday(), fixedOnly);
     saveSettings(tx, state, changed);
     if (changed.actions.length !== state.actions.length) {

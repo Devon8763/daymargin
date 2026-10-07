@@ -1,5 +1,5 @@
 // Bump this name whenever any cached asset or this worker changes.
-const CACHE = 'local-first-offline-0.18.1-v1';
+const CACHE = 'local-first-offline-0.19.0-v2';
 const ASSETS = [
   '/local-first/',
   '/local-first/index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   '/local-first/ledger.mjs',
   '/local-first/idb.mjs',
   '/local-first/rules.mjs',
+  '/local-first/schedule.mjs',
   '/local-first/income.mjs', '/local-first/annual.mjs',
   '/local-first/usage.mjs',
   '/local-first/browse.mjs',

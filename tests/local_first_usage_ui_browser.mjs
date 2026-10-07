@@ -46,8 +46,8 @@ try {
   form.elements.amount.value='.29';form.elements.note.value='<img src=x onerror=alert(1)>';form.elements.usage_days.value='1';form.requestSubmit();await wait(()=>!q('#ending-soon').hidden);
   check(q('#ending-soon-list').textContent.includes('<img')&&!q('#ending-soon-list img')&&!q('#expenses img')&&!q('#expenses').textContent.includes('每日平均成本'),'XSS or daily-cost default');
   lines.push('malicious consumption names remain text; new daily cost is opt-in');
-  const fixed=q('#fixed-form');fixed.elements.kind.value='分期';fixed.elements.kind.dispatchEvent(new Event('change'));fixed.elements.name.value='合成末期';fixed.elements.amount.value='.29';fixed.elements.due_day.value='1';fixed.elements.periods.value='2';fixed.requestSubmit();
-  await wait(()=>q('#fixed-list').textContent.includes('合成末期'));q('#fixed-sync').click();await wait(()=>q('#ending-soon-list').textContent.includes('剩 1 期'));
+  const fixed=q('#fixed-form');fixed.elements.kind.value='分期';fixed.elements.kind.dispatchEvent(new Event('change'));fixed.elements.name.value='合成末期';fixed.elements.amount.value='.29';fixed.elements.first_due_on.value=today.slice(0,7)+'-01';fixed.elements.periods.value='2';fixed.requestSubmit();
+  await wait(()=>q('#fixed-list').textContent.includes('合成末期'));q('#schedule-periods [data-operation="record"]').click();await wait(()=>q('#ending-soon-list').textContent.includes('剩 1 期'));
   const buttons=[...q('#ending-soon-list').querySelectorAll('button')];buttons.find(button=>button.textContent==='查看分期').click();
   check(q('#fixed-settings').open&&q('#ending-soon-list').textContent.includes('今天預計用完'),'Shared reminder navigation lost one kind');
   lines.push('one shared collapsed reminder distinguishes usage days and last installment with direct settings navigation');

@@ -1,12 +1,12 @@
-import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateRecurring, updateIncome, updateAllocation, excludeSuggestion, updateAnnual, processAnnual, updateShortcut, shortcutDraft, updateTag, taiwanToday, LedgerError } from './ledger.mjs';
+import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateSchedule, processSchedule, updateIncome, updateAllocation, excludeSuggestion, updateShortcut, shortcutDraft, updateTag, taiwanToday, LedgerError } from './ledger.mjs';
 import { readBackup, validateStorageLimits, MAX_BYTES, integerValue, storedInteger } from './backup.mjs';
 import {encryptBackup,decryptBackup,isEncryptedBackup,inspectEncryptedBackup,confirmBackupPassword,MAX_ENCRYPTED_BYTES,EncryptedBackupError} from './backup-crypto.mjs';
-import { categoryOptions, categoryName, cents, orderedShortcuts, tagName, tagSuggestions, fixedNextMonth, fixedSettings, fixedView, recurringProgress, ValidationError } from './rules.mjs';
+import { categoryOptions, categoryName, cents, orderedShortcuts, tagName, tagSuggestions, ValidationError } from './rules.mjs';
 import { activeExpenses, validateSearch, searchExpenses, calendarMonth, monthBudget, tagReport, validateTagQuery } from './browse.mjs';
 import { validateCsvRange, expenseCsv } from './csv.mjs';
 import {comparisonDefaults,comparisonCategories,validateComparison,compareExpenses,comparisonDay,canPlotComparison} from './comparison.mjs';
 import {incomeMonth, recurringSuggestions, defaultAllocation, allocationMonth} from './income.mjs';
-import {annualItems,annualReserve} from './annual.mjs';
+import {scheduleRules,scheduleItems,scheduleMonth,scheduleReserve} from './schedule.mjs';
 import {endingSoon,usageEnd,dailyCost} from './usage.mjs';
 
 const form = document.querySelector('#expense-form');
@@ -31,8 +31,8 @@ categorySection.append(document.querySelector('#settings-fields'),document.query
 document.querySelector('#view-settings').append(categorySection);
 document.querySelector('#ledger-settings').prepend(document.querySelector('#budget-settings'));
 for(const [view,selectors] of [
-  ['record',['#expense-form','#shortcut-quick','#ending-soon','#budget-overview','#expenses','#search-form','#calendar-grid']],
-  ['planning',['#ledger-settings','#income-planning','#annual-management']],
+  ['record',['#expense-form','#shortcut-quick','#ending-soon','#budget-overview','#schedule-overview','#expenses','#search-form','#calendar-grid']],
+  ['planning',['#ledger-settings','#income-planning']],
   ['analysis',['#expense-comparison','#tag-analysis']],['settings',['#data-management','#tag-settings']]])
   for(const selector of selectors)document.querySelector('#view-'+view).append(document.querySelector(selector).closest('section'));
 document.querySelector('#view-planning-title').after(document.querySelector('#planning-links'));
@@ -278,87 +278,61 @@ shortcutForm.onsubmit=event=>{
   saving(()=>updateShortcut(db,expected,operation,id,input,source),resetShortcut,shortcutError);
 };
 document.querySelector('#cancel-shortcut').onclick=()=>{if(!busy&&!writeBlocked){resetShortcut();shortcutError.textContent='';}};
-const annualForm=document.querySelector('#annual-form'),annualPanel=document.querySelector('#annual-management');
-const annualError=document.querySelector('#annual-error'),annualDialog=document.querySelector('#annual-dialog');
-let annualEditing=null,annualDraftId=null,annualDraft=null,annualAction=null,annualLimit=100;
-annualForm.elements.first_year.value=taiwanToday().slice(0,4);
-annualForm.elements.due_month.value=Number(taiwanToday().slice(5,7));
-annualForm.elements.due_day.value='1';
-function annualChoices() {
-  for(const [field,rows] of [['category',categoryOptions(state).filter(row=>row.active===1||row.name===annualEditing?.category).map(row=>({value:row.name,name:row.name+(row.active?'':'（已停用）')}))],
-    ['payment_source_id',state.payment_sources.filter(row=>row.active===1||row.id===annualEditing?.payment_source_id).map(row=>({value:row.id,name:row.name+(row.active?'':'（已停用）')}))]]) {
-    const select=annualForm.elements[field],value=select.value;
-    select.replaceChildren(...rows.map(row=>{const option=node('option',row.name);option.value=row.value;return option;}));
-    if(rows.some(row=>row.value===value))select.value=value;
-  }
-}
-function resetAnnual() {
-  annualForm.reset();annualEditing=null;annualDraftId=null;
-  annualForm.elements.first_year.value=taiwanToday().slice(0,4);annualForm.elements.due_month.value=Number(taiwanToday().slice(5,7));annualForm.elements.due_day.value='1';
-  document.querySelector('#annual-form-title').textContent='新增年度費用';document.querySelector('#cancel-annual-edit').hidden=true;annualChoices();
-}
-function askAnnual(operation,item) {
-  if(busy||writeBlocked)return;annualAction={operation,item:structuredClone(item)};
-  document.querySelector('#annual-dialog-title').textContent=operation==='disable'?'確認停用年度費用':'確認略過今年';
-  document.querySelector('#annual-dialog-summary').textContent=operation==='disable'
-    ? item.name+'：停止未來新期數，已到期未處理草稿仍保留；不產生或刪除消費。'
-    : item.year+'｜'+item.defaults.name+'：只略過這一次，明年仍照常；不產生消費。';
+const annualDialog=document.querySelector('#annual-dialog');
+let annualDraft=null,annualAction=null,annualLimit=100;
+function askAnnual(item) {
+  if(busy||writeBlocked)return;annualAction=structuredClone(item);
+  document.querySelector('#annual-dialog-title').textContent='確認略過此期';
+  document.querySelector('#annual-dialog-summary').textContent=item.defaults.due_on+'｜'+item.defaults.name+'：只略過這一期，不產生消費；可恢復同一期。';
   document.querySelector('#annual-dialog-error').textContent='';annualDialog.showModal();
 }
-function renderAnnual() {
-  annualChoices();const rules=document.querySelector('#annual-rules');rules.replaceChildren();
-  if(!state.annual_rules.length)rules.append(node('li','尚未設定年度費用。'));
-  for(const rule of state.annual_rules) {
-    const row=node('li');row.dataset.annualId=rule.id;
-    row.append(node('p',rule.name+'｜'+amountText(rule.cents)+' 元｜每年 '+rule.due_month+'/'+rule.due_day+'｜首次 '+rule.first_year+' 年｜'+rule.category+'｜'+rule.payment_source_name+(rule.active?'':'（已停用）')));
-    if(rule.active) {
-      const edit=node('button','更改年度費用');edit.type='button';edit.onclick=()=>{
-        if(busy||writeBlocked)return;annualEditing=structuredClone(rule);annualDraftId=null;annualChoices();
-        for(const key of ['name','category','payment_source_id','first_year','due_month','due_day'])annualForm.elements[key].value=rule[key];
-        annualForm.elements.amount.value=amountText(rule.cents,false);document.querySelector('#annual-form-title').textContent='更改年度費用（已開始期數保留原草稿）';
-        document.querySelector('#cancel-annual-edit').hidden=false;annualForm.elements.name.focus();
-      };
-      const stop=node('button','停用年度費用');stop.type='button';stop.onclick=()=>askAnnual('disable',rule);row.append(edit,stop);
-    }rules.append(row);
-  }
-  const periods=document.querySelector('#annual-periods'),result=annualItems(state,taiwanToday(),annualLimit);periods.replaceChildren();
-  if(!result.items.length)periods.append(node('li','目前沒有已開始的年度期數。'));
-  for(const item of result.items) {
-    const row=node('li');row.dataset.annualId=item.annual_id;row.dataset.year=item.year;
-    const voided=state.expenses.find(entry=>entry.id===item.expense_id)?.voided===1;
-    row.append(node('p',item.year+'｜'+item.defaults.name+'｜原定 '+item.due_on+'｜'+amountText(item.defaults.cents)+' 元｜'+({pending:'待記錄',recorded:'已記錄',skipped:'已略過'}[item.status])+(voided?'（消費已刪除，不會重建）':'')));
-    if(item.status==='pending') {
-      const record=node('button','記錄消費');record.type='button';record.onclick=()=>{
-        if(busy||writeBlocked)return;resetForm();annualDraft=structuredClone(item);
-        showView('record',false);
-        form.elements.spent_on.value=item.due_on;usageFields(null,item.due_on);form.elements.amount.value=amountText(item.defaults.cents,false);form.elements.note.value=item.defaults.name;
-        form.elements.category.value=item.defaults.category;form.elements.payment_source_id.value=item.defaults.payment_source_id;
-        document.querySelector('#form-title').textContent='記錄年度費用消費（'+item.year+' 年）';document.querySelector('#save').textContent='記錄消費';document.querySelector('#cancel-edit').hidden=false;
-        error.textContent=!form.elements.category.value||!form.elements.payment_source_id.value?'原分類或付款方式已停用，請另選有效項目。':'';
-        form.elements.amount.focus();
-      };
-      const skip=node('button','略過今年');skip.type='button';skip.onclick=()=>askAnnual('skip',item);row.append(record,skip);
-    }periods.append(row);
-  }
-  document.querySelector('#annual-more').hidden=!result.more;
+function beginScheduleDraft(item) {
+  if(busy||writeBlocked)return;
+  if(editing||annualDraft){document.querySelector('#fixed-error').textContent='請先儲存或取消目前的消費編輯。';return;}
+  const previous={values:[...form.elements].filter(el=>el.name).map(el=>({name:el.name,value:el.value,checked:el.checked})),tags:structuredClone(tagDraft),query:tagInput.value,usageStartChosen,tagsOpen:document.querySelector('#expense-tags').open,usageOpen:document.querySelector('#usage-inputs').open};
+  resetForm();annualDraft={...structuredClone(item),previous};
+  editingOrigin={listId:'schedule-periods',ruleId:item.rule_id,index:item.index};showView('record',false);
+  form.elements.spent_on.value=item.defaults.due_on;usageFields(null,item.defaults.due_on);
+  form.elements.amount.value=amountText(item.defaults.cents,false);form.elements.note.value=item.defaults.name;
+  form.elements.category.value=item.defaults.category;form.elements.payment_source_id.value=item.defaults.payment_source_id ?? '';
+  document.querySelector('#form-title').textContent='記錄定期支出（原定 '+item.defaults.due_on+'）';document.querySelector('#save').textContent='記錄消費';document.querySelector('#cancel-edit').hidden=false;
+  error.textContent=!form.elements.category.value||!form.elements.payment_source_id.value?'原分類或付款方式已停用或未指定，請另選有效項目。':'';
+  renderShortcuts();form.elements.amount.focus();
 }
-document.querySelector('#annual-more').onclick=()=>{if(!busy&&!writeBlocked){annualLimit+=100;renderAnnual();}};
-document.querySelector('#annual-entry').onclick=()=>{annualPanel.open=true;};
-annualForm.onsubmit=event=>{
-  event.preventDefault();if(busy||writeBlocked)return;
-  const input=Object.fromEntries(new FormData(annualForm));
-  for(const field of ['first_year','due_month','due_day'])input[field]=/^[0-9]{1,4}$/.test(input[field])?Number(input[field]):NaN;
-  annualDraftId??='y_'+crypto.randomUUID();
-  saving(()=>updateAnnual(db,annualEditing?'update':'add',annualEditing?.id||annualDraftId,annualEditing?.revision??null,input),resetAnnual,annualError);
-};
-document.querySelector('#cancel-annual-edit').onclick=()=>{if(!busy&&!writeBlocked)resetAnnual();};
+function renderPeriods() {
+  const result=scheduleItems(state,taiwanToday(),annualLimit),recent=document.querySelector('#schedule-recent'),older=document.querySelector('#schedule-older ul');
+  recent.replaceChildren();older.replaceChildren();
+  const items=result.items;
+  if(!items.length)recent.append(node('li','目前沒有可查看的期數。'));
+  for(const [position,item] of items.entries()) {
+    const row=node('li');row.dataset.ruleId=item.rule_id;row.dataset.index=item.index;
+    const entry=state.expenses.find(entry=>entry.id===item.expense_id),voided=entry?.voided===1;
+    row.append(node('p','預定 '+item.defaults.due_on+'｜'+item.defaults.name+'｜預設 '+amountText(item.defaults.cents)+' 元｜'+item.defaults.category+'｜'+item.defaults.payment_source_name+'｜'+({upcoming:'即將到期',pending:'待記錄',recorded:'已記錄',skipped:'已略過'}[item.status])+(voided?'（消費已刪除，不會重建）':entry?'｜實付 '+amountText(entry.cents)+' 元｜實際日期 '+entry.spent_on:'')));
+    if(item.status==='pending')for(const [operation,label] of [['record','按預設記錄'],['draft','更改實付再記錄'],['skip','略過此期']]) {
+      const button=node('button',label);button.type='button';button.dataset.operation=operation;
+      button.onclick=()=>{if(busy||writeBlocked)return;if(operation==='draft')beginScheduleDraft(item);else if(operation==='skip')askAnnual(item);else saving(()=>processSchedule(db,'record',item.rule_id,item.index,item.rule_revision,item.revision,null),()=>{},document.querySelector('#fixed-error'));};row.append(button);
+    }
+    else if(item.status==='skipped') {
+      const button=node('button','恢復此期');button.type='button';button.dataset.operation='resume';
+      button.onclick=()=>saving(()=>processSchedule(db,'resume',item.rule_id,item.index,item.rule_revision,item.revision,null),()=>{},document.querySelector('#fixed-error'));row.append(button);
+    }
+    (position<5?recent:older).append(row);
+  }
+  document.querySelector('#schedule-older').hidden=items.length<=5;
+  document.querySelector('#schedule-more').hidden=!result.more;
+}
+function renderScheduleOverview() {
+  const result=scheduleMonth(state,taiwanToday().slice(0,7),taiwanToday());
+  document.querySelector('#schedule-total').textContent='本月規劃金額：'+amountText(result.total)+' 元';
+  document.querySelector('#schedule-month-items').replaceChildren(...result.items.map(item=>node('li',item.defaults.due_on+'｜'+item.defaults.name+'｜'+amountText(item.contribution)+' 元｜'+({upcoming:'即將到期',pending:'待記錄',recorded:'已記錄',skipped:'已略過'}[item.status]))));
+}
+document.querySelector('#schedule-more').onclick=()=>{if(!busy&&!writeBlocked){annualLimit+=100;renderPeriods();}};
 document.querySelector('#cancel-annual').onclick=()=>{if(!busy)annualDialog.close();};
 annualDialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
-annualDialog.addEventListener('close',()=>{annualAction=null;});
+annualDialog.addEventListener('close',()=>{if(!annualDialog.open)annualAction=null;});
 document.querySelector('#confirm-annual').onclick=()=>{
-  if(busy||writeBlocked||!annualAction)return;const {operation,item}=annualAction;
-  saving(()=>operation==='disable'?updateAnnual(db,'disable',item.id,item.revision,null)
-    :processAnnual(db,'skip',item.annual_id,item.year,item.rule_revision,item.revision,null),()=>annualDialog.close(),document.querySelector('#annual-dialog-error'));
+  if(busy||writeBlocked||!annualAction)return;const item=annualAction;
+  saving(()=>processSchedule(db,'skip',item.rule_id,item.index,item.rule_revision,item.revision,null),()=>annualDialog.close(),document.querySelector('#annual-dialog-error'));
 };
 const incomePanel=document.querySelector('#income-planning'),incomeForm=document.querySelector('#income-form');
 const incomeMonthForm=document.querySelector('#income-month-form'),allocationForm=document.querySelector('#allocation-form');
@@ -392,7 +366,7 @@ function resetIncomeForm() {
 }
 function renderIncome() {
   incomeMonthForm.elements.month.value=incomeViewedMonth;
-  const summary=incomeMonth(state,incomeViewedMonth,taiwanToday()),suggestions=recurringSuggestions(state,incomeViewedMonth);
+  const summary=incomeMonth(state,incomeViewedMonth,taiwanToday()),suggestions=recurringSuggestions(state,incomeViewedMonth,taiwanToday());
   const totals=document.querySelector('#income-summary');
   totals.replaceChildren(node('h3',incomeViewedMonth),node('p','已收到的收入：'+amountText(summary.received)+' 元'),
     node('p','已規劃的分配：'+(summary.plan?amountText(summary.allocated)+' 元':'尚未設定')),
@@ -422,7 +396,7 @@ function renderIncome() {
       saving(()=>excludeSuggestion(db,incomeViewedMonth,item.id,'month',allocationExpected),()=>{allocationExpected=state.monthly_allocations.find(row=>row.month===incomeViewedMonth).revision;},incomeError);
     };row.append(exclude);}details.append(row);
   }
-  const reserve=annualReserve(state,incomeViewedMonth,taiwanToday());
+  const reserve=scheduleReserve(state,incomeViewedMonth,taiwanToday());
   document.querySelector('#annual-reserve-total').textContent=incomeViewedMonth<taiwanToday().slice(0,7)?'往月不重新推算年度參考額，以上為當時已儲存分配。':'每月參考額合計：'+amountText(reserve.total)+' 元（另列，不套用分配）';
   document.querySelector('#annual-reserve-items').replaceChildren(...reserve.items.map(item=>node('li',item.name+'｜年度預估 '+amountText(item.annual_cents)+' 元｜每月參考額 '+amountText(item.cents)+' 元')));
 }
@@ -456,7 +430,7 @@ document.querySelector('#add-allocation-item').onclick=()=>{
 };
 document.querySelector('#apply-income-suggestion').onclick=()=>{
   if(busy||writeBlocked||!incomeLoaded)return;
-  const value=recurringSuggestions(state,incomeViewedMonth).total;
+  const value=recurringSuggestions(state,incomeViewedMonth,taiwanToday()).total;
   let target=document.querySelector('[data-item-id="living"] [data-field="amount"]');
   if(!target){document.querySelector('#allocation-items').append(allocationRow(defaultAllocation()[0]));target=document.querySelector('[data-item-id="living"] [data-field="amount"]');}
   target.value=amountText(value,false);allocationDirty=true;
@@ -613,6 +587,7 @@ function renderEndingSoon() {
 }
 function resetForm() {
   const origin = editingOrigin;
+  const previous = annualDraft?.previous;
   editing = null;
   annualDraft = null;
   editingOrigin = null;
@@ -627,13 +602,21 @@ function resetForm() {
   document.querySelector('#form-title').textContent = '記錄消費';
   document.querySelector('#save').textContent = '儲存消費';
   document.querySelector('#cancel-edit').hidden = true;
+  if(previous) {
+    for(const item of previous.values){form.elements[item.name].value=item.value;if(form.elements[item.name].type==='checkbox')form.elements[item.name].checked=item.checked;}
+    tagDraft=previous.tags;tagInput.value=previous.query;usageStartChosen=previous.usageStartChosen;renderTagInput();
+    document.querySelector('#expense-tags').open=previous.tagsOpen;document.querySelector('#usage-inputs').open=previous.usageOpen;
+    document.querySelector('#cancel-edit').hidden=!previous.values.some(item=>['amount','note','usage_days'].includes(item.name)&&item.value.trim())&&tagDraft.length===0;
+    renderShortcuts();
+  }
   return origin;
 }
 function returnToExpense(origin) {
   if (!origin) return;
   const container = document.getElementById(origin.listId);
   showView(container.closest('[data-view]').dataset.view,false);
-  const row = [...container.children].find(row => row.dataset.expenseId === origin.id);
+  const row = origin.ruleId ? [...container.querySelectorAll('[data-rule-id]')].find(row=>row.dataset.ruleId===origin.ruleId&&row.dataset.index===String(origin.index)) : [...container.children].find(row => row.dataset.expenseId === origin.id);
+  if(origin.ruleId&&row?.closest('details'))row.closest('details').open=true;
   const target = row?.querySelector('button') || container;
   if (target === container) target.tabIndex = -1;
   target.focus();
@@ -645,7 +628,8 @@ function render() {
   renderSettings();
   renderBudgets();
   renderFixed();
-  renderAnnual();
+  renderPeriods();
+  renderScheduleOverview();
   renderEndingSoon();
   if (incomePanel.open && incomeLoaded) renderIncome();
   list.replaceChildren();
@@ -679,7 +663,7 @@ function expenseRow(entry,snapshot=state) {
       dialog.showModal();
     };
     buttons.append(edit);
-    if(entry.source==='manual' && !(state.annual_periods || []).some(item=>item.expense_id===entry.id)) {
+    if(entry.source==='manual' && ![...(state.annual_periods || []),...(state.scheduled_periods || [])].some(item=>item.expense_id===entry.id)) {
       const shortcut=node('button','建立捷徑');shortcut.type='button';shortcut.dataset.operation='shortcut';
       shortcut.onclick=()=>shortcutRead(snapshot=>startShortcut(snapshot,shortcutDraft(snapshot,entry.id,entry.revision,taiwanToday()),null,{id:entry.id,revision:entry.revision}));
       buttons.append(shortcut);
@@ -805,7 +789,6 @@ async function saving(operation, success, message = error) {
   document.querySelector('#shortcut-fields').disabled=true;
   document.querySelector('#tag-fields').disabled=true;
   incomeBusy(true);
-  document.querySelector('#annual-fields').disabled=true;
   document.querySelector('#confirm-annual').disabled=true;document.querySelector('#cancel-annual').disabled=true;
   message.textContent = '';
   document.querySelector('#settings-fields').disabled = true;
@@ -836,7 +819,6 @@ async function saving(operation, success, message = error) {
     document.querySelector('#shortcut-fields').disabled=writeBlocked;
     document.querySelector('#tag-fields').disabled=writeBlocked;
     incomeBusy(writeBlocked);
-    document.querySelector('#annual-fields').disabled=writeBlocked;
     document.querySelector('#confirm-annual').disabled=writeBlocked;document.querySelector('#cancel-annual').disabled=writeBlocked;
     document.querySelector('#settings-fields').disabled = writeBlocked;
     document.querySelector('#budget-fields').disabled = writeBlocked;
@@ -854,118 +836,82 @@ async function saving(operation, success, message = error) {
   }
 }
 function fixedBusy(disabled) {
-  document.querySelector('#fixed-fields').disabled = disabled;
-  for (const button of document.querySelectorAll('#fixed-list button, #fixed-sync, #confirm-fixed-stop, #cancel-fixed-stop')) button.disabled = disabled;
+  document.querySelector('#fixed-fields').disabled=disabled;
+  for(const button of document.querySelectorAll('#fixed-list button,#schedule-periods button,#schedule-more,#confirm-fixed-stop,#cancel-fixed-stop'))button.disabled=disabled;
 }
 function fixedChoices() {
-  const selected = fixedForm.elements.category.value;
-  const retained = fixedEditing ? fixedSettings(state, fixedEditing, fixedNextMonth(taiwanToday().slice(0, 7))).category : null;
-  const options = categoryOptions(state).filter(row => row.active === 1 || row.name === retained);
-  if (retained && !options.some(row => row.name === retained)) options.push({name:retained, active:0});
-  fixedForm.elements.category.replaceChildren(...options.map(row => {
-    const option = node('option', row.name + (row.active === 0 ? '（停用，保留原值）' : '')); option.value = row.name; return option;
-  }));
-  if (options.some(row => row.name === selected)) fixedForm.elements.category.value = selected;
-  const month = taiwanToday().slice(0, 7), previous = fixedForm.elements.start_month.value;
-  const months = fixedEditing ? [fixedEditing.start_month] : [month, fixedNextMonth(month)];
-  fixedForm.elements.start_month.replaceChildren(...months.map(value => {const option = node('option', value); option.value = value; return option;}));
-  if (months.includes(previous)) fixedForm.elements.start_month.value = previous;
-  fixedForm.elements.start_month.disabled = fixedEditing !== null;
+  for(const [field,rows] of [['category',categoryOptions(state).filter(row=>row.active===1||row.name===fixedEditing?.category).map(row=>({value:row.name,name:row.name+(row.active?'':'（停用，保留原值）')}))],
+    ['payment_source_id',state.payment_sources.filter(row=>row.active===1||row.id===fixedEditing?.payment_source_id).map(row=>({value:row.id,name:row.name+(row.active?'':'（停用，保留原值）')}))]]) {
+    const select=fixedForm.elements[field],value=select.value;
+    if(field==='payment_source_id'&&fixedEditing?.payment_source_id===null)rows.unshift({value:'',name:'保留未指定付款方式'});
+    select.replaceChildren(...rows.map(row=>{const option=node('option',row.name);option.value=row.value;return option;}));
+    if(rows.some(row=>row.value===value))select.value=value;
+  }
 }
 function resetFixed() {
-  fixedEditing = null; fixedForm.reset(); fixedChoices();
-  recurringFields();
-  document.querySelector('#cancel-fixed-edit').hidden = true;
+  fixedEditing=null;fixedDraftId=null;fixedForm.reset();fixedForm.elements.first_due_on.value=taiwanToday();fixedChoices();recurringFields();
+  document.querySelector('#cancel-fixed-edit').hidden=true;
 }
-const recurringLabel = kind => kind === '固定' ? '固定支出' : kind;
+const recurringLabel=kind=>kind==='固定'?'固定支出':kind;
+const unitLabel={day:'日',week:'週',month:'月',year:'年'};
+let fixedDraftId=null;
+fixedForm.elements.first_due_on.value=taiwanToday();
 function recurringFields() {
-  const installment = !fixedEditing && fixedForm.elements.kind.value === '分期';
-  for (const key of ['name', 'due_day']) fixedForm.elements[key].disabled = fixedEditing !== null && fixedEditing.kind !== '固定';
-  fixedForm.elements.kind.disabled = fixedEditing !== null;
-  fixedForm.elements.periods.disabled = !installment;
-  document.querySelector('#installment-fields').hidden = !installment;
-  if (!fixedEditing) for (const id of ['fixed-form-title', 'save-fixed']) {
-    document.querySelector('#'+id).textContent = '新增'+recurringLabel(fixedForm.elements.kind.value);
-  }
+  const installment=fixedForm.elements.kind.value==='分期';
+  fixedForm.elements.kind.disabled=fixedEditing!==null;fixedForm.elements.periods.disabled=!installment||fixedEditing!==null;
+  document.querySelector('#installment-fields').hidden=!installment;
+  if(!fixedEditing)for(const id of ['fixed-form-title','save-fixed'])document.querySelector('#'+id).textContent='新增'+recurringLabel(fixedForm.elements.kind.value);
 }
-fixedForm.elements.kind.onchange = recurringFields;
+fixedForm.elements.kind.onchange=recurringFields;
 function fixedText(row) {
-  return `${row.name}｜${amountText(row.cents)} 元｜${row.category}｜每月 ${row.due_day ?? 1} 日（短月取月底）`;
+  return row.name+'｜'+amountText(row.cents)+' 元｜'+row.category+'｜'+row.payment_source_name+'｜每隔 '+row.every+' '+unitLabel[row.unit]+'｜安排首期 '+row.first_due_on;
 }
 function renderFixed() {
-  fixedChoices(); recurringFields();
-  const rows = state.recurring_rules;
-  document.querySelector('#fixed-empty').hidden = rows.length !== 0;
-  const listElement = document.querySelector('#fixed-list'); listElement.replaceChildren();
-  const month = taiwanToday().slice(0, 7);
-  const postedCounts = new Map();
-  for (const entry of state.expenses) if (entry.recurring_id !== null) {
-    postedCounts.set(entry.recurring_id, (postedCounts.get(entry.recurring_id) ?? 0n) + 1n);
-  }
-  for (const rule of rows.slice().reverse()) {
-    const view = fixedView(state, rule, month), row = node('li'); row.dataset.id = rule.id;
-    const progress = recurringProgress(state, rule, postedCounts.get(rule.id) ?? 0n);
-    row.append(node('h3', recurringLabel(rule.kind)+'：'+view.name + (progress.complete ? '（已完成）' : rule.active === 0 ? '（已停用）' : '')), node('p', '目前設定：' + fixedText(view)),
-      node('p', `開始月份：${rule.start_month}${rule.start_month > month ? '（尚未開始）' : ''}`));
-    if (rule.kind === '分期') row.append(node('p', `已入帳 ${progress.posted}／${progress.total} 期（含已撤銷期數）`));
-    if (view.pending) row.append(node('p', `${view.pending.effective_month === fixedNextMonth(month) ? '下月生效設定' : '未來生效設定'}（${view.pending.effective_month}）：${fixedText(view.pending)}${progress.complete ? '；已完成，不會執行' : rule.active === 0 ? '；已停用，不會執行' : ''}`));
-    if (rule.active === 1 && !progress.complete) {
-      const buttons = node('div', undefined, 'buttons');
-      const edit = node('button', '更改'+recurringLabel(rule.kind)); edit.type = 'button'; edit.dataset.operation = 'update';
-      edit.onclick = () => {
-        if (busy) return;
-        fixedEditing = structuredClone(rule); fixedChoices(); fixedForm.elements.kind.value = rule.kind; recurringFields();
-        const target = fixedSettings(state, rule, fixedNextMonth(taiwanToday().slice(0, 7)));
-        for (const key of ['name', 'category']) fixedForm.elements[key].value = target[key];
-        fixedForm.elements.amount.value = amountText(target.cents, false);
-        fixedForm.elements.due_day.value = target.due_day ?? 1;
-        document.querySelector('#fixed-form-title').textContent = '更改'+recurringLabel(rule.kind)+'（下月生效）';
-        document.querySelector('#save-fixed').textContent = '儲存'+recurringLabel(rule.kind)+'更改';
-        document.querySelector('#cancel-fixed-edit').textContent = '取消更改'+recurringLabel(rule.kind);
-        document.querySelector('#cancel-fixed-edit').hidden = false;
-        document.querySelector('#fixed-error').textContent = ''; fixedForm.elements[rule.kind === '固定' ? 'name' : 'amount'].focus();
-      };
-      const stop = node('button', '停用'+recurringLabel(rule.kind)); stop.type = 'button'; stop.dataset.operation = 'stop';
-      stop.onclick = () => {
-        if (busy) return;
-        fixedStopping = structuredClone(rule);
-        for (const id of ['fixed-stop-title', 'confirm-fixed-stop']) document.querySelector('#'+id).textContent = '確認停用'+recurringLabel(rule.kind);
-        document.querySelector('#fixed-stop-summary').textContent = recurringLabel(rule.kind)+'目前設定：' + fixedText(view) + (rule.kind === '分期' ? `；已入帳 ${progress.posted}／${progress.total} 期` : '') + (view.pending ? '；未來設定：' + fixedText(view.pending) : '');
-        document.querySelector('#fixed-stop-error').textContent = ''; fixedStopDialog.showModal();
-      };
-      buttons.append(edit);
-      buttons.append(stop);
-      const excluded = state.allocation_preferences.some(item => item.recurring_id === rule.id);
-      const suggestion = node(excluded ? 'p' : 'button', excluded ? '已排除往後分配建議' : '往後不顯示分配建議'); if (!excluded) suggestion.type = 'button';
-      suggestion.onclick = () => {
-        if (busy || writeBlocked) return;
-        if (!confirm('往後不顯示此項目的分配建議；原定期支出仍照原規則執行。')) return;
-        saving(() => excludeSuggestion(db,taiwanToday().slice(0,7),rule.id,'future',null), () => {}, document.querySelector('#fixed-error'));
-      };
-      if (!excluded) buttons.append(suggestion); else row.append(suggestion); row.append(buttons);
-    }
-    listElement.append(row);
+  fixedChoices();recurringFields();const rows=scheduleRules(state,taiwanToday()),listElement=document.querySelector('#fixed-list');
+  document.querySelector('#fixed-empty').hidden=rows.length!==0;listElement.replaceChildren();
+  for(const rule of rows.slice().reverse()) {
+    const row=node('li');row.dataset.id=rule.id;
+    row.append(node('h3',recurringLabel(rule.kind)+'：'+rule.name+(rule.complete?'（已完成）':rule.active===0?'（已停用）':'')),node('p','目前未來安排：'+fixedText(rule)),node('p',rule.next_due_on?'下一期預定 '+rule.next_due_on:'沒有未來新期數'));
+    if(rule.kind==='分期')row.append(node('p','總期數：'+rule.periods+' 期（建立後保留）'));
+    if(rule.active===1&&!rule.complete) {
+      const buttons=node('div',undefined,'buttons');
+      if(rule.edit_due_on) {
+        const edit=node('button','更改'+recurringLabel(rule.kind));edit.type='button';edit.dataset.operation='update';
+        edit.onclick=()=>{
+          if(busy||writeBlocked)return;fixedEditing=structuredClone(rule);fixedDraftId=null;fixedChoices();
+          for(const key of ['kind','name','category','unit','every'])fixedForm.elements[key].value=rule[key];
+          fixedForm.elements.payment_source_id.value=rule.payment_source_id??'';fixedForm.elements.first_due_on.value=rule.edit_due_on;
+          fixedForm.elements.periods.value=String(rule.periods);fixedForm.elements.amount.value=amountText(rule.cents,false);recurringFields();
+          document.querySelector('#fixed-form-title').textContent='更改'+recurringLabel(rule.kind)+'（下一尚未到期且未保存期數生效）';document.querySelector('#save-fixed').textContent='儲存更改';document.querySelector('#cancel-fixed-edit').hidden=false;
+          document.querySelector('#fixed-error').textContent='';fixedForm.elements.name.focus();
+        };buttons.append(edit);
+      }
+      const stop=node('button','停用'+recurringLabel(rule.kind));stop.type='button';stop.dataset.operation='stop';
+      stop.onclick=()=>{
+        if(busy||writeBlocked)return;fixedStopping=structuredClone(rule);
+        for(const id of ['fixed-stop-title','confirm-fixed-stop'])document.querySelector('#'+id).textContent='確認停用'+recurringLabel(rule.kind);
+        document.querySelector('#fixed-stop-summary').textContent=recurringLabel(rule.kind)+'｜'+fixedText(rule);document.querySelector('#fixed-stop-error').textContent='';fixedStopDialog.showModal();
+      };buttons.append(stop);
+      if(rule.kind!=='年度費用') {
+        const excluded=state.allocation_preferences.some(item=>item.recurring_id===rule.id),suggestion=node(excluded?'p':'button',excluded?'已排除往後分配建議':'往後不顯示分配建議');
+        if(!excluded){suggestion.type='button';suggestion.onclick=()=>{if(busy||writeBlocked||!confirm('往後不顯示此項目的分配建議；定期安排仍保留。'))return;saving(()=>excludeSuggestion(db,taiwanToday().slice(0,7),rule.id,'future',null),()=>{},document.querySelector('#fixed-error'));};buttons.append(suggestion);}else row.append(suggestion);
+      }
+      row.append(buttons);
+    }listElement.append(row);
   }
 }
-fixedForm.addEventListener('submit', event => {
-  event.preventDefault(); if (busy) return;
-  const input = Object.fromEntries(new FormData(fixedForm));
-  if (!fixedEditing || fixedEditing.kind === '固定') input.due_day = /^\d{1,2}$/.test(input.due_day) ? Number(input.due_day) : NaN;
-  if (!fixedEditing && input.kind === '分期') input.periods = /^\d{1,3}$/.test(input.periods) ? Number(input.periods) : NaN;
-  saving(() => updateRecurring(db, fixedEditing ? 'update' : 'add', fixedEditing?.id, fixedEditing?.revision, input),
-    () => {resetFixed(); fixedForm.elements.name.focus();}, document.querySelector('#fixed-error'));
+fixedForm.addEventListener('submit',event=>{
+  event.preventDefault();if(busy||writeBlocked)return;
+  const input=Object.fromEntries(new FormData(fixedForm));input.every=/^[0-9]+$/.test(input.every)?Number(input.every):NaN;
+  input.kind=fixedEditing?.kind??input.kind;input.periods=fixedEditing?fixedEditing.periods:input.kind==='分期'&&/^[0-9]{1,3}$/.test(input.periods)?Number(input.periods):input.kind==='分期'?NaN:0;
+  fixedDraftId??='r_'+crypto.randomUUID();
+  saving(()=>updateSchedule(db,fixedEditing?'update':'add',fixedEditing?.id??fixedDraftId,fixedEditing?.revision??null,input),()=>{resetFixed();fixedForm.elements.name.focus();},document.querySelector('#fixed-error'));
 });
-document.querySelector('#cancel-fixed-edit').onclick = () => {if (!busy) {resetFixed(); document.querySelector('#fixed-error').textContent = ''; fixedForm.elements.name.focus();}};
-document.querySelector('#fixed-sync').onclick = () => saving(() => updateRecurring(db, 'sync'), () => {}, document.querySelector('#fixed-error'));
-document.querySelector('#confirm-fixed-stop').onclick = () => saving(
-  () => updateRecurring(db, 'stop', fixedStopping.id, fixedStopping.revision),
-  () => {if (fixedEditing?.id === fixedStopping.id) resetFixed(); fixedStopDialog.close(); document.querySelector('#fixed-settings summary').focus();},
-  document.querySelector('#fixed-stop-error')
-);
-document.querySelector('#cancel-fixed-stop').onclick = () => {if (!busy) fixedStopDialog.close();};
-fixedStopDialog.addEventListener('cancel', event => {if (busy) event.preventDefault();});
-fixedStopDialog.addEventListener('close', () => {fixedStopping = null;});
-
+document.querySelector('#cancel-fixed-edit').onclick=()=>{if(!busy&&!writeBlocked){resetFixed();document.querySelector('#fixed-error').textContent='';fixedForm.elements.name.focus();}};
+document.querySelector('#confirm-fixed-stop').onclick=()=>{if(busy||writeBlocked||!fixedStopping)return;saving(()=>updateSchedule(db,'disable',fixedStopping.id,fixedStopping.revision,null),()=>{if(fixedEditing?.id===fixedStopping.id)resetFixed();fixedStopDialog.close();document.querySelector('#fixed-settings summary').focus();},document.querySelector('#fixed-stop-error'));};
+document.querySelector('#cancel-fixed-stop').onclick=()=>{if(!busy)fixedStopDialog.close();};
+fixedStopDialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+fixedStopDialog.addEventListener('close',()=>{if(!fixedStopDialog.open)fixedStopping=null;});
 function renderSettings() {
   for (const [type, options] of [['category', categoryOptions(state)], ['payment', state.payment_sources]]) {
     const rows = options.map(option => {
@@ -1110,7 +1056,7 @@ form.addEventListener('submit', event => {
   else if(editing && state.usage_periods.some(row=>row.expense_id===editing.id))input.usage=null;
   const today = taiwanToday();
   expenseSubmissionId ??= 'e_'+crypto.randomUUID();
-  saving(() => annualDraft ? processAnnual(db,'record',annualDraft.annual_id,annualDraft.year,annualDraft.rule_revision,annualDraft.revision,input)
+  saving(() => annualDraft ? processSchedule(db,'record',annualDraft.rule_id,annualDraft.index,annualDraft.rule_revision,annualDraft.revision,input)
     : editing ? editExpense(db, editing.id, editing.revision, input, today) : addExpense(db, input, today,expenseSubmissionId), resetForm);
 });
 document.querySelector('#cancel-edit').onclick = () => { if (!busy) { const origin = resetForm(); error.textContent = ''; returnToExpense(origin); } };
@@ -1148,7 +1094,7 @@ document.querySelector('#start-ledger').onclick = async () => {
 document.querySelector('#choose-restore').onclick = () => { if (!busy) restoreFile.click(); };
 function prepareRestore(payload){
   const backup=readBackup(payload);validateStorageLimits(backup);
-  const labels={expenses:'消費',categories:'分類',payment_sources:'付款方式',budgets:'預算',recurring_rules:'定期規則',recurring_versions:'歷史版本',shortcuts:'捷徑',actions:'消費操作紀錄',settings:'設定',incomes:'收入',income_actions:'收入操作紀錄',monthly_allocations:'月份分配',allocation_preferences:'往後建議排除',annual_rules:'年度費用',annual_periods:'年度期數',usage_periods:'使用期間',tags:'標籤',expense_tags:'消費標籤關聯'};
+  const labels={expenses:'消費',categories:'分類',payment_sources:'付款方式',budgets:'預算',recurring_rules:'定期規則',recurring_versions:'歷史版本',shortcuts:'捷徑',actions:'消費操作紀錄',settings:'設定',incomes:'收入',income_actions:'收入操作紀錄',monthly_allocations:'月份分配',allocation_preferences:'往後建議排除',annual_rules:'年度費用',annual_periods:'年度期數',scheduled_periods:'定期支出期數',usage_periods:'使用期間',tags:'標籤',expense_tags:'消費標籤關聯'};
   document.querySelector('#restore-format').textContent=`備份 JSON v${backup.version}${backup.version >= 2 ? '（舊 Python 不支援）' : ''}`;
   document.querySelector('#restore-summary').replaceChildren(...Object.keys(backup.data).map(section=>node('li',`${labels[section]}：${section==='settings'?1:backup.data[section].length} 項`)));
   pendingBackup=payload;pendingEncrypted=null;decryptForm.reset();decryptPanel.hidden=true;review.hidden=false;

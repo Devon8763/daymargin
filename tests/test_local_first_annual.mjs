@@ -87,9 +87,9 @@ test('stale revisions, invalid data and capacity refusal do not mutate original 
 });
 test('optional annual entry and offline allowlists include the new flow without replacing expense form',async()=>{
   const root=new URL('../',import.meta.url),html=await readFile(new URL('local-first/index.html',root),'utf8');
-  assert.match(html,/id="annual-management"/);assert.match(html,/id="annual-entry"/);
+  assert.match(html,/id="fixed-settings"/);assert.match(html,/<option value="年度費用">/);assert.match(html,/id="schedule-periods"/);assert.doesNotMatch(html,/id="annual-management"|id="annual-entry"|id="sync-fixed"/);
   assert.equal((html.match(/id="expense-form"/g)||[]).length,1);
-  for(const file of ['local-first/sw.js','local-first/serve.mjs','tests/local_first_preview.mjs'])assert.match(await readFile(new URL(file,root),'utf8'),/annual\.mjs/);
+  for(const file of ['local-first/sw.js','local-first/serve.mjs','tests/local_first_preview.mjs']){const source=await readFile(new URL(file,root),'utf8');assert.match(source,/annual\.mjs/);assert.match(source,/schedule\.mjs/);}
 });
 test('moving due month never creates a retroactive new year; repeated changes keep opened snapshot',async()=>{
   const {annualItems}=await import('../local-first/annual.mjs');

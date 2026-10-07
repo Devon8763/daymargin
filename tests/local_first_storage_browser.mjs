@@ -28,7 +28,7 @@ try {
   const blankName = prefix + '-blank';
   await erase(blankName);
   let db = await openLedgerDatabase(blankName);
-  ok(db.version === 6 && await readSnapshot(db, true) === null, 'Blank v6 must stay blank on read');
+  ok(db.version === 7 && await readSnapshot(db, true) === null, 'Blank v7 must stay blank on read');
   db.close(); lines.push('blank v2 remains uninitialized');
 
   const original = await fixtureState();
@@ -36,7 +36,7 @@ try {
   await erase(name); await seed(name, original);
   db = await openLedgerDatabase(name);
   let restored = await readSnapshot(db);
-  ok(restored.format === original.format && restored.version === 6 && restored.owner === original.owner, 'State header');
+  ok(restored.format === original.format && restored.version === 7 && restored.owner === original.owner, 'State header');
   const encode = state => writeBackup({ format:'life-ledger-backup', version:1,
     data: Object.fromEntries(['expenses','categories','payment_sources','budgets','recurring_rules',
       'recurring_versions','shortcuts','actions','settings'].map(section => [section,state[section]])) });
@@ -71,7 +71,7 @@ try {
 
   const futureName = prefix + '-future';
   await erase(futureName);
-  const future = await request(indexedDB.open(futureName,7)); future.close();
+  const future = await request(indexedDB.open(futureName,8)); future.close();
   let futureRejected=false;
   try { (await openLedgerDatabase(futureName)).close(); } catch { futureRejected=true; }
   ok(futureRejected,'Future DB version must reject'); lines.push('future version rejected');

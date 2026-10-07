@@ -1,3 +1,113 @@
+# 0.19.0 第 2 階段：統一定期支出與年度費用 — 2026-10-07
+
+**僅供合成資料測試；IndexedDB 未加密，Python Web 尚未被取代。** 本節為本輪代理工具實際執行；下方使用者手動驗收保持原範圍，不轉稱 v6 實體檔或正式帳本驗收。
+
+實作輪起點：分支 codex/localhost-web-auth、HEAD f57d878a265325da490efca0c967010164933364、README／CHANGELOG 0.18.1、工作樹與 staged 清單空白。實作輪完成版 0.19.0，當時未 stage／commit／push；後續本機版本保存授權與驗收見下段。資料契約見[統一定期支出](local-first-schedule-backup-format.md)。
+
+## 交付補充：使用者手動驗證 — 2026-10-07
+
+使用者回報 **「1～4 各自通過」**。本次以全新隔離來源 `http://127.0.0.1:21790/`、兩個全新普通瀏覽器設定檔A／B及合成JSON v6帳本進行，包含新每日四期規則、已記錄、已略過、已恢復待記錄與另一期待記錄。
+
+| 使用者手動驗證 | 回報結果 |
+| --- | --- |
+| A查看新定期支出的待處理、略過／恢復及本月規劃總額 | 通過 |
+| A從畫面下載v6加密完整備份，實體檔存在、大小非零 | 通過 |
+| 空白B選取A剛下載的同一檔，錯密碼拒絕且無部分資料；正確密碼預覽、確認還原 | 通過 |
+| B關頁重開仍保留資料／期數，並再次下載備份 | 通過 |
+
+上述為使用者親自操作後的直接回報，**代理工具沒有獨立觀測實體檔案或使用者瀏覽器設定檔**；未索取／記錄密碼、檔案內容或個資。兩份密文不必逐位元組相同，也沒有把發出下載要求當作落地證據。補足下方實作輪列為未驗證的四項實體流程，該段保留當時工具測試範圍；使用者未另外回報兩份實體檔解密後完整內容逐欄／順序比對。
+
+本機版本保存前，41候選路徑及內容SHA-256與手測前記錄一致；本輪只修改本文件及目前版CHANGELOG以補結果，不改產品行為／版本。不納入忽略的.tmp種子、手測服務、備份或下載檔。實際重新執行Node161／161、隨機隔離埠入口7／7、正式檔案／非暫存SQLite防護下完整Python459／459（32.485秒）、Ruff、77個非vendor JS語法、7檔已追蹤授權資源SHA-256、離線18資源白名單、啟動器／授權追蹤及疑似憑證／資料檔排除檢查；git diff --check通過。審核輔助腳本首次使用錯誤啟動器檔名，核對實際已追蹤的start_local_first.local.cmd後重查通過，沒有新增或更動啟動器。舊實作輪46組原生／147組畫面為前輪結果，本次未冒稱重跑。
+
+本輪使用者確認後授權建立本機commit；不push、建PR、建立tag、升版或開始全站搜尋。實體手機、其他瀏覽器、螢幕閱讀器、整個瀏覽器程序退出、真磁碟配額／損壞、正式帳本或完整正式搬移仍未驗證。**僅供合成資料測試，IndexedDB未加密，Python Web尚未被取代；不宣稱安全認證。**
+
+## 本輪自動測試
+
+| 測試 | 實際結果與範圍 |
+| --- | --- |
+| Node | 161／161，含新增純日期／模型8、備份7、資料變更7；舊格式純規則仍保留。 |
+| 固定入口安全 | 隨機埠7／7，靜態白名單／CSP／Host／方法／路徑／授權；固定8768占埠項不計入通過。初次套件誤含入口測試遭環境EACCES，未取得來源回應；明確排除後重跑，沒有改服務或防護。 |
+| Python | 正式檔案／非暫存SQLite防護下459／459，33.399秒；新增JSON v6安全拒絕及拒絕前後暫存資料不變。不改Python帳務。 |
+| 靜態檢查 | Ruff、77個非vendor JavaScript語法、7檔既有授權資源SHA-256、git diff --check通過。3個本輪寫入的原LF測試檔及README新段落恢復原行尾；沒有改全庫行尾規則。 |
+
+## 本輪瀏覽器執行的測試
+
+原生 IndexedDB 共 **46組**：統一期數8、v6→v7升級4、既有逐列儲存升級7、舊完整備份互通12、手動消費11、四來源單筆4。新測試涵蓋原子規則／版本／期數／消費／action／metadata、未到期拒絕、雙連線同一期僅成功一次、舊revision、已作廢不復活、凍結舊期數、容量100000列、中途失敗及request成功後abort；十九類加密解密／空白還原／失敗回滾／關閉重開保持內容，兩次密文不同。升級只新增空store，舊列／鍵／position／metadata及舊JSON v5逐位元組相同；損壞升級不改原schema或資料。
+
+畫面共 **147組**，每項實際讀到PASS，不以純Node或Blob代替畫面：
+
+| 原生畫面 fixture | 組數 |
+| --- | ---: |
+| 統一期數 | 6 |
+| 固定／訂閱分期／年度 | 5／5／7 |
+| 收入分配／四區導覽／使用期間 | 10／10／8 |
+| 共同故障／定期確認後畫面故障 | 11／11 |
+| 十九類加密備份 | 10 |
+| 捷徑／標籤／分類付款／預算 | 15／10／6／4 |
+| 搜尋月曆／比較／CSV | 11／11／7 |
+
+快速取消並立即重開略過／停用確認曾重現timeout，修正close只在真正關閉時清狀態；已記錄期數只顯示預設值的斷言先失敗，補實付及實際日期後6組通過。備份拒絕舊月付recorded與新版pending／skipped同index衝突、年度9999年空區間讀取先失敗後通過。保存期數共用索引避免平方查找，沒有改期數或交易語意。CSV首次在已有隔離帳本拒絕，改全新20994來源完成7組；沒有覆蓋原測試資料。
+
+舊原生 fixed／recurring／annual自動補記腳本仍保留歷史程式，不列為v7驗收通過；其舊立即sync／月份開始年度語意已被本輪明確取代。新版統一期數fixture覆蓋交易、歷史及故障，另測所有舊live writer安全拒絕且帳本不變。這些舊腳本未重寫成另一套排程引擎，也不以其歷史通過數湊本輪數字。
+
+## 本輪人工操作的瀏覽器實測
+
+僅使用本輪新來源20991～20994與合成資料，沒有操作8767／8768現有帳本。桌面新帳本首先仍為消費表單，規劃原生收合表單預設每1月；實際新增每15日、首日2026-10-01，正確顯示10-01待記錄、10-16／31即將到期且無寫入操作。帶入原記帳表單，改實際日期10-07及99.29元，只產生一筆消費；本月規劃339.31元、普通消費99.29元，按不同日期歸屬。375px同來源原生iframe實測Enter切規劃／展開、查看實付與預設、窄版內容寬等於可用寬360px，無橫向溢出。iframe允許只存在隔離預覽測試路由，正式固定入口仍DENY／frame-ancestors none。
+
+20992原生更新演練：兩頁0.19.0舊worker與未送出草稿，模擬假0.19.1缺Chart.js時安裝失敗，舊快取／帳本／草稿保留；完整下載仍等待，只關一頁不啟用，關閉最後一頁才自然啟用。停本輪服務，同網址新頁離線冷啟動，18必要資源及十九類原始列／metadata／完整備份逐位元組不變。此演練使用本輪中途v1 cache；假0.19.1僅測試標籤，不是產品版本。
+
+確認修正後快取升到最終 **local-first-offline-0.19.0-v2**。20993另外實際更新等待、關閉全部產品／窄版頁後自然啟用；核對18完整資源與白名單。停止自己的20993服務並確認零監聽、關閉產品頁、相同精確網址新頁離線冷啟動，Enter開定期管理正常，實付／預定資料仍在。檢查器以操作前基準比對raw／metadata／完整JSON v6，再次PASS逐位元組相同。備份密文沒有用逐位元組比對；只有解密後帳本內容才比較。
+
+## 仍未驗證
+
+本輪沒有確證v6實體備份檔落地或另一個完整空白瀏覽器設定檔從同一檔還原；加密畫面fixture以捕捉Blob/File與原生IndexedDB驗證，不能代替實體流程。需要使用者另以兩個全新普通設定檔及合成資料，下載v6檔、確認存在、從同一檔錯密碼拒絕／正確還原、關頁重開及再次備份，核對解密後內容。先前第0階段使用者v5手測是歷史證據。
+
+實體手機、其他瀏覽器、真螢幕閱讀器、整個瀏覽器程序退出、真磁碟配額／損壞、正式帳本或真OAuth未驗證；固定入口8768占埠項未計為本輪通過。合成驗收不等於正式搬移、安全認證或瀏覽器資料永久保存。
+
+## 本輪修改檔案（41個）
+
+- `CHANGELOG.md`
+- `README.md`
+- `docs/local-first-browser-validation.md`
+- `local-first/backup.mjs`
+- `local-first/idb.mjs`
+- `local-first/income.mjs`
+- `local-first/index.html`
+- `local-first/ledger.mjs`
+- `local-first/page.mjs`
+- `local-first/rules.mjs`
+- `local-first/serve.mjs`
+- `local-first/style.css`
+- `local-first/sw.js`
+- `local-first/usage.mjs`
+- `tests/local_first_annual_ui_browser.mjs`
+- `tests/local_first_crypto_ui_browser.mjs`
+- `tests/local_first_fixed_ui_browser.mjs`
+- `tests/local_first_income_ui_browser.mjs`
+- `tests/local_first_navigation_browser.mjs`
+- `tests/local_first_offline_settings_browser.mjs`
+- `tests/local_first_preview.mjs`
+- `tests/local_first_recurring_ui_browser.mjs`
+- `tests/local_first_shortcuts_ui_browser.mjs`
+- `tests/local_first_storage_browser.mjs`
+- `tests/local_first_ui_browser.mjs`
+- `tests/local_first_update_browser.mjs`
+- `tests/local_first_usage_ui_browser.mjs`
+- `tests/test_browser_portable_backup.py`
+- `tests/test_local_first_annual.mjs`
+- `tests/test_local_first_offline.mjs`
+- `tests/test_local_first_update_status.mjs`
+- `docs/local-first-schedule-backup-format.md`
+- `local-first/schedule.mjs`
+- `tests/local_first_schedule_browser.html`
+- `tests/local_first_schedule_browser.mjs`
+- `tests/local_first_schedule_migration_browser.html`
+- `tests/local_first_schedule_migration_browser.mjs`
+- `tests/local_first_schedule_ui_browser.mjs`
+- `tests/test_local_first_schedule.mjs`
+- `tests/test_local_first_schedule_backup.mjs`
+- `tests/test_local_first_schedule_ledger.mjs`
+
 # 0.18.1 第 1 階段：規劃分流與分類管理連結 — 2026-10-07
 
 **僅供合成資料測試；IndexedDB 未加密，Python Web 尚未被取代。**本節為代理工具本輪觀測；下方第 0 階段的使用者手動驗收保留，不冒稱本輪重新驗證下載落地或獨立設定檔還原。

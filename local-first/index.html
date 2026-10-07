@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.18.1</p>
+  <p id="page-version">目前使用頁面版本：0.19.0</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -55,7 +55,7 @@
   <div id="view-planning" data-view="planning" role="region" aria-labelledby="view-planning-title" hidden><h2 id="view-planning-title" tabindex="-1">規劃</h2></div>
   <div id="view-analysis" data-view="analysis" role="region" aria-labelledby="view-analysis-title" hidden><h2 id="view-analysis-title" tabindex="-1">分析</h2></div>
   <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 id="view-settings-title" tabindex="-1">設定</h2><p><a href="#privacy-view" data-privacy-link>隱私與資料</a></p></div>
-  <p id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a> · <a id="annual-entry" href="#annual-management">年度費用</a></p>
+  <p id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a></p>
   <section aria-labelledby="form-title">
     <h2 id="form-title">記錄消費</h2>
     <form id="expense-form">
@@ -130,30 +130,41 @@
       <ul id="category-budget-list"></ul>
     </details>
   </section>
+  <section id="schedule-overview" aria-labelledby="schedule-overview-title">
+    <h2 id="schedule-overview-title">本月定期支出</h2>
+    <p id="schedule-total"></p>
+    <p>依預定付款月份歸屬，已記錄採有效實付金額；不是銀行餘額，也不是額外消費。略過或已刪除的消費不計入。</p>
+    <details><summary>查看本月明細</summary><ul id="schedule-month-items"></ul></details>
+  </section>
   <section aria-label="本機帳本設定">
     <div id="ledger-settings">
       <details id="fixed-settings">
         <summary>定期支出</summary>
-        <p>每月扣款；訂閱持續到停用，分期到總期數為止。更改從下月生效；訂閱／分期只可更改金額及分類，名稱、扣款日、類型及總期數不變。開始月份建立後不可更改，短月扣款日取月底。</p>
-        <p>只有按下補記或確認停用才入帳。這是記帳，不代表銀行已扣款；開頁、搜尋、月曆及匯出不會補記。</p>
+        <p>固定支出、訂閱、分期及年度費用統一管理。可每隔指定日、週、月或年安排；月／年遇短月取月底。類型及分期總數建立後保留。</p>
+        <p>更改從下一個尚未到期且未保存的期數生效，已到期及已保存期數保留原值。只有逐期記錄才入帳；這是記帳，不代表銀行已扣款。開頁、搜尋、月曆及匯出不會補記。</p>
         <form id="fixed-form" novalidate>
           <fieldset id="fixed-fields">
             <h3 id="fixed-form-title">新增固定支出</h3>
             <div class="form-grid">
-              <label>支出類型<select name="kind"><option value="固定">固定支出</option><option value="訂閱">訂閱</option><option value="分期">分期</option></select></label>
+              <label>支出類型<select name="kind"><option value="固定">固定支出</option><option value="訂閱">訂閱</option><option value="分期">分期</option><option value="年度費用">年度費用</option></select></label>
               <label>消費項目<input name="name" type="text" autocomplete="off"></label>
               <label>金額（元）<input name="amount" type="text" inputmode="decimal" autocomplete="off"></label>
               <label>分類<select name="category"></select></label>
-              <label>開始月份<select name="start_month"></select></label>
-              <label>每月扣款日<input name="due_day" type="number" min="1" max="31" step="1" value="1"></label>
+              <label>預設付款方式<select name="payment_source_id"></select></label>
+              <label>首次付款／未來安排首期日期<input name="first_due_on" type="date"></label>
+              <label>每隔<input name="every" type="number" min="1" step="1" value="1"></label>
+              <label>頻率單位<select name="unit"><option value="day">日</option><option value="week">週</option><option value="month" selected>月</option><option value="year">年</option></select></label>
               <div id="installment-fields" hidden><label>總期數（1～600）<input name="periods" type="number" min="1" max="600" step="1" disabled></label></div>
             </div>
             <div class="buttons"><button id="save-fixed" type="submit">新增固定支出</button><button id="cancel-fixed-edit" type="button" hidden>取消更改固定支出</button></div>
           </fieldset>
         </form>
         <p id="fixed-error" role="alert"></p>
-        <button id="fixed-sync" type="button">補記已到期消費</button>
-        <ul id="fixed-list"></ul><p id="fixed-empty">尚無固定支出、訂閱或分期。</p>
+        <ul id="fixed-list"></ul><p id="fixed-empty">尚無定期支出。</p>
+        <h3>各期處理狀態</h3>
+        <p>未到期只可查看。到期可按預設值記錄，或帶入記帳表單更改實付資料；取消不會略過。已略過可恢復同一期，已記錄消費即使刪除也不會重建。</p>
+        <div id="schedule-periods"><ul id="schedule-recent"></ul><details id="schedule-older"><summary>其他期數</summary><ul></ul></details></div>
+        <button id="schedule-more" type="button" hidden>顯示更多期數</button>
       </details>
       <details id="budget-settings">
         <summary>預算</summary>
@@ -291,33 +302,6 @@
       <p id="income-error" role="alert"></p>
     </details>
   </section>
-  <section aria-label="年度費用">
-    <details id="annual-management">
-      <summary>年度費用與待確認消費</summary>
-      <p>每年重複；短月取月底。到期月份開始可處理草稿，確認前不算支出。更改只影響尚未開始的期數；停用仍保留已到期未處理項目。</p>
-      <fieldset id="annual-fields">
-        <h3 id="annual-form-title">新增年度費用</h3>
-        <form id="annual-form" novalidate>
-          <div class="form-grid">
-            <label>年度費用名稱<input name="name" maxlength="200" required autocomplete="off"></label>
-            <label>預估年度金額（元）<input name="amount" inputmode="decimal" required autocomplete="off"></label>
-            <label>分類<select name="category" required></select></label>
-            <label>預設付款方式<select name="payment_source_id" required></select></label>
-            <label>首次到期年份<input name="first_year" inputmode="numeric" required></label>
-            <label>到期月份（1～12）<input name="due_month" inputmode="numeric" required></label>
-            <label>到期日（1～31，短月取月底）<input name="due_day" inputmode="numeric" required></label>
-          </div>
-          <div class="buttons"><button type="submit">儲存年度費用</button><button id="cancel-annual-edit" type="button" hidden>取消更改</button></div>
-        </form>
-        <ul id="annual-rules"></ul>
-        <h3>年度期數處理狀態</h3>
-        <p>「記錄消費」帶入記帳區的既有表單；取消填寫不會略過期數。「略過今年」只影響當次。已記錄的消費即使刪除，也不會重建。</p>
-        <ul id="annual-periods"></ul>
-        <button id="annual-more" type="button" hidden>顯示更多年度期數</button>
-      </fieldset>
-      <p id="annual-error" role="alert"></p>
-    </details>
-  </section>
   <section id="data-management" aria-labelledby="data-management-title" hidden>
     <h2 id="data-management-title">資料管理</h2>
     <p id="storage-status" role="status">正在查詢本來源的瀏覽器儲存狀態……</p>
@@ -346,7 +330,7 @@
     <div id="export-panel" hidden>
       <h3>完整備份方式</h3>
       <p>備份密碼不會加密瀏覽器帳本；本頁不保存密碼或金鑰，忘記密碼無法取回。Python Web 尚未被取代。</p>
-      <p>含收入／分配使用 JSON v2，含年度費用／期數使用 JSON v3，含使用期間使用 JSON v4，含標籤使用 JSON v5；舊 Python／舊版 local-first 不支援，不可刪去新資料後當作完整帳本搬移。加密封裝仍為 v1。</p>
+      <p>含收入／分配使用 JSON v2，含年度費用／期數使用 JSON v3，含使用期間使用 JSON v4，含標籤使用 JSON v5，含統一定期安排／期數使用 JSON v6（十九類完整資料）；舊 Python／舊版 local-first 不支援，不可刪去新資料後當作完整帳本搬移。加密封裝仍為 v1。</p>
       <form id="export-form" novalidate autocomplete="off">
         <fieldset id="export-inputs">
           <label>備份方式<select id="export-mode"><option value="encrypted" selected>加密備份（建議）</option><option value="plain">不加密備份</option></select></label>
@@ -380,7 +364,7 @@
 <dialog id="fixed-stop-dialog" aria-labelledby="fixed-stop-title">
   <h2 id="fixed-stop-title">確認停用固定支出</h2>
   <p id="fixed-stop-summary"></p>
-  <p>確認後會先補記此規則已到期的缺漏，再停用。規則、歷史版本與已入帳消費保留；不再執行後續月份。</p>
+  <p>確認後停止未來新期數。規則、歷史版本、已保存待處理／略過期數及消費保留；不產生或刪除消費。</p>
   <p id="fixed-stop-error" role="alert"></p>
   <div class="buttons"><button id="confirm-fixed-stop" type="button">確認停用固定支出</button><button id="cancel-fixed-stop" type="button">取消</button></div>
 </dialog>

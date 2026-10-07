@@ -6,7 +6,7 @@ const wait=async predicate=>{for(let i=0;i<200;i++){if(predicate())return;await 
 const name=ledger.DB_NAME+'-income-ui-'+crypto.randomUUID(),open=indexedDB.open.bind(indexedDB);indexedDB.open=(value,version)=>open(value===ledger.DB_NAME?name:value,version);
 const db=await ledger.openDatabase(),lines=[],month=ledger.taiwanToday().slice(0,7);
 await ledger.initializeLedger(db);
-for(const [kind,amount] of [['固定','.10'],['訂閱','.20'],['分期','.30']])await ledger.updateRecurring(db,'add',null,null,{kind,name:kind+'<img src=x onerror=alert(1)>',amount,category:'餐飲',start_month:month,periods:kind==='分期'?2:0,due_day:31});
+for(const [kind,amount] of [['固定','.10'],['訂閱','.20'],['分期','.30']])await ledger.updateSchedule(db,'add','r_'+kind.length+'_'+amount.slice(1),null,{kind,name:kind+'<img src=x onerror=alert(1)>',amount,category:'餐飲',payment_source_id:'p_cash',first_due_on:month+'-28',unit:'month',every:1,periods:kind==='分期'?2:0});
 const before=await ledger.exportPortableBackup(db),rules=JSON.stringify((await ledger.readLedger(db)).recurring_rules);
 const enter=(amount,name='合成已收')=>{q('#income-form').elements.amount.value=amount;q('#income-form').elements.name.value=name;q('#income-form').requestSubmit();};
 try{
@@ -59,6 +59,6 @@ try{
   q('#income-month-form').requestSubmit();enter('.13');await new Promise(resolve=>setTimeout(resolve,300));IDBDatabase.prototype.transaction=originalTransaction;
   check(q('#income-summary').textContent.includes('已收到的收入：0.24 元'),'Delayed read replaced newly committed income');
   lines.push('pending readonly snapshot cannot replace a successfully committed write');
-  check(readBackup(await ledger.exportPortableBackup(db)).version===2,'UI backup omits finance');
+  check(readBackup(await ledger.exportPortableBackup(db)).version===6,'UI backup omits finance');
   report.textContent='PASS：'+lines.length+' 組收入與分配畫面驗證\n'+lines.join('\n');
 }catch(error){report.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{db.close();}

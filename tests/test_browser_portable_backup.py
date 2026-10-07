@@ -31,6 +31,25 @@ def synthetic_payload(helper):
 
 
 class BrowserPortableBackupTests(unittest.TestCase):
+    def test_schedule_json_v6_safely_rejects_in_python_without_changes(self):
+        code = """
+import {emptyData,writeBackup} from './local-first/backup.mjs';
+const data=emptyData(6);
+data.payment_sources=[{id:'p_cash',name:'現金',active:1}];
+data.recurring_rules=[{id:'r_one',name:'synthetic',cents:'1',category:'餐飲',kind:'固定',start_month:'2026-10',periods:0,due_day:7,active:1,revision:0}];
+data.recurring_versions=[{id:'v_one',recurring_id:'r_one',from_index:0,first_due_on:'2026-10-07',unit:'day',every:15,name:'synthetic',cents:'1',category:'餐飲',payment_source_id:'p_cash',payment_source_name:'現金'}];
+process.stdout.write(writeBackup({format:'life-ledger-backup',version:6,data}));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['version'], 6)
+        before = self.helper.snapshot()
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            self.helper.bk.read_backup(result.stdout)
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            existing.service.restore_portable_backup('target', result.stdout)
+        self.assertEqual(self.helper.snapshot(), before)
+
     def test_tag_json_v5_safely_rejects_in_python_without_changes(self):
         code = """
 import {emptyData,writeBackup} from './local-first/backup.mjs';
