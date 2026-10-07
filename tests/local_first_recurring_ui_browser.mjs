@@ -16,7 +16,7 @@ try {
   const before=await bytes();await import('../local-first/page.mjs');check(await bytes()===before,'Read-only load wrote');
   document.querySelector('[data-view-button="planning"]').click();
   const form=document.querySelector('#fixed-form');check(form.elements.kind,'Missing recurring type selector');
-  document.querySelector('#ledger-settings').open=true;document.querySelector('#fixed-settings').open=true;
+  document.querySelector('#fixed-settings').open=true;
   const select=kind=>{form.elements.kind.value=kind;form.elements.kind.dispatchEvent(new Event('change'));};
   for(const kind of ['訂閱','固定']){select(kind);check(form.elements.periods.disabled&&document.querySelector('#installment-fields').hidden,'Non-installment requires periods');}
   select('分期');check(!form.elements.periods.disabled&&!document.querySelector('#installment-fields').hidden,'Missing installment periods');
