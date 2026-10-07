@@ -22,6 +22,7 @@ try{
   const raw=async()=>{const tx=db.transaction(STORES,'readonly'),rows={};for(const name of STORES)tx.objectStore(name).getAll().onsuccess=event=>{rows[name]=event.target.result;};await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=reject;});return JSON.stringify(STORES.map(name=>rows[name]),(_key,value)=>typeof value==='bigint'?value.toString():value);};
   const before=await backupText(),rawBefore=await raw();
   await import('../local-first/page.mjs');await wait(()=>!q('#ledger-page').hidden);
+  q('[data-view-button="analysis"]').click();
   const form=q('#comparison-form');check(form,'Comparison form missing');
   const expected=comparisonDefaults(new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'}));
   for(const name of ['a_start','a_end','b_start','b_end'])check(form.elements[name].value===expected[name],'Whole month defaults');

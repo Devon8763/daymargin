@@ -5,6 +5,21 @@ export function pythonStrip(value) {
   if (typeof value !== 'string') throw new ValidationError('請輸入有效名稱。');
   return value.replace(/^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/gu, '');
 }
+export function tagName(value) {
+  if(typeof value!=='string')throw new ValidationError('請輸入有效標籤名稱。');
+  let name=pythonStrip(value.trim());
+  while(/^[#＃]/u.test(name))name=pythonStrip(name.slice(1).trim());
+  name=name.normalize('NFC');
+  if(!name || [...name].length>50 || /[\u0000-\u001f\u007f-\u009f\p{Surrogate}]/u.test(name))
+    throw new ValidationError('標籤名稱需 1～50 字，不可包含換行或控制字元。');
+  return name;
+}
+export function tagSuggestions(state,input='') {
+  let prefix=typeof input==='string' ? input.trim() : '';
+  while(/^[#＃]/u.test(prefix))prefix=prefix.slice(1).trim();
+  prefix=prefix.normalize('NFC');
+  return (state.tags || []).filter(row=>row.hidden===0 && row.name.includes(prefix));
+}
 export function categoryName(value) {
   const name = pythonStrip(value);
   if (!name || [...name].length > 20 || name === '總額' || /[\n\r]/u.test(name)) {

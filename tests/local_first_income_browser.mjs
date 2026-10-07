@@ -18,9 +18,9 @@ try{
   const oldName=name+'-rows',opening=indexedDB.open(oldName,2);
   opening.onupgradeneeded=()=>{for(const section of [...SECTIONS,'meta'])opening.result.createObjectStore(section,{keyPath:'key'});};
   old=await request(opening);let tx=old.transaction([...SECTIONS,'meta'],'readwrite');addState(tx,legacy);await done(tx);old.close();
-  let upgraded=await ledger.openDatabase(oldName);check(upgraded.version===5,'Expected v5');
+  let upgraded=await ledger.openDatabase(oldName);check(upgraded.version===6,'Expected v6');
   check(text(await ledger.exportPortableBackup(upgraded))===text(writeBackup({format:'life-ledger-backup',version:1,data:readBackup(bytes).data})),'V2 upgrade changed original backup');
-  upgraded.close();lines.push('v2 to v5 upgrade preserves nine-section bytes and action order');
+  upgraded.close();lines.push('v2 to v6 upgrade preserves nine-section bytes and action order');
   // Corrupt old metadata must abort upgrade and leave the complete old schema.
   const badName=name+'-bad',badOpen=indexedDB.open(badName,2);badOpen.onupgradeneeded=()=>{for(const section of [...SECTIONS,'meta'])badOpen.result.createObjectStore(section,{keyPath:'key'});};
   old=await request(badOpen);tx=old.transaction([...SECTIONS,'meta'],'readwrite');addState(tx,legacy);tx.objectStore('meta').put({key:'row_count',value:0});await done(tx);old.close();

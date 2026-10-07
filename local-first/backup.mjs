@@ -1,5 +1,5 @@
 import * as distribution from './vendor/lossless-json-4.3.1/lossless-json.js';
-import { isoDate } from './rules.mjs';
+import { isoDate,tagName } from './rules.mjs';
 import {usageInput} from './usage.mjs';
 
 // Official UMD exports in Node; its browser global is created by the same local file.
@@ -34,7 +34,9 @@ const ANNUAL_FIELDS = {
 export const ANNUAL_SECTIONS = Object.keys(ANNUAL_FIELDS);
 export const V3_SECTIONS = [...V2_SECTIONS,...ANNUAL_SECTIONS];
 const USAGE_FIELDS = {usage_periods:['expense_id','started_on','days','remind','reminder_days','show_daily_cost','active','revision']};
-export const ALL_SECTIONS = [...V3_SECTIONS,...Object.keys(USAGE_FIELDS)];
+export const V4_SECTIONS = [...V3_SECTIONS,...Object.keys(USAGE_FIELDS)];
+const TAG_FIELDS = {tags:['id','name','hidden','revision'],expense_tags:['expense_id','tag_id']};
+export const ALL_SECTIONS = [...V4_SECTIONS,...Object.keys(TAG_FIELDS)];
 export class BackupError extends Error {
   constructor(kind) { super('生活帳本備份資料異常：' + kind); this.code = 'backup'; }
 }
@@ -93,16 +95,16 @@ export function emptyData(version = 1) {
   return { expenses: [], categories: [], payment_sources: [], budgets: [], recurring_rules: [], recurring_versions: [], shortcuts: [], actions: [], settings: { reminder_levels: null, recording_started_on: null },
     ...(version >= 2 ? Object.fromEntries(FINANCE_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 3 ? Object.fromEntries(ANNUAL_SECTIONS.map(section => [section, []])) : {}),
-    ...(version >= 4 ? {usage_periods:[]} : {}) };
+    ...(version >= 4 ? {usage_periods:[]} : {}), ...(version >= 5 ? {tags:[],expense_tags:[]} : {}) };
 }
 export function validateBackup(bundle) {
   shape(bundle, ['format', 'version', 'data'], '格式');
   if (bundle.format !== 'life-ledger-backup') invalid('格式／版本');
-  const version = integerValue(bundle.version, 1n, 4n);
-  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : ALL_SECTIONS, '生活帳本');
+  const version = integerValue(bundle.version, 1n, 5n);
+  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : ALL_SECTIONS, '生活帳本');
   let count = 0;
   const ids = [];
-  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {})})) {
+  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {})})) {
     const rows = data[section];
     if (!Array.isArray(rows)) invalid(section + '結構');
     count += rows.length; if (count > 100000) invalid('資料筆數上限');
@@ -235,6 +237,15 @@ export function validateBackup(bundle) {
       catch { invalid('使用期間'); }
     }
     unique(data.usage_periods.map(row=>row.expense_id),'使用期間');
+  }
+  if(version>=5n) {
+    for(const row of data.tags) {
+      try {if(tagName(row.name)!==row.name)invalid('標籤名稱');} catch {invalid('標籤名稱');}
+      integerValue(row.hidden,0n,1n);integerValue(row.revision);
+    }
+    unique(data.tags.map(row=>row.name),'標籤名稱');const tags=new Set(data.tags.map(row=>row.id));
+    for(const row of data.expense_tags)if(typeof row.expense_id!=='string' || !expenses.has(row.expense_id) || typeof row.tag_id!=='string' || !tags.has(row.tag_id))invalid('標籤消費引用');
+    unique(data.expense_tags.map(row=>row.expense_id+'\0'+row.tag_id),'消費標籤');
   }
   return bundle;
 }

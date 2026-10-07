@@ -1,5 +1,5 @@
 import * as distribution from './vendor/lossless-json-4.3.1/lossless-json.js';
-import { validateInput, categoryOptions, categoryName, paymentName, orderedShortcuts, budgetCents, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
+import { validateInput, categoryOptions, categoryName, paymentName, orderedShortcuts, tagName, budgetCents, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
 import { emptyData, readBackup, writeBackup, integerValue, storedInteger, MAX_INTEGER, MAX_BYTES } from './backup.mjs';
 import { STORES, openLedgerDatabase, readSnapshot, scanTransaction, addState, portable, metadata, rowKey } from './idb.mjs';
 import {annualInput,annualItem,annualDefaults} from './annual.mjs';
@@ -40,7 +40,7 @@ function transaction(db, operation) {
 export function initializeLedger(db) {
   return transaction(db, (tx, state) => {
     if (state !== null) return state;
-    const initial = { format:'local-first-test-ledger', version:5, owner:'local-test-owner', ...emptyData(4),
+    const initial = { format:'local-first-test-ledger', version:6, owner:'local-test-owner', ...emptyData(5),
       payment_sources:[{ id:'p_cash', name:'現金', active:1 }, { id:'p_unspecified', name:'未指定', active:1 }] };
     addState(tx, initial);
     return initial;
@@ -54,7 +54,7 @@ export function restorePortableBackup(db, payload, confirmedMain = false) {
   const parsed = readBackup(payload);
   return transaction(db, (tx, state) => {
     if (state !== null) throw new LedgerError('nonempty', '目標測試帳本已有資料或建立標記，無法還原。');
-    const restored = { format:'local-first-test-ledger', version:5, owner:'local-test-owner', ...emptyData(4), ...parsed.data };
+    const restored = { format:'local-first-test-ledger', version:6, owner:'local-test-owner', ...emptyData(5), ...parsed.data };
     addState(tx, restored);
     return restored;
   });
@@ -86,19 +86,61 @@ function applyUsage(state,id,input) {
     incrementRevision(row);state.usage_periods[state.usage_periods.indexOf(previous)]=row;
   } else state.usage_periods.push(row);
 }
-function save(tx, state, meta, entry, before, position, usage) {
+function applyTags(state,id,input) {
+  if(input===undefined)return;
+  if(!input || Object.keys(input).length!==2 || !Array.isArray(input.ids) || !Array.isArray(input.names) ||
+      input.ids.length+input.names.length>100000 || new Set(input.ids).size!==input.ids.length)
+    throw new ValidationError('請選擇有效且不重複的標籤。');
+  state.tags ??= [];state.expense_tags ??= [];
+  const byId=new Map(state.tags.map(row=>[row.id,row])),byName=new Map(state.tags.map(row=>[row.name,row]));
+  const selected=input.ids.map(id=>{if(typeof id!=='string' || !byId.has(id))throw new ValidationError('標籤已移除，請重新載入後再選取。');return id;});
+  const names=input.names.map(tagName),created=new Set();
+  if(new Set(names).size!==names.length)throw new ValidationError('請勿重複加入相同標籤。');
+  for(const name of names) {
+    let row=byName.get(name);
+    if(!row){row={id:identifier('t_'),name,hidden:0,revision:0};state.tags.push(row);byName.set(name,row);byId.set(row.id,row);created.add(row.id);}
+    selected.push(row.id);
+  }
+  if(new Set(selected).size!==selected.length)throw new ValidationError('請勿重複加入相同標籤。');
+  const previous=new Set(state.expense_tags.filter(row=>row.expense_id===id).map(row=>row.tag_id)),wanted=new Set(selected);
+  for(const tag of new Set([...previous,...wanted]))if(previous.has(tag)!==wanted.has(tag) && !created.has(tag))incrementRevision(byId.get(tag));
+  state.expense_tags=state.expense_tags.filter(row=>row.expense_id!==id || wanted.has(row.tag_id));
+  for(const tag of wanted)if(!previous.has(tag))state.expense_tags.push({expense_id:id,tag_id:tag});
+}
+export function assignExpenseTags(state,id,input) {
+  metadata(state);const changed={...emptyData(5),...structuredClone(state)};
+  if(!changed.expenses.some(row=>row.id===id))throw new ValidationError('找不到此筆消費。');
+  applyTags(changed,id,input);metadata(changed);return changed;
+}
+export function changeTag(state,operation,id,expected,name) {
+  metadata(state);const changed={...emptyData(5),...structuredClone(state)},row=changed.tags.find(item=>item.id===id);
+  if(operation==='add') {
+    if(expected!==null || row)throw new LedgerError('conflict','此操作已處理，請重新載入。');
+    const normalized=tagName(name);
+    if(changed.tags.some(item=>item.name===normalized))throw new ValidationError('已有同名標籤，請使用既有項目。');
+    changed.tags.push({id,name:normalized,hidden:0,revision:0});
+  } else {
+    if(!row)throw new LedgerError('unavailable','標籤已移除，請重新載入。');financeRevision(row,expected);
+    if(operation==='remove') {
+      const affected=new Set(changed.expense_tags.filter(item=>item.tag_id===id).map(item=>item.expense_id));
+      for(const entry of changed.expenses)if(affected.has(entry.id))incrementRevision(entry);
+      changed.expense_tags=changed.expense_tags.filter(item=>item.tag_id!==id);changed.tags=changed.tags.filter(item=>item.id!==id);
+    } else if(operation==='hide' || operation==='show') {
+      const hidden=operation==='hide'?1:0;if(row.hidden===hidden)throw new ValidationError('此標籤已是目前顯示狀態。');
+      incrementRevision(row);row.hidden=hidden;
+    } else throw new ValidationError('請選擇有效標籤操作。');
+  }
+  metadata(changed);return changed;
+}
+export const updateTag=(db,operation,id,expected,name)=>financeWrite(db,state=>changeTag(state,operation,id,expected,name));
+function save(tx, state, meta, entry, before, position, usage, tags) {
   const action = { id:identifier('a_'), expense_id:entry.id, before:before ?? null, undone:0 };
   const expenseAdded = before === undefined;
-  if (usage !== undefined) {
-    const changed={...emptyData(4),...structuredClone(state)};
+  if (usage !== undefined || tags!==undefined) {
+    const changed={...emptyData(5),...structuredClone(state)};
     if (expenseAdded) changed.expenses.push(entry); else changed.expenses[position]=entry;
-    changed.actions.push(action);applyUsage(changed,entry.id,usage);
-    const actual=metadata(changed); // Validate format and capacity before any request; all writes share this transaction.
-    tx.objectStore('expenses').put({key:entry.id,position,value:entry});
-    tx.objectStore('actions').add({key:action.id,position:meta.next_action_order,value:action});
-    const index=changed.usage_periods.findIndex(row=>row.expense_id===entry.id);
-    if (index>=0) tx.objectStore('usage_periods').put({key:entry.id,position:index,value:changed.usage_periods[index]});
-    for (const key of ['row_count','backup_bytes','next_action_order']) tx.objectStore('meta').put({key,value:actual[key]});
+    changed.actions.push(action);applyUsage(changed,entry.id,usage);applyTags(changed,entry.id,tags);
+    saveSettings(tx,state,changed); // Validate all references and capacity before any request; resolve only at transaction complete.
     Object.assign(state,changed);return;
   }
   const delta = length(entry) - (expenseAdded ? 0 : length(before)) +
@@ -129,7 +171,7 @@ export function addExpense(db, form, today, id = identifier('e_')) {
     if (STORES.some(section=>Array.isArray(state[section])&&state[section].some(row=>row.id===id))) throw new LedgerError('conflict','此操作已處理，請重新載入後確認。');
     const entry = { id, ...validateInput(form, state, today), source:'manual', recurring_id:null,
       period:null, voided:0, kind:'consumption', revision:0 };
-    save(tx, state, meta, entry, undefined, state.expenses.length, form.usage);
+    save(tx, state, meta, entry, undefined, state.expenses.length, form.usage,form.tags);
   });
 }
 export function editExpense(db, id, expectedRevision, form, today) {
@@ -137,7 +179,7 @@ export function editExpense(db, id, expectedRevision, form, today) {
     const {entry, position} = current(state, id, expectedRevision);
     const updated = { ...entry, ...validateInput(form, state, today, entry),
       revision:storedInteger(integerValue(entry.revision) + 1n) };
-    save(tx, state, meta, updated, structuredClone(entry), position, form.usage);
+    save(tx, state, meta, updated, structuredClone(entry), position, form.usage,form.tags);
   });
 }
 export function voidExpense(db, id, expectedRevision) {
@@ -306,6 +348,7 @@ export function changeAnnualPeriod(state,operation,id,year,expectedRule,expected
       period:null,voided:0,kind:'consumption',revision:0};
     changed.expenses.push(entry);
     applyUsage(changed,entry.id,form.usage);
+    applyTags(changed,entry.id,form.tags);
     changed.actions.push({id:identifier('a_'),expense_id:entry.id,before:null,undone:0});
     row.status = 'recorded'; row.expense_id = entry.id;
   } else if (operation === 'skip') row.status = 'skipped';
@@ -364,12 +407,16 @@ export function changeCategory(state, operation, oldName, value) {
 
 function saveSettings(tx, state, changed) {
   const meta = metadata(changed);
+  for(const section of ['tags','expense_tags']) {
+    const keys=new Set((changed[section] || []).map(row=>stringify(rowKey(section,row))));
+    for(const row of state[section] || [])if(!keys.has(stringify(rowKey(section,row))))tx.objectStore(section).delete(rowKey(section,row));
+  }
   for (const section of STORES.filter(section => !['meta', 'settings'].includes(section))) {
-    changed[section].forEach((row, position) => {
-      const previous = state[section][position];
+    (changed[section] || []).forEach((row, position) => {
+      const previous = state[section]?.[position];
       if (previous && stringify(previous) === stringify(row)) return;
       const store = tx.objectStore(section);
-      if (previous && stringify(rowKey(section, previous)) !== stringify(rowKey(section, row))) store.delete(rowKey(section, previous));
+      if (previous && !['tags','expense_tags'].includes(section) && stringify(rowKey(section, previous)) !== stringify(rowKey(section, row))) store.delete(rowKey(section, previous));
       store.put({ key:rowKey(section, row), position, value:row });
     });
   }

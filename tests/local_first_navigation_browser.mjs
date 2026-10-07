@@ -1,0 +1,45 @@
+import * as ledger from '../local-first/ledger.mjs';
+import {STORES} from '../local-first/idb.mjs';
+const q=selector=>document.querySelector(selector),check=(value,message)=>{if(!value)throw new Error(message);};
+const wait=async predicate=>{for(let i=0;i<300;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('Navigation UI timeout');};
+const report=document.createElement('pre');report.id='navigation-result';document.body.prepend(report);
+const open=indexedDB.open.bind(indexedDB),name=ledger.DB_NAME+'-navigation-'+crypto.randomUUID();indexedDB.open=(value,version)=>open(value===ledger.DB_NAME?name:value,version);
+const db=await ledger.openDatabase(),lines=[],today=ledger.taiwanToday(),transaction=IDBDatabase.prototype.transaction;
+const raw=async()=>{const rows={},tx=db.transaction(STORES,'readonly');for(const store of STORES)tx.objectStore(store).getAll().onsuccess=event=>{rows[store]=event.target.result;};await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=reject;});return JSON.stringify(STORES.map(store=>rows[store]),(_key,value)=>typeof value==='bigint'?{bigint:value.toString()}:value);};
+const bytes=async()=>new TextDecoder().decode(await ledger.exportPortableBackup(db));
+let armed=false,reads=0;
+IDBDatabase.prototype.transaction=function(...args){if(armed&&this.name===name){reads++;throw new Error('Unexpected navigation storage');}return transaction.apply(this,args);};
+const nav=name=>q('[data-view-button="'+name+'"]').click();
+try {
+  await import('../local-first/page.mjs');
+  check(q('#view-navigation')&&q('#welcome [data-privacy-link]'),'Missing four-view navigation/privacy entry');
+  check(!q('#welcome').hidden&&q('#view-navigation').hidden,'First use requires a setup view');
+  const blank=await raw();armed=true;q('#welcome [data-privacy-link]').click();
+  check(!q('#privacy-view').hidden&&q('#ledger-page').hidden&&q('#welcome').hidden,'Privacy view is not independent');q('#privacy-back').click();
+  check(!q('#welcome').hidden&&!q('#start-ledger').disabled&&reads===0,'First-use privacy writes or blocks start');armed=false;check(await raw()===blank,'Privacy initialized blank ledger');lines.push('first-use privacy is optional, independent and returns to untouched blank ledger');
+  q('#start-ledger').click();await wait(()=>!q('#ledger-page').hidden);
+  check(!q('#view-record').hidden&&q('#view-planning').hidden&&q('#view-analysis').hidden&&q('#view-settings').hidden,'Recording is not the default');
+  for(const [view,ids]of [['record',['expense-form','shortcut-quick','ending-soon','budget-overview','expenses','search-form','calendar-grid']],['planning',['budget-settings','fixed-settings','income-planning','annual-management']],['analysis',['expense-comparison']],['settings',['settings-fields','data-management']]])for(const id of ids)check(q('#'+id).closest('[data-view]')?.dataset.view===view,'Feature in wrong view: '+id);
+  lines.push('exact four regions; recording default; all existing features reachable in assigned view');
+  q('#expense-form').elements.amount.value='100.01';q('#expense-form').elements.note.value='<img src=x onerror=alert(1)>合成草稿';q('#expense-form').elements.usage_days.value='180';
+  q('#fixed-form').elements.name.value='定期草稿';q('#income-form').elements.name.value='收入草稿';q('#annual-form').elements.name.value='年度草稿';q('#comparison-form').elements.keyword.value='分析草稿';q('#category-add').elements.name.value='設定草稿';
+  const formValues=()=>JSON.stringify([...document.querySelectorAll('form')].map(form=>[form.id,[...form.elements].filter(el=>el.name).map(el=>[el.name,el.value,el.checked])]));
+  const draft=formValues(),baseline=await bytes(),rawBefore=await raw();reads=0;armed=true;
+  for(let i=0;i<3;i++)for(const view of ['planning','analysis','settings','record']){nav(view);check(!q('#view-'+view).hidden&&q('[data-view-button="'+view+'"]').getAttribute('aria-current')==='page','Current view not announced');check(document.activeElement===q('#view-'+view+'-title'),'Navigation focus not on region heading');check([...document.querySelectorAll('[data-view]')].filter(el=>!el.hidden).length===1,'Multiple views visible');}
+  check(formValues()===draft&&reads===0&&!q('#income-planning').open,'Switch changed drafts, opened income or accessed storage');armed=false;check(await bytes()===baseline&&await raw()===rawBefore,'Pure navigation changed full ledger');lines.push('all-region repeated navigation preserves every form and uses no IndexedDB transaction');
+  nav('settings');q('#download-backup').click();q('#export-password').value='synthetic-navigation-password';q('#export-confirm-password').value='synthetic-navigation-password';
+  armed=true;q('#data-management [data-privacy-link]').click();check(!q('#privacy-view').hidden,'Backup privacy entry missing');q('#privacy-back').click();
+  check(!q('#view-settings').hidden&&!q('#export-panel').hidden&&q('#export-password').value==='synthetic-navigation-password','Privacy discarded backup setup');
+  q('#data-management [data-privacy-link]').click();nav('analysis');check(q('#privacy-view').hidden&&!q('#ledger-page').hidden&&!q('#view-analysis').hidden,'Main navigation cannot leave privacy');nav('record');nav('settings');check(q('#export-password').value==='synthetic-navigation-password'&&reads===0,'Switch clears password or downloads');armed=false;q('#cancel-export').click();lines.push('privacy returns by its back button or main navigation; backup setup survives without downloads');
+  nav('planning');q('#income-planning').open=true;await wait(()=>q('#income-summary').textContent.includes('已收到的收入'));q('#allocation-items input').value='規劃草稿';q('#allocation-items input[inputmode=decimal]').value='123.45';
+  const planDraft=formValues();reads=0;armed=true;nav('record');nav('planning');check(q('#income-planning').open&&formValues()===planDraft&&reads===0,'Navigation reopened income or reset allocations');armed=false;lines.push('opened income and allocation drafts survive hiding without a second load');
+  nav('record');q('#expense-form').elements.usage_days.value='';q('#expense-form').requestSubmit();await wait(()=>q('#expenses').children.length===1);
+  check(!q('#expenses img'),'Unsafe consumption rendered HTML');q('#search-form').elements.keyword.value='合成草稿';q('#search-form').requestSubmit();await wait(()=>q('#search-results').children.length===1);
+  q('#search-results button').click();q('#expense-form').elements.amount.value='100.02';nav('analysis');nav('record');check(q('#expense-form').elements.amount.value==='100.02','Expense edit lost across view');q('#cancel-edit').click();check(document.activeElement.closest('#search-results'),'Search cancel focus lost');
+  q('#calendar-grid [data-day="'+today+'"]').click();q('#calendar-day-results button').click();q('#expense-form').elements.amount.value='100.03';q('#expense-form').requestSubmit();await wait(()=>q('#calendar-day-results').textContent.includes('100.03'));
+  check(document.activeElement.closest('#calendar-day-results')&&!q('#calendar-day-details').hidden,'Calendar save did not return to selected day');lines.push('search/calendar reuse original edit and keep origin focus, conditions and selected day');
+  q('#search-results button:last-child').click();check(q('#delete-dialog').open,'Delete dialog inaccessible');q('#cancel-delete').click();check(!q('#delete-dialog').open,'Delete cancel failed');
+  q('#search-results button:last-child').click();q('#confirm-delete').click();await wait(()=>q('#search-results').children.length===0);check(!q('#delete-dialog').open&&!q('#view-record').hidden,'Delete leaves wrong view');lines.push('global delete dialog remains reachable; confirmation refreshes original search/calendar');
+  armed=true;nav('planning');q('#annual-entry').click();check(q('#annual-management').open&&!q('#view-planning').hidden,'Annual anchor hidden');nav('analysis');nav('settings');q('#csv-export').open=true;nav('record');nav('settings');check(q('#csv-export').open&&reads===0,'CSV disclosure lost or navigation exported');armed=false;lines.push('existing anchors/disclosures remain usable without automatic posting or export');
+  report.textContent='PASS：'+lines.length+' 組四區導覽／隱私驗證\n'+lines.join('\n');
+}catch(error){report.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{armed=false;IDBDatabase.prototype.transaction=transaction;db.close();}

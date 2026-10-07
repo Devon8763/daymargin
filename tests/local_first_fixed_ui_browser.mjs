@@ -14,6 +14,7 @@ const wait=async action=>{const complete=new Promise((resolve,reject)=>{const ob
 const current=()=>document.querySelector('#fixed-list > li');
 try {
   const before=(await exportPortableBackup(db)).toString();await import('../local-first/page.mjs');
+  document.querySelector('[data-view-button="planning"]').click();
   check(document.querySelector('#fixed-settings')?.tagName==='DETAILS'&&!document.querySelector('#fixed-settings').open,'Missing native collapsed fixed settings');
   check((await exportPortableBackup(db)).toString()===before,'Page implicitly posted/wrote');
   document.querySelector('#ledger-settings').open=true;document.querySelector('#fixed-settings').open=true;

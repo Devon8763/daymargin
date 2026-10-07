@@ -25,6 +25,7 @@ try{
   await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=reject;});
   const before=await raw(),backup=await exportPortableBackup(db);
   await import('../local-first/page.mjs');
+  q('[data-view-button="settings"]').click();
   check(q('#csv-form'),'CSV entry missing');check(before===await raw(),'Opening created defaults or changed data');
   const form=q('#csv-form'),today=taiwanToday();
   check(form.elements.start.value===today.slice(0,7)+'-01'&&form.elements.end.value===today,'Taiwan defaults missing');

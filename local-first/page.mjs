@@ -1,8 +1,8 @@
-import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateRecurring, updateIncome, updateAllocation, excludeSuggestion, updateAnnual, processAnnual, updateShortcut, shortcutDraft, taiwanToday, LedgerError } from './ledger.mjs';
+import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateRecurring, updateIncome, updateAllocation, excludeSuggestion, updateAnnual, processAnnual, updateShortcut, shortcutDraft, updateTag, taiwanToday, LedgerError } from './ledger.mjs';
 import { readBackup, validateStorageLimits, MAX_BYTES, integerValue, storedInteger } from './backup.mjs';
 import {encryptBackup,decryptBackup,isEncryptedBackup,inspectEncryptedBackup,confirmBackupPassword,MAX_ENCRYPTED_BYTES,EncryptedBackupError} from './backup-crypto.mjs';
-import { categoryOptions, categoryName, cents, orderedShortcuts, fixedNextMonth, fixedSettings, fixedView, recurringProgress, ValidationError } from './rules.mjs';
-import { activeExpenses, validateSearch, searchExpenses, calendarMonth, monthBudget } from './browse.mjs';
+import { categoryOptions, categoryName, cents, orderedShortcuts, tagName, tagSuggestions, fixedNextMonth, fixedSettings, fixedView, recurringProgress, ValidationError } from './rules.mjs';
+import { activeExpenses, validateSearch, searchExpenses, calendarMonth, monthBudget, tagReport, validateTagQuery } from './browse.mjs';
 import { validateCsvRange, expenseCsv } from './csv.mjs';
 import {comparisonDefaults,comparisonCategories,validateComparison,compareExpenses,comparisonDay,canPlotComparison} from './comparison.mjs';
 import {incomeMonth, recurringSuggestions, defaultAllocation, allocationMonth} from './income.mjs';
@@ -23,6 +23,45 @@ const review = document.querySelector('#restore-review');
 let db, state, editing = null, deleting = null, busy = false, writeBlocked = false;
 let editingOrigin = null, deletingOrigin = null;
 let expenseSubmissionId=null,usageStartChosen=false;
+const viewNavigation=document.querySelector('#view-navigation'),privacyView=document.querySelector('#privacy-view');
+let privacyReturn=null;
+// Move the original nodes once: forms, listeners, disclosures and internal hidden flags are retained.
+const categorySection=document.createElement('section');categorySection.setAttribute('aria-label','分類與付款方式');
+categorySection.append(document.querySelector('#settings-fields'),document.querySelector('#settings-error'));
+document.querySelector('#view-settings').append(categorySection);
+for(const [view,selectors] of [
+  ['record',['#expense-form','#shortcut-quick','#ending-soon','#budget-overview','#expenses','#search-form','#calendar-grid']],
+  ['planning',['#ledger-settings','#income-planning','#annual-management']],
+  ['analysis',['#expense-comparison','#tag-analysis']],['settings',['#data-management','#tag-settings']]])
+  for(const selector of selectors)document.querySelector('#view-'+view).append(document.querySelector(selector).closest('section'));
+document.querySelector('#view-planning-title').after(document.querySelector('#planning-links'));
+function closePrivacy(focus=true) {
+  if(!privacyReturn)return;
+  const previous=privacyReturn;privacyReturn=null;privacyView.hidden=true;
+  ledgerPage.hidden=previous.ledgerHidden;welcome.hidden=previous.welcomeHidden;
+  if(focus)previous.trigger.focus();
+}
+function showView(view,focus=true) {
+  const panel=document.querySelector('#view-'+view);if(!panel?.hasAttribute('data-view'))return;
+  closePrivacy(false);
+  for(const item of document.querySelectorAll('[data-view]'))item.hidden=item!==panel;
+  for(const button of viewNavigation.querySelectorAll('button'))button.setAttribute('aria-current',button.dataset.viewButton===view?'page':'false');
+  if(focus)document.querySelector('#view-'+view+'-title').focus();
+  if(view==='analysis')for(const chart of comparisonCharts)chart.resize();
+}
+for(const button of viewNavigation.querySelectorAll('button'))button.onclick=()=>showView(button.dataset.viewButton);
+for(const link of document.querySelectorAll('a[href^="#"]'))link.addEventListener('click',event=>{
+  if(link.hasAttribute('data-privacy-link')) {
+    event.preventDefault();if(busy)return;
+    privacyReturn={trigger:link,ledgerHidden:ledgerPage.hidden,welcomeHidden:welcome.hidden};
+    ledgerPage.hidden=true;welcome.hidden=true;privacyView.hidden=false;
+    document.querySelector('#privacy-back').textContent=privacyReturn.ledgerHidden?'返回首次使用':'返回設定';
+    document.querySelector('#privacy-title').focus();return;
+  }
+  const view=document.getElementById(link.getAttribute('href').slice(1))?.closest('[data-view]');
+  if(view)showView(view.dataset.view,false);
+});
+document.querySelector('#privacy-back').onclick=()=>closePrivacy();
 let pendingBackup = null, selection = 0;
 let pendingEncrypted = null, exportSelection = 0;
 const decryptForm=document.querySelector('#decrypt-form'),decryptPanel=document.querySelector('#decrypt-panel');
@@ -34,7 +73,7 @@ const csvError = document.querySelector('#csv-error'), csvStatus = document.quer
 const csvToday = taiwanToday();
 csvForm.elements.start.value = csvToday.slice(0, 7) + '-01';
 csvForm.elements.end.value = csvToday;
-let searchRows = [], searchShown = 0, lastQuery = null, calendarData = null, selectedDay = null;
+let searchRows = [], searchShown = 0, lastQuery = null, calendarData = null, selectedDay = null,searchSnapshot=null,calendarSnapshot=null;
 let calendarShown = 0;
 let viewedMonth = null;
 const settingsDialog = document.querySelector('#settings-dialog');
@@ -84,6 +123,69 @@ function node(tag, text, className) {
   if (className) element.className = className;
   return element;
 }
+const tagInput=document.querySelector('#tag-input'),tagDialog=document.querySelector('#tag-remove-dialog'),tagQueryForm=document.querySelector('#tag-query');
+let tagDraft=[],tagDraftState=null,tagRemoving=null,tagCreateId=null,tagQuery=null,tagRows=[],tagShown=0,tagSnapshot=null,tagQueryRequest=0;
+function renderTagInput(snapshot=tagDraftState || state) {
+  tagDraftState=snapshot;
+  tagDraft=tagDraft.map(item=>{const row=item.id===null && snapshot.tags.find(row=>row.name===item.name);return row ? {id:row.id,name:row.name} : item;});
+  document.querySelector('#tag-suggestions').replaceChildren(...tagSuggestions(snapshot,tagInput.value).map(row=>{const option=node('option');option.value='#'+row.name;return option;}));
+  const selected=document.querySelector('#tag-selected');selected.replaceChildren();
+  for(const item of tagDraft) {
+    const live=item.id ? snapshot.tags.find(row=>row.id===item.id) : null;
+    const button=node('button','#'+item.name+(live?.hidden===1?'（不再顯示）':'')+' ×');button.type='button';button.setAttribute('aria-label','移除這筆消費的標籤：'+item.name);
+    button.onclick=()=>{if(!busy){tagDraft=tagDraft.filter(row=>row!==item);renderTagInput();(document.querySelector('#tag-selected button') || tagInput).focus();}};selected.append(button);
+  }
+  document.querySelector('#tag-options').replaceChildren(...tagSuggestions(snapshot).map(row=>{
+    const label=node('label','#'+row.name,'tag-choice'),input=node('input');input.type='checkbox';input.value=row.id;input.checked=tagDraft.some(item=>item.id===row.id);
+    input.onchange=()=>{if(busy)return;tagDraft=tagDraft.filter(item=>item.id!==row.id);if(input.checked)tagDraft.push({id:row.id,name:row.name});document.querySelector('#cancel-edit').hidden=false;renderTagInput();document.querySelector('#tag-options input[value="'+row.id+'"]').focus();};
+    label.prepend(input);return label;
+  }));
+}
+function tagFields(id=null,snapshot=state) {
+  const ids=new Set((snapshot.expense_tags || []).filter(row=>row.expense_id===id).map(row=>row.tag_id));
+  tagDraft=(snapshot.tags || []).filter(row=>ids.has(row.id)).map(row=>({id:row.id,name:row.name}));tagInput.value='';
+  document.querySelector('#expense-tags').open=tagDraft.length>0;renderTagInput(snapshot);
+}
+function addTagDraft() {
+  if(!tagInput.value.trim())return;
+  const name=tagName(tagInput.value),existing=(tagDraftState || state).tags.find(row=>row.name===name);
+  if(!tagDraft.some(row=>row.name===name))tagDraft.push({id:existing?.id ?? null,name});
+  tagInput.value='';document.querySelector('#cancel-edit').hidden=false;renderTagInput();
+}
+document.querySelector('#tag-draft-add').onclick=()=>{if(busy)return;try{addTagDraft();error.textContent='';}catch(failure){error.textContent=failure instanceof ValidationError?failure.message:'請輸入有效標籤。';}};
+tagInput.oninput=()=>renderTagInput();tagInput.onkeydown=event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();document.querySelector('#tag-draft-add').click();}};
+function showTagReport(snapshot,query,today) {
+  const result=tagReport(snapshot,query,today),tag=snapshot.tags.find(row=>row.id===query.tag_id);tagSnapshot=snapshot;tagRows=result.rows;tagShown=0;
+  document.querySelector('#tag-summary').textContent='#'+tag.name+(tag.hidden?'（不再顯示，仍含歷史）':'')+'：'+amountText(result.total)+' 元，'+result.rows.length+' 筆；'+(query.start||'全部時間')+' ～ '+(query.end||today);
+  document.querySelector('#tag-results').replaceChildren();tagShown=appendBatch(tagRows,document.querySelector('#tag-results'),document.querySelector('#tag-more'),tagShown,snapshot);
+}
+function renderTags() {
+  renderTagInput(state);
+  const select=tagQueryForm.elements.tag_id,value=select.value,options=[node('option','請選擇一個標籤')];options[0].value='';
+  for(const row of state.tags){const option=node('option','#'+row.name+(row.hidden?'（不再顯示）':''));option.value=row.id;options.push(option);}select.replaceChildren(...options);if(state.tags.some(row=>row.id===value))select.value=value;
+  const list=document.querySelector('#tag-list');list.replaceChildren();if(!state.tags.length)list.append(node('li','尚無標籤。'));
+  for(const row of state.tags) {
+    const item=node('li');item.append(node('span','#'+row.name+(row.hidden?'（不再顯示）':'')));
+    for(const [operation,label] of [[row.hidden?'show':'hide',row.hidden?'重新顯示':'不再顯示'],['remove','移除']]) {
+      const button=node('button',label);button.type='button';button.dataset.operation=operation;
+      button.onclick=()=>{if(busy||writeBlocked)return;if(operation==='remove'){tagRemoving=structuredClone(row);document.querySelector('#tag-remove-error').textContent='';document.querySelector('#tag-remove-summary').textContent='#'+row.name+'：會取消 '+state.expense_tags.filter(link=>link.tag_id===row.id).length+' 筆帳目關聯。';tagDialog.showModal();}else saving(()=>updateTag(db,operation,row.id,row.revision),()=>{},document.querySelector('#tag-settings-error'));};item.append(button);
+    }list.append(item);
+  }
+  if(tagQuery) {
+    if(state.tags.some(row=>row.id===tagQuery.tag_id))showTagReport(state,tagQuery,taiwanToday());
+    else {tagQuery=null;tagRows=[];document.querySelector('#tag-results').replaceChildren();document.querySelector('#tag-summary').textContent='此標籤已移除，請重新選擇。';document.querySelector('#tag-more').hidden=true;}
+  }
+}
+document.querySelector('#tag-add').onsubmit=event=>{event.preventDefault();tagCreateId??='t_'+crypto.randomUUID();const id=tagCreateId,value=event.currentTarget.elements.name.value;saving(()=>updateTag(db,'add',id,null,value),()=>{document.querySelector('#tag-add').reset();tagCreateId=null;},document.querySelector('#tag-settings-error'));};
+document.querySelector('#cancel-tag-remove').onclick=()=>{if(!busy)tagDialog.close();};tagDialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});tagDialog.addEventListener('close',()=>{if(!tagDialog.open)tagRemoving=null;});
+document.querySelector('#confirm-tag-remove').onclick=()=>{if(!tagRemoving||busy)return;const item=tagRemoving;saving(()=>updateTag(db,'remove',item.id,item.revision),()=>tagDialog.close(),document.querySelector('#tag-remove-error'));};
+tagQueryForm.onsubmit=async event=>{
+  event.preventDefault();const button=tagQueryForm.querySelector('button');if(button.disabled)return;button.disabled=true;document.querySelector('#tag-query-error').textContent='';const request=++tagQueryRequest;
+  try{if(!tagQueryForm.elements.start.validity.valid||!tagQueryForm.elements.end.validity.valid)throw new ValidationError('請輸入有效日期。');const query=Object.fromEntries(new FormData(tagQueryForm)),today=taiwanToday();validateTagQuery(query,today);const snapshot=await readLedger(db);if(request!==tagQueryRequest)return;showTagReport(snapshot,query,today);tagQuery=query;}
+  catch(failure){if(request===tagQueryRequest)document.querySelector('#tag-query-error').textContent=failure instanceof ValidationError?failure.message:'無法查看標籤消費，請重新載入後再試。';}
+  finally{button.disabled=false;}
+};
+document.querySelector('#tag-more').onclick=()=>{tagShown=appendBatch(tagRows,document.querySelector('#tag-results'),document.querySelector('#tag-more'),tagShown,tagSnapshot);};
 const shortcutForm=document.querySelector('#shortcut-form'),shortcutError=document.querySelector('#shortcut-error');
 let shortcutEditing=null,shortcutSource=null,shortcutExpected=null,shortcutId=null;
 function shortcutChoices(target,snapshot,row=null,message=shortcutError) {
@@ -222,6 +324,7 @@ function renderAnnual() {
     if(item.status==='pending') {
       const record=node('button','記錄消費');record.type='button';record.onclick=()=>{
         if(busy||writeBlocked)return;resetForm();annualDraft=structuredClone(item);
+        showView('record',false);
         form.elements.spent_on.value=item.due_on;usageFields(null,item.due_on);form.elements.amount.value=amountText(item.defaults.cents,false);form.elements.note.value=item.defaults.name;
         form.elements.category.value=item.defaults.category;form.elements.payment_source_id.value=item.defaults.payment_source_id;
         document.querySelector('#form-title').textContent='記錄年度費用消費（'+item.year+' 年）';document.querySelector('#save').textContent='記錄消費';document.querySelector('#cancel-edit').hidden=false;
@@ -471,8 +574,9 @@ form.elements.spent_on.onchange=()=>{
     form.elements.usage_started_on.value=form.elements.spent_on.value;
 };
 document.querySelector('#usage-stop').onclick=()=>{if(!busy&&!writeBlocked){form.elements.usage_days.value='';form.elements.usage_remind.checked=false;}};
-function beginExpenseEdit(entry,origin) {
+function beginExpenseEdit(entry,origin,snapshot=state) {
   if(busy||writeBlocked)return;
+  showView('record',false);
   annualDraft=null;expenseSubmissionId=null;editingOrigin=origin;
   editing=structuredClone(entry);choices();error.textContent='';
   form.elements.amount.value=amountText(entry.cents,false);form.elements.note.value=entry.note;
@@ -480,6 +584,7 @@ function beginExpenseEdit(entry,origin) {
   document.querySelector('#expense-date-note').hidden=entry.source==='manual';
   form.elements.category.value=entry.category;form.elements.payment_source_id.value='';
   usageFields(state.usage_periods.find(row=>row.expense_id===entry.id),entry.spent_on);
+  tagFields(entry.id,snapshot);
   document.querySelector('#form-title').textContent='更改消費';document.querySelector('#save').textContent='儲存更改';
   document.querySelector('#cancel-edit').hidden=false;form.elements.amount.focus();
 }
@@ -492,6 +597,7 @@ function renderEndingSoon() {
     if(item.kind==='usage') {
       row.dataset.expenseId=item.id;button.onclick=()=>beginExpenseEdit(state.expenses.find(entry=>entry.id===item.id),{listId:'ending-soon-list',id:item.id});
     } else button.onclick=()=>{
+      showView('planning',false);
       document.querySelector('#ledger-settings').open=true;document.querySelector('#fixed-settings').open=true;
       const target=[...document.querySelector('#fixed-list').children].find(entry=>entry.dataset.id===item.id);
       if(target){target.tabIndex=-1;target.focus();}
@@ -509,6 +615,7 @@ function resetForm() {
   form.elements.note.value = '';
   form.elements.spent_on.value = taiwanToday();
   expenseSubmissionId=null;usageFields();
+  tagFields();
   form.elements.spent_on.readOnly = false;
   document.querySelector('#expense-date-note').hidden = true;
   document.querySelector('#form-title').textContent = '記錄消費';
@@ -519,12 +626,14 @@ function resetForm() {
 function returnToExpense(origin) {
   if (!origin) return;
   const container = document.getElementById(origin.listId);
+  showView(container.closest('[data-view]').dataset.view,false);
   const row = [...container.children].find(row => row.dataset.expenseId === origin.id);
   const target = row?.querySelector('button') || container;
   if (target === container) target.tabIndex = -1;
   target.focus();
 }
 function render() {
+  renderTags();
   renderShortcuts();
   comparisonChoices();
   renderSettings();
@@ -536,21 +645,23 @@ function render() {
   list.replaceChildren();
   const entries = activeExpenses(state, taiwanToday()).slice().reverse();
   document.querySelector('#empty').hidden = entries.length !== 0;
-  list.append(...entries.map(expenseRow));
+  list.append(...entries.map(entry=>expenseRow(entry,state)));
 }
-function expenseRow(entry) {
+function expenseRow(entry,snapshot=state) {
     const row = node('li', undefined, 'expense');
     row.dataset.expenseId = entry.id;
     for (const [label, value] of [['日期', entry.spent_on], ['項目', entry.note], ['金額', amountText(entry.cents) + ' 元'], ['分類', entry.category], ['付款方式', entry.payment_source_name]]) {
       const cell = node('div'); cell.append(node('small', label), node('span', value)); row.append(cell);
     }
     const buttons = node('div', undefined, 'buttons');
+    const tagIds=new Set((snapshot.expense_tags || []).filter(item=>item.expense_id===entry.id).map(item=>item.tag_id));
+    const labels=(snapshot.tags || []).filter(item=>tagIds.has(item.id)).map(item=>'#'+item.name+(item.hidden?'（不再顯示）':''));if(labels.length)row.append(node('p',labels.join(' · '),'expense-tag-labels'));
     const usage=state.usage_periods.find(item=>item.expense_id===entry.id);
     if(usage) row.append(node('p',usage.active===1 ? '使用期間：'+usage.started_on+' 起，'+usage.days+' 天；預計用完 '+usageEnd(usage)
       +(usage.show_daily_cost===1?'；每日平均成本約 '+dailyCost(entry.cents,usage.days)+' 元／天（只供理解）':'') : '使用期間：已停止追蹤'));
     const edit = node('button', '更改'); edit.type = 'button';
     edit.onclick = () => {
-      beginExpenseEdit(entry,{listId:row.parentElement.id,id:entry.id});
+      beginExpenseEdit(entry,{listId:row.parentElement.id,id:entry.id},snapshot);
     };
     const remove = node('button', '刪除'); remove.type = 'button';
     remove.onclick = () => {
@@ -570,19 +681,20 @@ function expenseRow(entry) {
     buttons.append(remove);
     row.append(buttons); return row;
 }
-function appendBatch(rows, listElement, more, shown) {
-  listElement.append(...rows.slice(shown, shown + 50).map(expenseRow));
+function appendBatch(rows, listElement, more, shown,snapshot=state) {
+  listElement.append(...rows.slice(shown, shown + 50).map(entry=>expenseRow(entry,snapshot)));
   more.hidden = shown + 50 >= rows.length;
   return Math.min(shown + 50, rows.length);
 }
 const searchForm = document.querySelector('#search-form');
 function showSearch(snapshot, query, today) {
+  searchSnapshot=snapshot;
   searchRows = searchExpenses(snapshot, query, today);
   searchShown = 0;
   document.querySelector('#search-results').replaceChildren();
   document.querySelector('#search-count').textContent = searchRows.length
     ? `符合 ${searchRows.length} 筆消費。` : '沒有符合條件的消費。';
-  searchShown = appendBatch(searchRows, document.querySelector('#search-results'), document.querySelector('#search-more'), searchShown);
+  searchShown = appendBatch(searchRows, document.querySelector('#search-results'), document.querySelector('#search-more'), searchShown,searchSnapshot);
 }
 searchForm.addEventListener('submit', async event => {
   event.preventDefault();
@@ -609,7 +721,7 @@ searchForm.addEventListener('submit', async event => {
   }
 });
 document.querySelector('#search-more').onclick = () => {
-  searchShown = appendBatch(searchRows, document.querySelector('#search-results'), document.querySelector('#search-more'), searchShown);
+  searchShown = appendBatch(searchRows, document.querySelector('#search-results'), document.querySelector('#search-more'), searchShown,searchSnapshot);
 };
 function nextMonth(month, offset) {
   const [year, number] = month.split('-').map(Number);
@@ -624,7 +736,7 @@ function showDay(day) {
   document.querySelector('#calendar-day-empty').hidden = day.expenses.length !== 0;
   const listElement = document.querySelector('#calendar-day-results');
   listElement.replaceChildren();
-  calendarShown = appendBatch(day.expenses, listElement, document.querySelector('#calendar-day-more'), 0);
+  calendarShown = appendBatch(day.expenses, listElement, document.querySelector('#calendar-day-more'), 0,calendarSnapshot);
   for (const button of document.querySelectorAll('#calendar-grid button[data-day]')) {
     button.setAttribute('aria-pressed', String(button.dataset.day === selectedDay));
   }
@@ -632,9 +744,10 @@ function showDay(day) {
 document.querySelector('#calendar-day-more').onclick = () => {
   const day = calendarData.days.find(item => item.date === selectedDay);
   calendarShown = appendBatch(day.expenses, document.querySelector('#calendar-day-results'),
-    document.querySelector('#calendar-day-more'), calendarShown);
+    document.querySelector('#calendar-day-more'), calendarShown,calendarSnapshot);
 };
 function showCalendar(snapshot, today) {
+  calendarSnapshot=snapshot;
   const retainedDay = selectedDay;
   calendarData = calendarMonth(snapshot, viewedMonth, today);
   document.querySelector('#calendar-month').textContent = viewedMonth.replace('-', ' 年 ') + ' 月';
@@ -677,12 +790,14 @@ document.querySelector('#calendar-next').onclick = () => moveMonth(1);
 async function saving(operation, success, message = error) {
   if (busy || writeBlocked) return;
     ++incomeViewRequest;
+    ++tagQueryRequest;
   let committed = false;
   const budgetControl = document.activeElement.closest('#budget-fields') ? document.activeElement : null;
   const fixedControl = document.activeElement.closest('#fixed-fields') ? document.activeElement : null;
   const budgetRow = budgetControl?.closest('#budget-setting-list > li');
   busy = true; fields.disabled = true; error.textContent = '';
   document.querySelector('#shortcut-fields').disabled=true;
+  document.querySelector('#tag-fields').disabled=true;
   incomeBusy(true);
   document.querySelector('#annual-fields').disabled=true;
   document.querySelector('#confirm-annual').disabled=true;document.querySelector('#cancel-annual').disabled=true;
@@ -705,7 +820,7 @@ async function saving(operation, success, message = error) {
     status.textContent = '瀏覽器本機測試帳本；儲存完成。';
   } catch (failure) {
     writeBlocked = committed;
-    if (committed) for (const modal of [dialog, settingsDialog, fixedStopDialog, incomeVoidDialog, annualDialog]) if (modal.open) modal.close();
+    if (committed) for (const modal of [dialog, settingsDialog, fixedStopDialog, incomeVoidDialog, annualDialog,tagDialog]) if (modal.open) modal.close();
     message.textContent = committed ? '資料已儲存，但畫面更新未完成。請重新載入確認，勿重複提交。'
       : failure instanceof LedgerError || failure instanceof ValidationError ? failure.message : '儲存未完成，請確認瀏覽器儲存空間後重試。';
     if (dialog.open) document.querySelector('#delete-error').textContent = error.textContent;
@@ -713,6 +828,7 @@ async function saving(operation, success, message = error) {
   } finally {
     busy = false; fields.disabled = writeBlocked;
     document.querySelector('#shortcut-fields').disabled=writeBlocked;
+    document.querySelector('#tag-fields').disabled=writeBlocked;
     incomeBusy(writeBlocked);
     document.querySelector('#annual-fields').disabled=writeBlocked;
     document.querySelector('#confirm-annual').disabled=writeBlocked;document.querySelector('#cancel-annual').disabled=writeBlocked;
@@ -981,6 +1097,8 @@ form.addEventListener('submit', event => {
   event.preventDefault();
   if(busy||writeBlocked)return;
   const input = Object.fromEntries(new FormData(form));
+  try{addTagDraft();input.tags={ids:tagDraft.filter(row=>row.id!==null).map(row=>row.id),names:tagDraft.filter(row=>row.id===null).map(row=>row.name)};}
+  catch(failure){error.textContent=failure instanceof ValidationError?failure.message:'請輸入有效標籤。';return;}
   if(form.elements.usage_days.value.trim())input.usage={started_on:form.elements.usage_started_on.value,days:Number(form.elements.usage_days.value),
     remind:Number(form.elements.usage_remind.checked),reminder_days:form.elements.usage_reminder_days.value.trim()===''?NaN:Number(form.elements.usage_reminder_days.value),show_daily_cost:Number(form.elements.usage_show_daily_cost.checked),active:1};
   else if(editing && state.usage_periods.some(row=>row.expense_id===editing.id))input.usage=null;
@@ -992,7 +1110,7 @@ form.addEventListener('submit', event => {
 document.querySelector('#cancel-edit').onclick = () => { if (!busy) { const origin = resetForm(); error.textContent = ''; returnToExpense(origin); } };
 document.querySelector('#cancel-delete').onclick = () => dialog.close();
 dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
-dialog.addEventListener('close', () => { deleting = null; deletingOrigin = null; });
+dialog.addEventListener('close', () => { if(!dialog.open){deleting = null; deletingOrigin = null;} });
 document.querySelector('#confirm-delete').onclick = () => saving(
   () => voidExpense(db, deleting.id, deleting.revision),
   () => { const origin = deletingOrigin; if (editing?.id === deleting.id) resetForm(); dialog.close(); return origin; }
@@ -1002,6 +1120,7 @@ function showLedger() {
   welcome.hidden = true;
   review.hidden = true;
   ledgerPage.hidden = false;
+  viewNavigation.hidden=false;showView('record',false);
   management.hidden = false;
   resetForm(); render(); fields.disabled = false;
   viewedMonth = taiwanToday().slice(0, 7);
@@ -1023,7 +1142,7 @@ document.querySelector('#start-ledger').onclick = async () => {
 document.querySelector('#choose-restore').onclick = () => { if (!busy) restoreFile.click(); };
 function prepareRestore(payload){
   const backup=readBackup(payload);validateStorageLimits(backup);
-  const labels={expenses:'消費',categories:'分類',payment_sources:'付款方式',budgets:'預算',recurring_rules:'定期規則',recurring_versions:'歷史版本',shortcuts:'捷徑',actions:'消費操作紀錄',settings:'設定',incomes:'收入',income_actions:'收入操作紀錄',monthly_allocations:'月份分配',allocation_preferences:'往後建議排除',annual_rules:'年度費用',annual_periods:'年度期數',usage_periods:'使用期間'};
+  const labels={expenses:'消費',categories:'分類',payment_sources:'付款方式',budgets:'預算',recurring_rules:'定期規則',recurring_versions:'歷史版本',shortcuts:'捷徑',actions:'消費操作紀錄',settings:'設定',incomes:'收入',income_actions:'收入操作紀錄',monthly_allocations:'月份分配',allocation_preferences:'往後建議排除',annual_rules:'年度費用',annual_periods:'年度期數',usage_periods:'使用期間',tags:'標籤',expense_tags:'消費標籤關聯'};
   document.querySelector('#restore-format').textContent=`備份 JSON v${backup.version}${backup.version >= 2 ? '（舊 Python 不支援）' : ''}`;
   document.querySelector('#restore-summary').replaceChildren(...Object.keys(backup.data).map(section=>node('li',`${labels[section]}：${section==='settings'?1:backup.data[section].length} 項`)));
   pendingBackup=payload;pendingEncrypted=null;decryptForm.reset();decryptPanel.hidden=true;review.hidden=false;
