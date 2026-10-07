@@ -27,6 +27,7 @@ const clear=category=>row(category).querySelector('[data-operation="clear"]').cl
 try {
   const before=await exportPortableBackup(db);
   await import('../local-first/page.mjs');
+  document.querySelector('[data-view-button="planning"]').click();
   check(document.querySelector('#budget-overview'),'Missing budget overview');
   check(document.querySelector('#budget-settings')?.tagName==='DETAILS' && !document.querySelector('#budget-settings').open,'Native collapsed budget settings');
   check(!document.querySelector('#category-budget-overview').open,'Category budgets must start collapsed');

@@ -14,6 +14,7 @@ const wait=async action=>{const complete=new Promise((resolve,reject)=>{const ob
   const timeout=setTimeout(()=>{observer.disconnect();reject(new Error('Write timeout'));},5000);observer.observe(document.body,{subtree:true,attributes:true,childList:true});});action();await complete;};
 try {
   const before=await bytes();await import('../local-first/page.mjs');check(await bytes()===before,'Read-only load wrote');
+  document.querySelector('[data-view-button="planning"]').click();
   const form=document.querySelector('#fixed-form');check(form.elements.kind,'Missing recurring type selector');
   document.querySelector('#ledger-settings').open=true;document.querySelector('#fixed-settings').open=true;
   const select=kind=>{form.elements.kind.value=kind;form.elements.kind.dispatchEvent(new Event('change'));};

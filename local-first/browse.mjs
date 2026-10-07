@@ -9,6 +9,21 @@ export function activeExpenses(state, today) {
   return state.expenses.filter(row => row.kind === 'consumption' && row.voided === 0 &&
     ['manual', '固定', '訂閱', '分期'].includes(row.source) && row.spent_on <= today);
 }
+export function validateTagQuery(query,today) {
+  isoDate(today);
+  if(!query || Object.keys(query).length!==3 || ['tag_id','start','end'].some(key=>typeof query[key]!=='string') || !/^[a-z][a-z0-9_-]{0,63}$/.test(query.tag_id))
+    throw new ValidationError('請選擇一個現有標籤。');
+  const start=query.start ? isoDate(query.start) : '',end=query.end ? isoDate(query.end) : today;
+  if(start && start>end)throw new ValidationError('開始日期不可晚於結束日期。');
+  return {start,end};
+}
+export function tagReport(state,query,today) {
+  const {start,end}=validateTagQuery(query,today);
+  if(!(state.tags || []).some(row=>row.id===query.tag_id))throw new ValidationError('標籤已移除，請重新選擇。');
+  const ids=new Set((state.expense_tags || []).filter(row=>row.tag_id===query.tag_id).map(row=>row.expense_id));
+  const rows=ordered(activeExpenses(state,today).filter(row=>ids.has(row.id) && row.spent_on>=start && row.spent_on<=end));
+  return {rows,total:rows.reduce((total,row)=>total+cents(row.cents),0n)};
+}
 
 export function monthBudget(state, today) {
   const month = isoDate(today).slice(0, 7);

@@ -17,9 +17,9 @@ try {
   let old=await request(opening),legacy={format:'local-first-test-ledger',version:4,owner:'local-test-owner',...emptyData(3),payment_sources:[{id:'p_cash',name:'現金',active:1}]};
   let tx=old.transaction([...V3_SECTIONS,'meta'],'readwrite');
   const seed=(transaction,state)=>{for(const section of V3_SECTIONS){const rows=section==='settings'?[state.settings]:state[section];rows.forEach((value,position)=>transaction.objectStore(section).add({key:rowKey(section,value),position,value}));}for(const [key,value] of Object.entries(metadata(state)))transaction.objectStore('meta').add({key,value});};
-  seed(tx,legacy);await done(tx);old.close();db=await ledger.openDatabase(name);check(db.version===5,'Schema not upgraded');
+  seed(tx,legacy);await done(tx);old.close();db=await ledger.openDatabase(name);check(db.version===6,'Schema not upgraded');
   check(text(await ledger.exportPortableBackup(db))===text(writeBackup(portable(legacy))),'Migration changed old bytes');db.close();
-  lines.push('v4 to v5 migration preserves old complete backup bytes');
+  lines.push('v4 to v6 migration preserves old complete backup bytes');
   const corrupt=indexedDB.open(name+'-corrupt',4);corrupt.onupgradeneeded=()=>{for(const section of [...V3_SECTIONS,'meta'])corrupt.result.createObjectStore(section,{keyPath:'key'});};
   old=await request(corrupt);tx=old.transaction([...V3_SECTIONS,'meta'],'readwrite');seed(tx,legacy);tx.objectStore('meta').put({key:'row_count',value:999});await done(tx);old.close();
   let refused=false;try{(await ledger.openDatabase(name+'-corrupt')).close();}catch{refused=true;}check(refused,'Corruption accepted');old=await request(indexedDB.open(name+'-corrupt',4));check(!old.objectStoreNames.contains('usage_periods'),'Failed migration changed schema');old.close();

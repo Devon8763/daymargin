@@ -19,9 +19,9 @@ try {
   oldOpen.onupgradeneeded=()=>{for(const section of [...V2_SECTIONS,'meta'])oldOpen.result.createObjectStore(section,{keyPath:'key'});};
   let old=await request(oldOpen),legacy={format:'local-first-test-ledger',version:3,owner:'local-test-owner',...emptyData(2),incomes:[{id:'i_legacy',received_on:'2024-01-01',name:'合成收入',cents:'29',voided:0,revision:1}]};
   let tx=old.transaction([...V2_SECTIONS,'meta'],'readwrite');addState(tx,legacy);await done(tx);old.close();
-  db=await ledger.openDatabase(name);check(db.version===5,'Schema not upgraded');
+  db=await ledger.openDatabase(name);check(db.version===6,'Schema not upgraded');
   check(text(await ledger.exportPortableBackup(db))===text(writeBackup({format:'life-ledger-backup',version:2,data:Object.fromEntries(V2_SECTIONS.map(key=>[key,legacy[key]]))})),'V3 migration changed original bytes');
-  db.close();lines.push('v3 to v5 empty annual-store migration preserves complete JSON v2 bytes');
+  db.close();lines.push('v3 to v6 empty annual-store migration preserves complete JSON v2 bytes');
   const badOpen=indexedDB.open(name+'-bad',3);badOpen.onupgradeneeded=()=>{for(const section of [...V2_SECTIONS,'meta'])badOpen.result.createObjectStore(section,{keyPath:'key'});};
   old=await request(badOpen);tx=old.transaction([...V2_SECTIONS,'meta'],'readwrite');addState(tx,legacy);tx.objectStore('meta').put({key:'row_count',value:0});await done(tx);old.close();
   let refused=false;try{(await ledger.openDatabase(name+'-bad')).close();}catch{refused=true;}check(refused,'Corrupt v3 accepted');

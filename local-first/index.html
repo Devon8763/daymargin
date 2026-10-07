@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.17.0</p>
+  <p id="page-version">目前使用頁面版本：0.18.0</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -23,9 +23,16 @@
     <p>如果已有可用的完整備份，可在另一個全新、空白的瀏覽器設定檔，使用同一個固定網址還原；核對資料後再備份。</p>
     <p>沒有可用備份時，請先停止操作並查明原因。目前無法判定資料是否遺失，也無法保證能自動取回。</p>
   </div>
+  <nav id="view-navigation" class="buttons" aria-label="主要功能" hidden>
+    <button type="button" data-view-button="record" aria-controls="view-record" aria-current="page">記帳</button>
+    <button type="button" data-view-button="planning" aria-controls="view-planning" aria-current="false">規劃</button>
+    <button type="button" data-view-button="analysis" aria-controls="view-analysis" aria-current="false">分析</button>
+    <button type="button" data-view-button="settings" aria-controls="view-settings" aria-current="false">設定</button>
+  </nav>
   <section id="welcome" aria-labelledby="welcome-title" hidden>
     <h2 id="welcome-title">建立本機測試帳本</h2>
     <div class="buttons"><button id="start-ledger" type="button">開始記帳</button><button id="choose-restore" type="button">從備份還原</button></div>
+    <p><a href="#privacy-view" data-privacy-link>資料存在哪裡？</a></p>
     <input id="restore-file" type="file" accept=".json,.llbk,application/json,application/octet-stream" hidden>
     <div id="decrypt-panel" hidden>
       <h3>解密備份</h3>
@@ -44,7 +51,11 @@
     </div>
   </section>
   <div id="ledger-page" hidden>
-  <p><a href="#expense-comparison">支出比較</a> · <a id="income-entry" href="#income-planning">收入與每月分配</a> · <a id="annual-entry" href="#annual-management">年度費用</a></p>
+  <div id="view-record" data-view="record" role="region" aria-labelledby="view-record-title"><h2 id="view-record-title" tabindex="-1">記帳</h2></div>
+  <div id="view-planning" data-view="planning" role="region" aria-labelledby="view-planning-title" hidden><h2 id="view-planning-title" tabindex="-1">規劃</h2></div>
+  <div id="view-analysis" data-view="analysis" role="region" aria-labelledby="view-analysis-title" hidden><h2 id="view-analysis-title" tabindex="-1">分析</h2></div>
+  <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 id="view-settings-title" tabindex="-1">設定</h2><p><a href="#privacy-view" data-privacy-link>隱私與資料</a></p></div>
+  <p id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a> · <a id="annual-entry" href="#annual-management">年度費用</a></p>
   <section aria-labelledby="form-title">
     <h2 id="form-title">記錄消費</h2>
     <form id="expense-form">
@@ -68,6 +79,15 @@
             <label class="usage-checkbox"><input name="usage_show_daily_cost" type="checkbox">顯示每日平均成本（約數，元／天）</label>
           </div>
           <button id="usage-stop" type="button" hidden>停止追蹤／不再提醒（儲存後生效）</button>
+        </details>
+        <details id="expense-tags">
+          <summary>加入標籤（選填）</summary>
+          <p>一次加入一個名稱；前後空白與開頭 #／＃ 會忽略，大小寫及不同文字仍區分。新標籤只在消費成功儲存時建立，不影響分類或金額。</p>
+          <label>標籤名稱<input id="tag-input" type="text" list="tag-suggestions" autocomplete="off"></label>
+          <datalist id="tag-suggestions"></datalist>
+          <button id="tag-draft-add" type="button">加入這筆消費（儲存後生效）</button>
+          <div id="tag-selected" class="buttons" aria-label="這筆消費的標籤"></div>
+          <div id="tag-options" aria-label="可顯示的既有標籤"></div>
         </details>
         <div class="buttons"><button type="submit" id="save">儲存消費</button><button type="button" id="cancel-edit" hidden>取消更改</button></div>
       </fieldset>
@@ -112,7 +132,7 @@
   </section>
   <section aria-label="本機帳本設定">
     <details id="ledger-settings">
-      <summary>本月預算、分類、付款方式與定期支出設定</summary>
+      <summary>本月預算與定期支出設定</summary>
       <details id="fixed-settings">
         <summary>固定支出／訂閱／分期</summary>
         <p>每月扣款；訂閱持續到停用，分期到總期數為止。更改從下月生效；訂閱／分期只可更改金額及分類，名稱、扣款日、類型及總期數不變。開始月份建立後不可更改，短月扣款日取月底。</p>
@@ -213,6 +233,27 @@
     <p id="comparison-error" role="alert"></p>
     <div id="comparison-results" aria-live="polite"></div>
   </section>
+  <section id="tag-analysis" aria-labelledby="tag-analysis-title">
+    <h2 id="tag-analysis-title">單一標籤消費</h2>
+    <p>只查看一個標籤；同一筆消費可出現在多個標籤，請勿把不同標籤總額相加。只統計截至台灣今天已入帳、有效的生活消費。</p>
+    <form id="tag-query" novalidate>
+      <div class="form-grid">
+        <label>查看標籤<select name="tag_id" required></select></label>
+        <label>標籤統計開始日期（留空為全部時間）<input name="start" type="date"></label>
+        <label>標籤統計結束日期（留空截至今天）<input name="end" type="date"></label>
+      </div><button type="submit">查看標籤消費</button>
+    </form>
+    <p id="tag-query-error" role="alert"></p><p id="tag-summary" role="status"></p>
+    <ul id="tag-results"></ul><button id="tag-more" type="button" hidden>顯示更多標籤帳目</button>
+  </section>
+  <section id="tag-settings" aria-labelledby="tag-settings-title">
+    <h2 id="tag-settings-title">消費標籤管理</h2>
+    <p>不再顯示只隱藏選單及建議，舊關聯與統計保留；移除須確認，會從所有帳目取消此標籤，但不刪帳目。</p>
+    <fieldset id="tag-fields">
+      <form id="tag-add" novalidate><label>新增標籤名稱<input name="name" type="text" autocomplete="off"></label><button type="submit">新增標籤</button></form>
+      <ul id="tag-list"></ul>
+    </fieldset><p id="tag-settings-error" role="alert"></p>
+  </section>
   <section aria-label="收入與每月分配">
     <details id="income-planning">
       <summary>收入與每月分配</summary>
@@ -269,7 +310,7 @@
         </form>
         <ul id="annual-rules"></ul>
         <h3>年度期數處理狀態</h3>
-        <p>「記錄消費」帶入上方既有記帳表單；取消填寫不會略過期數。「略過今年」只影響當次。已記錄的消費即使刪除，也不會重建。</p>
+        <p>「記錄消費」帶入記帳區的既有表單；取消填寫不會略過期數。「略過今年」只影響當次。已記錄的消費即使刪除，也不會重建。</p>
         <ul id="annual-periods"></ul>
         <button id="annual-more" type="button" hidden>顯示更多年度期數</button>
       </fieldset>
@@ -282,6 +323,7 @@
     <button id="request-persistence" type="button" disabled>申請持久保存</button>
     <p>本機帳本保存在此瀏覽器來源；獲准持久保存仍可能遺失，請手動加密備份並自行確認檔案存在。</p>
     <button id="download-backup" type="button">下載完整備份</button>
+    <p><a href="#privacy-view" data-privacy-link>隱私與資料：帳本及備份存在哪裡？</a></p>
     <p>請在重要操作後手動備份。發出下載要求不代表檔案已保存，請確認檔案存在，並妥善保管備份與密碼。</p>
     <details id="csv-export">
       <summary>CSV 支出匯出</summary>
@@ -303,7 +345,7 @@
     <div id="export-panel" hidden>
       <h3>完整備份方式</h3>
       <p>備份密碼不會加密瀏覽器帳本；本頁不保存密碼或金鑰，忘記密碼無法取回。Python Web 尚未被取代。</p>
-      <p>含收入／分配使用 JSON v2，含年度費用／期數使用 JSON v3；舊 Python／舊版 local-first 不支援，不可刪去新資料後當作完整帳本搬移。加密封裝仍為 v1。</p>
+      <p>含收入／分配使用 JSON v2，含年度費用／期數使用 JSON v3，含使用期間使用 JSON v4，含標籤使用 JSON v5；舊 Python／舊版 local-first 不支援，不可刪去新資料後當作完整帳本搬移。加密封裝仍為 v1。</p>
       <form id="export-form" novalidate autocomplete="off">
         <fieldset id="export-inputs">
           <label>備份方式<select id="export-mode"><option value="encrypted" selected>加密備份（建議）</option><option value="plain">不加密備份</option></select></label>
@@ -323,6 +365,16 @@
     </div>
   </section>
   </div>
+  <section id="privacy-view" aria-labelledby="privacy-title" hidden>
+    <h2 id="privacy-title" tabindex="-1">隱私與資料</h2>
+    <button id="privacy-back" type="button">返回設定</button>
+    <p>帳本存在這個瀏覽器設定檔、這個網址的本機儲存空間（IndexedDB）。即使是同一台電腦，換瀏覽器設定檔或網址／連接埠，也可能看不到原帳本；這不代表原資料已被刪除。</p>
+    <p>瀏覽器內的帳本本身未加密。能存取這個瀏覽器設定檔的人或程式，可能讀取其中內容；本頁不能防禦本機惡意程式或瀏覽器擴充套件。</p>
+    <p>加密完整備份只保護下載的備份檔，不會加密瀏覽器內帳本。請自行確認檔案已下載並保管密碼；發出下載要求不代表檔案已保存。遺失備份密碼，便無法解密，程式沒有密碼取回功能。</p>
+    <p>清除網站資料、移除瀏覽器設定檔或換裝置，可能無法再讀取原帳本。已有可用完整備份時，可在另一個全新空白設定檔、相同固定網址還原並核對。原帳本開啟失敗時，請先保留原設定檔，不要清除網站資料或覆蓋原帳本。</p>
+    <p>目前版本在瀏覽器內處理記帳與統計，本機服務提供頁面與程式資源。載入及檢查更新時，頁面會向本機服務要求靜態檔案；完整下載後才具備離線能力。目前沒有帳務上傳或雲端同步入口，這不等於對整台電腦、瀏覽器或其他軟體作出絕對不連線、不傳送或不記錄的保證。</p>
+    <p>這是本機版本的資料說明，不是對外服務的正式隱私政策或安全認證。僅供合成資料測試，請勿輸入真實帳目；Python Web 尚未被取代。</p>
+  </section>
 </main>
 <dialog id="fixed-stop-dialog" aria-labelledby="fixed-stop-title">
   <h2 id="fixed-stop-title">確認停用固定支出</h2>
@@ -358,6 +410,12 @@
 <dialog id="annual-dialog" aria-labelledby="annual-dialog-title">
   <h2 id="annual-dialog-title"></h2><p id="annual-dialog-summary"></p><p id="annual-dialog-error" role="alert"></p>
   <div class="buttons"><button id="confirm-annual" type="button">確認</button><button id="cancel-annual" type="button">取消</button></div>
+</dialog>
+<dialog id="tag-remove-dialog" aria-labelledby="tag-remove-title">
+  <h2 id="tag-remove-title">確認移除標籤</h2><p id="tag-remove-summary"></p>
+  <p>會取消所有帳目的此標籤關聯（含已作廢）；消費、金額、分類與歷史保留。這與「不再顯示」不同。</p>
+  <p id="tag-remove-error" role="alert"></p>
+  <div class="buttons"><button id="confirm-tag-remove" type="button">確認移除標籤</button><button id="cancel-tag-remove" type="button">取消</button></div>
 </dialog>
 </body>
 </html>
