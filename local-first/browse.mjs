@@ -61,6 +61,25 @@ export function searchExpenses(state, query, today) {
     (!keyword || literalMatch(row.note, keyword))));
 }
 
+function searchCategories(state,today) {
+  const options=new Map(categoryOptions(state).map(row=>[row.name,row]));
+  for(const row of activeExpenses(state,today))if(!options.has(row.category))options.set(row.category,{name:row.category,active:0,historical:true});
+  return [...options.values()];
+}
+export function siteSearch(state,query,today,functions=[]) {
+  const expenses=searchExpenses(state,query,today),keyword=query.keyword.trim();
+  return {expenses,
+    functions:keyword ? functions.filter(row=>literalMatch(row.name,keyword)) : [],
+    categories:keyword ? searchCategories(state,today).filter(row=>literalMatch(row.name,keyword)) : [],
+    tags:keyword ? (state.tags || []).filter(row=>literalMatch(row.name,keyword)) : []};
+}
+export function categoryReport(state,query,today) {
+  const rows=searchExpenses(state,{keyword:'',start:query.start || '0001-01-01',end:query.end},today);
+  if(!searchCategories(state,today).some(row=>row.name===query.category))throw new ValidationError('分類已變更，請重新搜尋。');
+  const related=rows.filter(row=>row.category===query.category);
+  return {rows:related,total:related.reduce((sum,row)=>sum+cents(row.cents),0n)};
+}
+
 export function calendarMonth(state, month, today) {
   isoDate(today);
   if (typeof month !== 'string' || !/^\d{4}-\d{2}$/.test(month)) throw new ValidationError('月份格式錯誤。');
