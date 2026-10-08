@@ -1,8 +1,8 @@
-import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, voidExpense, updateCategory, updatePayment, updateBudget, updateSchedule, processSchedule, updateIncome, updateAllocation, excludeSuggestion, updateShortcut, shortcutDraft, updateTag, taiwanToday, LedgerError } from './ledger.mjs';
+import { openDatabase, readLedgerIfPresent, readLedger, initializeLedger, restorePortableBackup, exportPortableBackup, addExpense, editExpense, editExpenseBatch, voidExpense, updateCategory, updatePayment, updateBudget, updateSchedule, processSchedule, updateIncome, updateAllocation, excludeSuggestion, updateShortcut, shortcutDraft, updateTag, taiwanToday, LedgerError } from './ledger.mjs';
 import { readBackup, validateStorageLimits, MAX_BYTES, integerValue, storedInteger } from './backup.mjs';
 import {encryptBackup,decryptBackup,isEncryptedBackup,inspectEncryptedBackup,confirmBackupPassword,MAX_ENCRYPTED_BYTES,EncryptedBackupError} from './backup-crypto.mjs';
 import { categoryOptions, categoryName, cents, orderedShortcuts, tagName, tagSuggestions, ValidationError } from './rules.mjs';
-import { activeExpenses, validateSearch, siteSearch, categoryReport, calendarMonth, monthBudget, tagReport, validateTagQuery } from './browse.mjs';
+import { activeExpenses, validateSearch, validateBrowse, browseSite, siteSearch, categoryReport, calendarMonth, monthBudget, tagReport, validateTagQuery } from './browse.mjs';
 import { validateCsvRange, expenseCsv } from './csv.mjs';
 import {comparisonDefaults,comparisonCategories,validateComparison,compareExpenses,comparisonDay,canPlotComparison} from './comparison.mjs';
 import {incomeMonth, recurringSuggestions, defaultAllocation, allocationMonth} from './income.mjs';
@@ -53,6 +53,7 @@ function showView(view,focus=true) {
   for(const button of viewNavigation.querySelectorAll('button'))button.setAttribute('aria-current',button.dataset.viewButton===view?'page':'false');
   if(focus)document.querySelector('#view-'+view+'-title').focus();
   if(view==='analysis')for(const chart of comparisonCharts)chart.resize();
+  renderBatchSelection();
 }
 for(const button of viewNavigation.querySelectorAll('button'))button.onclick=()=>showView(button.dataset.viewButton);
 for(const link of document.querySelectorAll('a[href^="#"]'))link.addEventListener('click',event=>{
@@ -446,7 +447,7 @@ allocationForm.onsubmit=event=>{
 };
 const comparisonForm=document.querySelector('#comparison-form');
 for(const [key,value] of Object.entries(comparisonDefaults(taiwanToday())))comparisonForm.elements[key].value=value;
-let comparisonCharts=[];
+let comparisonCharts=[],comparisonQuery=null,comparisonRequest=0;
 function comparisonChoices() {
   const selected=comparisonForm.elements.category.value;
   const all=node('option','全部分類');all.value='';
@@ -467,7 +468,7 @@ function clearComparison() {
   for(const chart of comparisonCharts)chart.destroy();comparisonCharts=[];
   document.querySelector('#comparison-results').replaceChildren();
 }
-async function showComparison(result) {
+async function showComparison(result,request=comparisonRequest) {
   const target=document.querySelector('#comparison-results');
   for(const [key,label] of [['a','期間 A'],['b','期間 B']]){
     const period=result[key];target.append(node('h3',label),node('p',`所選範圍：${period.start} ～ ${period.end}`));
@@ -496,6 +497,7 @@ async function showComparison(result) {
   const pieCanvases=['a','b'].map(key=>{const panel=node('div');pies.append(panel);return result[key].total_cents>0n?canvas(`期間 ${key.toUpperCase()} 分類占比`,panel):(panel.append(node('h3',`期間 ${key.toUpperCase()} 分類占比`),node('p',result[key].started?'沒有正額支出可計算占比。':'期間尚未開始')),null);});
   try{
     await import('./vendor/chartjs-4.5.1/chart.umd.min.js');
+    if(request!==comparisonRequest)return;
     if(typeof globalThis.Chart!=='function')throw new Error('Chart unavailable');
     const keys=['a','b'],colors=['#26745b','#946437'];
     const options={responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true}}};
@@ -515,15 +517,17 @@ async function showComparison(result) {
   }
 }
 comparisonForm.addEventListener('submit',async event=>{
-  event.preventDefault();const button=comparisonForm.querySelector('button');if(button.disabled)return;
+  event.preventDefault();const button=comparisonForm.querySelector('button');if(button.disabled||busy||writeBlocked)return;
+  const request=++comparisonRequest;comparisonQuery=null;
   const query=Object.fromEntries(new FormData(comparisonForm)),today=taiwanToday(),message=document.querySelector('#comparison-error');
   message.textContent='';clearComparison();button.disabled=true;
   try{
     if(['a_start','a_end','b_start','b_end'].some(key=>!comparisonForm.elements[key].validity.valid))throw new ValidationError('請輸入有效日期。');
     validateComparison(query,today);
     const snapshot=await readLedger(db); // One readonly transaction; never sync recurring rules.
-    await showComparison(compareExpenses(snapshot,query,today));
-  }catch(failure){clearComparison();message.textContent=failure instanceof ValidationError?failure.message:'無法比較支出，請重新載入後再試。';}
+    if(request!==comparisonRequest)return;comparisonQuery=query;
+    await showComparison(compareExpenses(snapshot,query,today),request);
+  }catch(failure){if(request!==comparisonRequest)return;comparisonQuery=null;clearComparison();message.textContent=failure instanceof ValidationError?failure.message:'無法比較支出，請重新載入後再試。';}
   finally{button.disabled=false;}
 });
 function choices() {
@@ -625,12 +629,13 @@ function returnToExpense(origin) {
   const container = document.getElementById(origin.listId);
   showView(container.closest('[data-view]').dataset.view,false);
   const row = origin.ruleId ? [...container.querySelectorAll('[data-rule-id]')].find(row=>row.dataset.ruleId===origin.ruleId&&row.dataset.index===String(origin.index)) : [...container.children].find(row => row.dataset.expenseId === origin.id);
-  if(origin.ruleId&&row?.closest('details'))row.closest('details').open=true;
-  const target = row?.querySelector('button') || container;
+  if(row?.closest('details'))row.closest('details').open=true;
+  const target = row?.querySelector('[data-batch-id]') || row?.querySelector('button') || container;
   if (target === container) target.tabIndex = -1;
   target.focus();
 }
 function render() {
+  renderBatchChoices();
   renderTags();
   renderShortcuts();
   comparisonChoices();
@@ -646,13 +651,18 @@ function render() {
   document.querySelector('#empty').hidden = entries.length !== 0;
   list.append(...entries.map(entry=>expenseRow(entry,state)));
 }
-function expenseRow(entry,snapshot=state) {
+function expenseRow(entry,snapshot=state,selectable=false) {
     const row = node('li', undefined, 'expense');
     row.dataset.expenseId = entry.id;
     for (const [label, value] of [['日期', entry.spent_on], ['項目', entry.note], ['金額', amountText(entry.cents) + ' 元'], ['分類', entry.category], ['付款方式', entry.payment_source_name]]) {
       const cell = node('div'); cell.append(node('small', label), node('span', value)); row.append(cell);
     }
     const buttons = node('div', undefined, 'buttons');
+    if(selectable) {
+      row.classList.add('expense-selectable');const label=node('label',undefined,'batch-choice'),input=node('input');input.type='checkbox';input.dataset.batchId=entry.id;
+      input.setAttribute('aria-label','選取消費：'+entry.note+'（'+entry.spent_on+'）');input.checked=batchSelected.has(entry.id);input.disabled=busy||writeBlocked;
+      input.onchange=()=>{if(busy||writeBlocked||!input.isConnected||!batchListActive()||row.parentElement.id!==batchListId())return;if(input.checked)batchSelected.set(entry.id,{id:entry.id,revision:entry.revision});else batchSelected.delete(entry.id);renderBatchSelection();};label.prepend(input);row.prepend(label);
+    }
     const tagIds=new Set((snapshot.expense_tags || []).filter(item=>item.expense_id===entry.id).map(item=>item.tag_id));
     const labels=(snapshot.tags || []).filter(item=>tagIds.has(item.id)).map(item=>'#'+item.name+(item.hidden?'（不再顯示）':''));if(labels.length)row.append(node('p',labels.join(' · '),'expense-tag-labels'));
     const usage=state.usage_periods.find(item=>item.expense_id===entry.id);
@@ -671,7 +681,7 @@ function expenseRow(entry,snapshot=state) {
       document.querySelector('#delete-summary').textContent = `${entry.spent_on}｜${entry.note}｜${amountText(entry.cents)} 元｜${entry.category}｜${entry.payment_source_name}`;
       dialog.showModal();
     };
-    buttons.append(edit);
+    if(!selectable)buttons.append(edit);
     if(entry.source==='manual' && ![...(state.annual_periods || []),...(state.scheduled_periods || [])].some(item=>item.expense_id===entry.id)) {
       const shortcut=node('button','建立捷徑');shortcut.type='button';shortcut.dataset.operation='shortcut';
       shortcut.onclick=()=>shortcutRead(snapshot=>startShortcut(snapshot,shortcutDraft(snapshot,entry.id,entry.revision,taiwanToday()),null,{id:entry.id,revision:entry.revision}));
@@ -681,11 +691,80 @@ function expenseRow(entry,snapshot=state) {
     row.append(buttons); return row;
 }
 function appendBatch(rows, listElement, more, shown,snapshot=state) {
-  listElement.append(...rows.slice(shown, shown + 50).map(entry=>expenseRow(entry,snapshot)));
+  listElement.append(...rows.slice(shown, shown + 50).map(entry=>expenseRow(entry,snapshot,['search-results','search-selection-results'].includes(listElement.id))));
   more.hidden = shown + 50 >= rows.length;
   return Math.min(shown + 50, rows.length);
 }
 const searchForm = document.querySelector('#search-form');
+const batchForm=document.querySelector('#batch-form'),batchDialog=document.querySelector('#batch-dialog'),batchEditor=document.querySelector('#batch-editor'),batchInput=document.querySelector('#batch-tag-input');
+const batchSelected=new Map();let batchTags=[],batchRemove=[],batchConfirmation=null;
+const batchRows=()=>searchSelection?selectionRows:searchRows;
+const batchListId=()=>searchSelection?'search-selection-results':'search-results';
+const batchListName=()=>searchSelection?(searchSelection.kind==='category'?'分類：':'標籤：')+searchSelection.name:'帳目';
+const batchListActive=()=>!document.querySelector('#view-search').hidden&&(searchSelection?!document.querySelector('#search-selection').hidden:!document.querySelector('#search-groups').hidden&&document.querySelector('#search-accounts').open);
+function renderBatchSelection() {
+  const controls=document.querySelector('#batch-controls'),activeList=document.getElementById(batchListId());if(controls.nextElementSibling!==activeList)activeList.before(controls);
+  document.querySelector('#batch-controls').hidden=!batchListActive();document.querySelector('#batch-title').textContent='目前清單：'+batchListName();
+  document.querySelector('#batch-count').textContent='已選取 '+batchSelected.size+' 筆；更換條件或清單會清除選取。';
+  for(const input of document.querySelectorAll('#search-results [data-batch-id],#search-selection-results [data-batch-id]')){input.checked=batchSelected.has(input.dataset.batchId);input.disabled=busy||writeBlocked;}
+  document.querySelector('#batch-select-all').textContent='全選「'+batchListName()+'」全部符合帳目';
+  document.querySelector('#batch-select-all').disabled=busy||writeBlocked||!batchRows().length;
+  document.querySelector('#batch-clear').disabled=busy||writeBlocked||!batchSelected.size;
+  document.querySelector('#batch-edit').disabled=busy||writeBlocked||batchSelected.size!==1;
+  document.querySelector('#batch-open').disabled=busy||writeBlocked||batchSelected.size<2;
+  document.querySelector('#batch-fields').disabled=busy||writeBlocked;
+}
+function clearBatchSelection(){batchSelected.clear();if(!busy){if(batchDialog.open)batchDialog.close();if(batchEditor.open)batchEditor.close();}renderBatchSelection();}
+document.querySelector('#search-accounts').ontoggle=()=>{if(!document.querySelector('#search-accounts').open&&!searchSelection)clearBatchSelection();renderBatchSelection();};
+document.querySelector('#batch-edit').onclick=()=>{
+  if(busy||writeBlocked||batchSelected.size!==1||!batchListActive())return;
+  const target=[...batchSelected.values()][0],entry=batchRows().find(row=>row.id===target.id);if(entry)beginExpenseEdit({...entry,revision:target.revision},{listId:batchListId(),id:entry.id},searchSnapshot);
+};
+document.querySelector('#batch-open').onclick=()=>{if(busy||writeBlocked||batchSelected.size<2||!batchListActive())return;renderBatchChoices();document.querySelector('#batch-editor-title').textContent='批次更改 '+batchSelected.size+' 筆消費';document.querySelector('#batch-error').textContent='';batchEditor.showModal();};
+document.querySelector('#batch-editor-cancel').onclick=()=>{if(!busy)batchEditor.close();};batchEditor.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+function renderBatchChoices() {
+  for(const [key,rows,label]of [['category',categoryOptions(state).filter(row=>row.active===1).map(row=>({value:row.name,name:row.name})),'分類不更改'],['payment_source_id',state.payment_sources.filter(row=>row.active===1).map(row=>({value:row.id,name:row.name})),'付款方式不更改（保留各筆快照）']]) {
+    const select=batchForm.elements[key],value=select.value,options=[node('option',label)];options[0].value='';
+    for(const row of rows){const option=node('option',row.name);option.value=row.value;options.push(option);}
+    if(value&&!rows.some(row=>row.value===value)){const option=node('option','已失效，請另選：'+value);option.value=value;options.push(option);}select.replaceChildren(...options);select.value=value;
+  }
+  renderBatchTags();renderBatchSelection();
+}
+function renderBatchTags() {
+  batchTags=batchTags.map(item=>{const row=item.id===null&&state.tags.find(row=>row.name===item.name);return row?{id:row.id,name:row.name}:item;});
+  document.querySelector('#batch-tag-suggestions').replaceChildren(...tagSuggestions(state,batchInput.value).map(row=>{const option=node('option');option.value='#'+row.name;return option;}));
+  document.querySelector('#batch-tag-selected').replaceChildren(...batchTags.map(item=>{const button=node('button','#'+item.name+' ×');button.type='button';button.setAttribute('aria-label','取消批次新增標籤：'+item.name);button.onclick=()=>{if(!busy){batchTags=batchTags.filter(row=>row!==item);renderBatchTags();batchInput.focus();}};return button;}));
+  document.querySelector('#batch-tag-options').replaceChildren(...tagSuggestions(state).map(row=>{const label=node('label','#'+row.name,'batch-choice'),input=node('input');input.type='checkbox';input.value=row.id;input.checked=batchTags.some(item=>item.id===row.id);input.onchange=()=>{if(busy)return;batchTags=batchTags.filter(item=>item.id!==row.id);if(input.checked)batchTags.push({id:row.id,name:row.name});renderBatchTags();document.querySelector('#batch-tag-options input[value="'+row.id+'"]').focus();};label.prepend(input);return label;}));
+  document.querySelector('#batch-remove-options').replaceChildren(...state.tags.map(row=>{const label=node('label','#'+row.name+(row.hidden?'（不再顯示）':''),'batch-choice'),input=node('input');input.type='checkbox';input.value=row.id;input.checked=batchRemove.includes(row.id);input.onchange=()=>{if(busy)return;batchRemove=batchRemove.filter(id=>id!==row.id);if(input.checked)batchRemove.push(row.id);};label.prepend(input);return label;}));
+}
+function addBatchTag(){if(!batchInput.value.trim())return;const name=tagName(batchInput.value),row=state.tags.find(row=>row.name===name);if(!batchTags.some(item=>item.name===name))batchTags.push({id:row?.id??null,name});batchInput.value='';renderBatchTags();}
+document.querySelector('#batch-tag-add').onclick=()=>{if(busy||writeBlocked)return;try{addBatchTag();document.querySelector('#batch-error').textContent='';}catch(failure){document.querySelector('#batch-error').textContent=failure instanceof ValidationError?failure.message:'請輸入有效標籤。';}};
+batchInput.oninput=()=>renderBatchTags();batchInput.onkeydown=event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();document.querySelector('#batch-tag-add').click();}};
+document.querySelector('#batch-select-all').onclick=()=>{if(busy||writeBlocked||!batchListActive())return;for(const row of batchRows())if(!batchSelected.has(row.id))batchSelected.set(row.id,{id:row.id,revision:row.revision});renderBatchSelection();};
+document.querySelector('#batch-clear').onclick=()=>{if(!busy&&!writeBlocked)clearBatchSelection();};
+batchForm.onsubmit=event=>{
+  event.preventDefault();if(busy||writeBlocked)return;
+  const message=document.querySelector('#batch-error');message.textContent='';
+  try {
+    if(batchSelected.size<2||!lastQuery||!batchEditor.open)throw new ValidationError('請選取至少兩筆消費後開啟批次更改。');addBatchTag();
+    const changes={},labels=[];
+    for(const [key,label]of [['category','分類'],['payment_source_id','付款方式']])if(batchForm.elements[key].value){changes[key]=batchForm.elements[key].value;labels.push(label+' → '+batchForm.elements[key].selectedOptions[0].textContent);}
+    if(batchTags.length){changes.tags={ids:batchTags.filter(row=>row.id!==null).map(row=>row.id),names:batchTags.filter(row=>row.id===null).map(row=>row.name)};labels.push('新增標籤：'+batchTags.map(row=>'#'+row.name).join('、')+'（保留原標籤）');}
+    if(batchRemove.length){if(batchTags.some(row=>batchRemove.includes(row.id)))throw new ValidationError('同一標籤不能同時新增與移除。');changes.remove_tag_ids=[...batchRemove];labels.push('移除標籤：'+batchRemove.map(id=>'#'+(state.tags.find(row=>row.id===id)?.name||'已失效的標籤')).join('、')+'（只解除選中帳目關聯）');}
+    if(!labels.length)throw new ValidationError('請至少選擇一項批次更改。');
+    batchConfirmation={targets:structuredClone([...batchSelected.values()]),changes};
+    document.querySelector('#batch-summary').textContent='將套用至 '+batchSelected.size+' 筆消費；來源清單：'+batchListName()+'。關鍵字「'+lastQuery.keyword+'」；日期 '+(lastQuery.start||'全部時間')+' ～ '+(lastQuery.end||taiwanToday())+'。已具備的新增標籤或沒有的移除標籤會略過。';
+    document.querySelector('#batch-changes').replaceChildren(...labels.map(label=>node('li',label)));document.querySelector('#batch-confirm-error').textContent='';batchDialog.showModal();
+  }catch(failure){message.textContent=failure instanceof ValidationError?failure.message:'無法準備批次更改，請重新搜尋。';}
+};
+document.querySelector('#batch-cancel').onclick=()=>{if(!busy)batchDialog.close();};batchDialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});batchDialog.addEventListener('close',()=>{if(!batchDialog.open)batchConfirmation=null;});
+document.querySelector('#batch-confirm').onclick=async()=>{
+  if(busy||writeBlocked||!batchConfirmation)return;const confirmed=structuredClone(batchConfirmation),message=document.querySelector('#batch-confirm-error');
+  let changedCount=null;
+  await saving(()=>editExpenseBatch(db,confirmed.targets,confirmed.changes),()=>{changedCount=confirmed.targets.filter(target=>integerValue(state.expenses.find(row=>row.id===target.id).revision)!==integerValue(target.revision)).length;batchDialog.close();batchEditor.close();batchSelected.clear();batchTags=[];batchRemove=[];batchInput.value='';batchForm.reset();document.querySelector('#batch-edit').focus();},message);
+  if(changedCount!==null&&!writeBlocked)status.textContent='已更改 '+changedCount+' 筆消費；其餘已有設定，未重複更改。';
+  if(message.textContent&&!writeBlocked)message.textContent+=' 選取與欄位已保留，請重新載入後再選取確認。';
+};
 const homeSearch=document.querySelector('#home-search-keyword');
 function openSearch(trigger) {
   if(busy)return;
@@ -722,6 +801,7 @@ function showSearchNames(kind,rows,label,action) {
   }
 }
 function showSearchSelection(snapshot,query,today,choice,focus=true,trigger=null) {
+  if(!searchSelection||searchSelection.kind!==choice.kind||searchSelection.key!==choice.key)clearBatchSelection();searchSnapshot=snapshot;
   searchSelection=choice;selectionTrigger=trigger || selectionTrigger;
   document.querySelector('#search-groups').hidden=true;document.querySelector('#search-selection').hidden=false;
   document.querySelector('#search-selection-title').textContent=(choice.kind==='category'?'分類：':'標籤：')+choice.name;
@@ -737,17 +817,20 @@ function showSearchSelection(snapshot,query,today,choice,focus=true,trigger=null
   document.querySelector('#search-selection-results').replaceChildren();
   selectionShown=appendBatch(selectionRows,document.querySelector('#search-selection-results'),document.querySelector('#search-selection-more'),0,snapshot);
   if(focus)document.querySelector('#search-selection-title').focus();
+  renderBatchSelection();
 }
 document.querySelector('#search-selection-back').onclick=()=>{
+  clearBatchSelection();
   searchSelection=null;document.querySelector('#search-selection').hidden=true;document.querySelector('#search-groups').hidden=false;
   (selectionTrigger?.isConnected?selectionTrigger:searchForm.elements.keyword).focus();
+  renderBatchSelection();
 };
 document.querySelector('#search-selection-more').onclick=()=>{
   selectionShown=appendBatch(selectionRows,document.querySelector('#search-selection-results'),document.querySelector('#search-selection-more'),selectionShown,searchSnapshot);
 };
 function showSearch(snapshot, query, today) {
   searchSnapshot=snapshot;
-  const groups=siteSearch(snapshot,query,today,searchFunctions());
+  const groups=query.keyword.trim()?siteSearch(snapshot,query,today,searchFunctions()):browseSite(snapshot,query,today,searchFunctions());
   searchRows = groups.expenses;
   searchShown = 0;
   homeSearch.value=query.keyword;
@@ -761,24 +844,24 @@ function showSearch(snapshot, query, today) {
   document.querySelector('#search-count').textContent = searchRows.length
     ? `符合 ${searchRows.length} 筆消費。` : '沒有符合條件的消費。';
   searchShown = appendBatch(searchRows, document.querySelector('#search-results'), document.querySelector('#search-more'), searchShown,searchSnapshot);
+  renderBatchSelection();
   if(searchSelection)showSearchSelection(snapshot,query,today,searchSelection,false);
 }
 async function runSearch(automatic=false) {
   const request=++searchRequest;
   if(busy||!state)return;
+  clearBatchSelection();
   const query = Object.fromEntries(new FormData(searchForm));
   const today = taiwanToday();
   const message = document.querySelector('#search-error');
   message.textContent = '';
-  if(automatic&&!query.keyword.trim()&&!query.start&&!query.end) {
-    lastQuery=null;clearSearchOutput();return;
-  }
   try {
     if (!searchForm.elements.start.validity.valid || !searchForm.elements.end.validity.valid) {
       throw new ValidationError('請輸入有效日期。');
     }
-    validateSearch(query, today); // Invalid conditions never open a database read.
+    (query.keyword.trim()?validateSearch:validateBrowse)(query,today); // Invalid dates never open a database read.
     document.querySelector('#search-groups').hidden=true;document.querySelector('#search-selection').hidden=true;
+    renderBatchSelection();
     document.querySelector('#search-progress').textContent='正在搜尋……';
     const snapshot = await readLedger(db);
     if(request!==searchRequest)return;
@@ -794,14 +877,16 @@ async function runSearch(automatic=false) {
   }
 }
 function clearSearchOutput() {
+  clearBatchSelection();
   searchSelection=null;searchRows=[];selectionRows=[];
   document.querySelector('#search-groups').hidden=true;document.querySelector('#search-selection').hidden=true;
   for(const id of ['search-results','search-functions','search-categories','search-tags','search-selection-results'])document.getElementById(id).replaceChildren();
   for(const id of ['search-count','site-search-counts','search-progress'])document.getElementById(id).textContent='';
   document.querySelector('#search-more').hidden=true;
+  renderBatchSelection();
 }
 searchForm.addEventListener('submit',event=>{event.preventDefault();searchSelection=null;runSearch();});
-searchForm.addEventListener('input',event=>{if(!event.isComposing){searchSelection=null;homeSearch.value=searchForm.elements.keyword.value;runSearch(true);}});
+searchForm.addEventListener('input',event=>{clearBatchSelection();if(!event.isComposing){searchSelection=null;homeSearch.value=searchForm.elements.keyword.value;runSearch(true);}});
 searchForm.elements.keyword.addEventListener('compositionend',()=>{searchSelection=null;homeSearch.value=searchForm.elements.keyword.value;runSearch(true);});
 document.querySelector('#search-more').onclick = () => {
   searchShown = appendBatch(searchRows, document.querySelector('#search-results'), document.querySelector('#search-more'), searchShown,searchSnapshot);
@@ -876,11 +961,13 @@ async function saving(operation, success, message = error) {
     ++searchRequest;
     ++incomeViewRequest;
     ++tagQueryRequest;
+    ++comparisonRequest;
   let committed = false;
   const budgetControl = document.activeElement.closest('#budget-fields') ? document.activeElement : null;
   const fixedControl = document.activeElement.closest('#fixed-fields') ? document.activeElement : null;
   const budgetRow = budgetControl?.closest('#budget-setting-list > li');
   busy = true; fields.disabled = true; error.textContent = '';
+  renderBatchSelection();document.querySelector('#batch-confirm').disabled=true;document.querySelector('#batch-cancel').disabled=true;
   document.querySelector('#shortcut-fields').disabled=true;
   document.querySelector('#tag-fields').disabled=true;
   incomeBusy(true);
@@ -897,20 +984,22 @@ async function saving(operation, success, message = error) {
   try {
     state = await operation(); // Resolved only by transaction complete, never request success.
     committed = true;
-    const origin = success(); render();
+    const origin = success(); clearBatchSelection(); render();
+    if(comparisonQuery){clearComparison();await showComparison(compareExpenses(state,comparisonQuery,taiwanToday()));}
     if (lastQuery) showSearch(state, lastQuery, taiwanToday());
     if (viewedMonth) showCalendar(state, taiwanToday());
     returnToExpense(origin);
     status.textContent = '瀏覽器本機測試帳本；儲存完成。';
   } catch (failure) {
     writeBlocked = committed;
-    if (committed) for (const modal of [dialog, settingsDialog, fixedStopDialog, incomeVoidDialog, annualDialog,tagDialog]) if (modal.open) modal.close();
+    if (committed) for (const modal of [dialog, settingsDialog, fixedStopDialog, incomeVoidDialog, annualDialog,tagDialog,batchDialog,batchEditor]) if (modal.open) modal.close();
     message.textContent = committed ? '資料已儲存，但畫面更新未完成。請重新載入確認，勿重複提交。'
       : failure instanceof LedgerError || failure instanceof ValidationError ? failure.message : '儲存未完成，請確認瀏覽器儲存空間後重試。';
     if (dialog.open) document.querySelector('#delete-error').textContent = error.textContent;
     status.textContent = committed ? message.textContent : '瀏覽器本機測試帳本；此次儲存未完成。';
   } finally {
     busy = false; fields.disabled = writeBlocked;
+    renderBatchSelection();document.querySelector('#batch-confirm').disabled=writeBlocked;document.querySelector('#batch-cancel').disabled=false;
     document.querySelector('#shortcut-fields').disabled=writeBlocked;
     document.querySelector('#tag-fields').disabled=writeBlocked;
     incomeBusy(writeBlocked);

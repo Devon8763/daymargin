@@ -1,4 +1,10 @@
 import { DB_NAME, openDatabase, readLedger, exportPortableBackup, addExpense, editExpense, taiwanToday } from '../local-first/ledger.mjs';
+const editSearch=async(list='search-results')=>{
+  const query=document.querySelector('#search-form');
+  if(document.querySelector('#view-search').hidden){document.querySelector('[data-view-button="record"]').click();document.querySelector('#home-search-keyword').value=query.elements.keyword.value;document.querySelector('#view-record [data-search-open]').click();for(let i=0;i<250;i++){if(!document.querySelector('#search-groups').hidden&&document.querySelector('#search-results [data-batch-id]'))break;await new Promise(resolve=>setTimeout(resolve,20));}}
+  if(list==='search-results')document.querySelector('#search-accounts').open=true;
+  document.querySelector('#batch-clear').click();const input=document.querySelector('#'+list+' [data-batch-id]');if(!input)throw Error('Missing selected consumption');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#batch-edit').click();
+};
 import { readBackup, SECTIONS } from '../local-first/backup.mjs';
 import { addState } from '../local-first/idb.mjs';
 import { monthBudget } from '../local-first/browse.mjs';
@@ -34,10 +40,11 @@ try {
   const form = document.querySelector('#search-form');
   check(form && !document.querySelector('#ledger-page').hidden, 'Search UI unavailable');
   form.elements.keyword.value = '  ';
+  form.elements.start.value = '2025-02-01';
   form.elements.end.value = '2025-01-31';
   form.requestSubmit();
   await new Promise(resolve => setTimeout(resolve, 50));
-  check(document.querySelector('#search-error').textContent.includes('關鍵字或開始日期'), 'Invalid search not reported');
+  check(document.querySelector('#search-error').textContent.includes('開始日期不可晚於結束日期'), 'Invalid date-only browse not reported');
   check(form.elements.end.value === '2025-01-31', 'Invalid search input lost');
   lines.push('invalid input retained');
 
@@ -48,6 +55,7 @@ try {
   check(document.querySelector('#search-error').textContent.includes('日期') &&
     !document.querySelector('#search-count').textContent, 'Native invalid date was queried');
   form.elements.start.setCustomValidity('');
+  form.elements.start.value='';
   lines.push('invalid native date rejected');
 
   form.elements.keyword.value = '原固定';
@@ -55,7 +63,7 @@ try {
   form.requestSubmit();
   await new Promise(resolve => setTimeout(resolve, 100));
   check(document.querySelector('#search-results').textContent.includes('原固定'), 'Fixed expense missing');
-  check(document.querySelectorAll('#search-results button').length === 2, 'Search lacks shared edit/delete controls');
+  check(document.querySelectorAll('#search-results [data-batch-id]').length === 1 && document.querySelectorAll('#search-results button').length === 1, 'Search lacks shared edit/delete controls');
   lines.push('search across restored source');
 
   form.elements.keyword.value = '<img src=x';
@@ -128,7 +136,7 @@ try {
   };
   form.elements.keyword.value='原固定';form.requestSubmit();await new Promise(resolve=>setTimeout(resolve,100));
   document.querySelector('[data-day="2025-01-31"]').click();
-  document.querySelector('#search-results button').click();
+  await editSearch();
   check(expenseForm.elements.spent_on.readOnly && !document.querySelector('#expense-date-note').hidden,'Automatic date not explained or locked');
   expenseForm.elements.amount.value='.37';expenseForm.elements.note.value='原固定<img src=x onerror=alert(1)>';
   await saved(()=>expenseForm.requestSubmit());
@@ -147,14 +155,14 @@ try {
   lines.push('search and calendar reuse edit/confirm; preserve month/date/query; cancel is pure, XSS stays text and all views refresh');
   for(const source of ['訂閱','分期']){
     form.elements.keyword.value=source;form.requestSubmit();await new Promise(resolve=>setTimeout(resolve,100));
-    document.querySelector('#search-results button').click();expenseForm.elements.amount.value='.53';
+    await editSearch();expenseForm.elements.amount.value='.53';
     await saved(()=>expenseForm.requestSubmit());check(!document.querySelector('#error').textContent,'Generated source edit failed');
   }
   form.elements.keyword.value='另一頁合成新增';form.requestSubmit();await new Promise(resolve=>setTimeout(resolve,100));
-  document.querySelector('#search-results button').click();check(!expenseForm.elements.spent_on.readOnly,'Manual date incorrectly locked');
+  await editSearch();check(!expenseForm.elements.spent_on.readOnly,'Manual date incorrectly locked');
   expenseForm.elements.spent_on.value='2025-01-16';await saved(()=>expenseForm.requestSubmit());
   check(document.querySelector('#search-results').textContent.includes('2025-01-16'),'Manual date edit failed');
-  document.querySelector('#search-results button').click();
+  await editSearch();
   const racing=(await readLedger(db)).expenses.find(row=>row.note==='另一頁合成新增');
   await editExpense(db,racing.id,racing.revision,{amount:'.59',note:racing.note,spent_on:racing.spent_on,category:racing.category,payment_source_id:''},taiwanToday());
   expenseForm.elements.amount.value='.61';await saved(()=>expenseForm.requestSubmit());
@@ -163,7 +171,7 @@ try {
   lines.push('subscription/installment and manual-date edits; stale browse snapshot retains draft and rejects overwrite');
   for(const source of ['manual','固定','訂閱','分期']){
     form.elements.keyword.value='本月合成'+source;form.requestSubmit();await new Promise(resolve=>setTimeout(resolve,100));
-    document.querySelector('#search-results button').click();
+    await editSearch();
     check(expenseForm.elements.category.value==='歷史無override' && expenseForm.elements.payment_source_id.value==='','Missing original category or payment retention option');
     expenseForm.elements.amount.value='.37';await saved(()=>expenseForm.requestSubmit());
     let state=await readLedger(db),spent=monthBudget(state,taiwanToday()).spent;

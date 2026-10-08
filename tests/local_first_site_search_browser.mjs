@@ -1,4 +1,10 @@
 import * as ledger from '../local-first/ledger.mjs';
+const editSearch=async(list='search-results')=>{
+  const query=document.querySelector('#search-form');
+  if(document.querySelector('#view-search').hidden){document.querySelector('[data-view-button="record"]').click();document.querySelector('#home-search-keyword').value=query.elements.keyword.value;document.querySelector('#view-record [data-search-open]').click();for(let i=0;i<250;i++){if(!document.querySelector('#search-groups').hidden&&document.querySelector('#search-results [data-batch-id]'))break;await new Promise(resolve=>setTimeout(resolve,20));}}
+  if(list==='search-results')document.querySelector('#search-accounts').open=true;
+  document.querySelector('#batch-clear').click();const input=document.querySelector('#'+list+' [data-batch-id]');if(!input)throw Error('Missing selected consumption');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#batch-edit').click();
+};
 import {readBackup} from '../local-first/backup.mjs';
 import {STORES,addState} from '../local-first/idb.mjs';
 const q=selector=>document.querySelector(selector),check=(value,message)=>{if(!value)throw new Error(message);};
@@ -41,10 +47,10 @@ try {
   [...q('#search-tags').querySelectorAll('button')].find(button=>button.textContent.includes('另一旅行')).click();check(q('#search-selection-summary').textContent.includes('1.01 元'),'Different tags merged');q('#search-selection-back').click();
   [...q('#search-categories').querySelectorAll('button')].find(button=>button.textContent.includes('旅行空')).click();check(q('#search-selection-summary').textContent.includes('0 元')&&!q('#search-selection-empty').hidden,'Empty category is an error');q('#search-selection-back').click();
   lines.push('single disabled category / hidden tag totals, complete related rows and normal empty state');
-  q('#search-results button').click();q('#cancel-edit').click();q('#search-categories button').click();
+  await editSearch();q('#cancel-edit').click();q('#search-categories button').click();
   check(!q('#search-selection').hidden,'Cancel edit disabled current name-result actions');
   check(draft()===draftBefore,'Search edit/cancel lost original expense draft');q('#search-selection-back').click();
-  q('#search-tags button').click();q('#search-selection-results button').click();q('#cancel-edit').click();q('#search-selection-back').click();q('#search-tags button').click();
+  q('#search-tags button').click();await editSearch('search-selection-results');q('#cancel-edit').click();q('#search-selection-back').click();q('#search-tags button').click();
   check(!q('#search-selection').hidden&&draft()===draftBefore,'Related edit/cancel cannot return to working tag results and original draft');q('#search-selection-back').click();
   lines.push('expense and related-result edit/cancel retain original draft and leave name actions usable');
   let reads=0;IDBDatabase.prototype.transaction=function(...args){if(this.name===name)reads++;return transaction.apply(this,args);};
@@ -60,8 +66,8 @@ try {
   q('[data-view-button=planning]').click();lines.push('backup feature is discoverable; navigation only focuses the entry without opening/downloading');
   q('#view-planning [data-search-open]').click();q('#site-search-back').click();q('[data-view-button=record]').click();q('#home-search-keyword').value='';
   let blankReads=0;IDBDatabase.prototype.transaction=function(...args){if(this.name===name)blankReads++;return transaction.apply(this,args);};
-  q('#view-record [data-search-open]').click();check(q('#search-groups').hidden&&q('#search-selection').hidden&&blankReads===0,'Blank home search exposes old groups or reads ledger');IDBDatabase.prototype.transaction=transaction;
-  lines.push('cleared home input opens a genuinely blank shared search with no read');
+  q('#view-record [data-search-open]').click();await wait(()=>!q('#search-groups').hidden);check(q('#search-selection').hidden&&blankReads===1&&q('#search-functions button')&&q('#search-tags button'),'Blank browse must use one readonly snapshot and show current groups');IDBDatabase.prototype.transaction=transaction;
+  lines.push('cleared keyword explicitly browses current groups from one readonly snapshot');
   form.elements.keyword.value='旅行';form.requestSubmit();await wait(()=>q('#search-count').textContent.includes('70'));
   {
     let held=null,first=true;const old=q('#search-categories button'),descriptor=Object.getOwnPropertyDescriptor(IDBTransaction.prototype,'oncomplete');

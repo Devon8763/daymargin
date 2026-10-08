@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.20.0</p>
+  <p id="page-version">目前使用頁面版本：0.21.0</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -208,18 +208,17 @@
     </form>
     <p id="search-error" role="alert"></p>
     <p id="search-progress" role="status" aria-live="polite"></p>
-    <p>輸入關鍵字搜尋帳目、功能、分類或標籤；也可只用開始日期查帳目。日期篩選適用於帳目及分類／標籤相關消費。</p>
+    <p>未輸入關鍵字可展開瀏覽；輸入後顯示符合項目。日期適用於帳目及分類／標籤相關消費。</p>
     <div id="search-groups" hidden>
     <p id="site-search-counts" role="status" aria-live="polite"></p>
-    <div class="site-search-names">
-      <section aria-labelledby="search-functions-heading"><h3 id="search-functions-heading">功能（0）</h3><ul id="search-functions"></ul></section>
-      <section aria-labelledby="search-categories-heading"><h3 id="search-categories-heading">分類（0）</h3><ul id="search-categories"></ul></section>
-      <section aria-labelledby="search-tags-heading"><h3 id="search-tags-heading">標籤（0）</h3><ul id="search-tags"></ul></section>
-    </div>
-    <h3 id="search-expenses-heading">帳目（0）</h3>
+    <details id="search-functions-group"><summary id="search-functions-heading">功能（0）</summary><ul id="search-functions"></ul></details>
+    <details id="search-categories-group"><summary id="search-categories-heading">分類（0）</summary><ul id="search-categories"></ul></details>
+    <details id="search-tags-group"><summary id="search-tags-heading">標籤（0）</summary><ul id="search-tags"></ul></details>
+    <details id="search-accounts"><summary id="search-expenses-heading">帳目（0）</summary>
     <p id="search-count" role="status"></p>
     <ul id="search-results"></ul>
     <button id="search-more" type="button" hidden>顯示更多</button>
+    </details>
     </div>
     <section id="search-selection" aria-labelledby="search-selection-title" hidden>
       <h3 id="search-selection-title" tabindex="-1"></h3><p id="search-selection-summary" role="status"></p>
@@ -227,6 +226,12 @@
       <p id="search-selection-empty" hidden>沒有符合日期範圍的有效消費。</p><ul id="search-selection-results"></ul>
       <button id="search-selection-more" type="button" hidden>顯示更多相關消費</button>
     </section>
+    <div id="batch-controls" aria-labelledby="batch-title" hidden>
+      <h3 id="batch-title">目前清單：帳目</h3>
+      <div class="buttons"><button id="batch-select-all" type="button">全選符合結果</button><button id="batch-clear" type="button">取消全選</button></div>
+      <p id="batch-count" role="status" aria-live="polite">已選取 0 筆。</p>
+      <div class="buttons"><button id="batch-edit" type="button" disabled>更改</button><button id="batch-open" type="button" disabled>批次更改</button></div>
+    </div>
   </section>
   <section aria-labelledby="calendar-title">
     <h2 id="calendar-title" data-search-feature>月曆</h2>
@@ -419,6 +424,22 @@
   <p>會取消所有帳目的此標籤關聯（含已作廢）；消費、金額、分類與歷史保留。這與「不再顯示」不同。</p>
   <p id="tag-remove-error" role="alert"></p>
   <div class="buttons"><button id="confirm-tag-remove" type="button">確認移除標籤</button><button id="cancel-tag-remove" type="button">取消</button></div>
+</dialog>
+<dialog id="batch-editor" aria-labelledby="batch-editor-title">
+  <h2 id="batch-editor-title">批次更改消費</h2>
+  <form id="batch-form"><fieldset id="batch-fields">
+    <div class="form-grid"><label>批次分類<select id="batch-category" name="category"></select></label><label>批次付款方式<select id="batch-payment" name="payment_source_id"></select></label></div>
+    <details><summary>新增標籤（保留其他原標籤）</summary>
+      <label>批次標籤名稱<input id="batch-tag-input" type="text" list="batch-tag-suggestions" autocomplete="off"></label><datalist id="batch-tag-suggestions"></datalist>
+      <button id="batch-tag-add" type="button">加入批次標籤（確認儲存後生效）</button><div id="batch-tag-selected" class="buttons" aria-label="批次新增的標籤"></div><div id="batch-tag-options" aria-label="可顯示的既有標籤"></div>
+    </details>
+    <details><summary>移除標籤（只解除選中帳目關聯）</summary><div id="batch-remove-options" aria-label="批次移除的標籤"></div></details>
+    <p id="batch-error" role="alert"></p><div class="buttons"><button id="batch-review" type="submit">檢查批次更改</button><button id="batch-editor-cancel" type="button">取消</button></div>
+  </fieldset></form>
+</dialog>
+<dialog id="batch-dialog" aria-labelledby="batch-confirm-title">
+  <h2 id="batch-confirm-title">確認批次更改</h2><p id="batch-summary"></p><ul id="batch-changes"></ul><p id="batch-confirm-error" role="alert"></p>
+  <div class="buttons"><button id="batch-confirm" type="button">確認更改</button><button id="batch-cancel" type="button">取消</button></div>
 </dialog>
 </body>
 </html>

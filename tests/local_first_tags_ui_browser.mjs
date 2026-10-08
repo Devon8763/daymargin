@@ -1,4 +1,10 @@
 import * as ledger from '../local-first/ledger.mjs';
+const editSearch=async(list='search-results')=>{
+  const query=document.querySelector('#search-form');
+  if(document.querySelector('#view-search').hidden){document.querySelector('[data-view-button="record"]').click();document.querySelector('#home-search-keyword').value=query.elements.keyword.value;document.querySelector('#view-record [data-search-open]').click();for(let i=0;i<250;i++){if(!document.querySelector('#search-groups').hidden&&document.querySelector('#search-results [data-batch-id]'))break;await new Promise(resolve=>setTimeout(resolve,20));}}
+  if(list==='search-results')document.querySelector('#search-accounts').open=true;
+  document.querySelector('#batch-clear').click();const input=document.querySelector('#'+list+' [data-batch-id]');if(!input)throw Error('Missing selected consumption');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#batch-edit').click();
+};
 const q=selector=>document.querySelector(selector),check=(value,message)=>{if(!value)throw new Error(message);};
 const wait=async predicate=>{for(let i=0;i<350;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('Tag UI timeout');};
 const report=document.createElement('pre');report.id='tags-result';document.body.prepend(report);
@@ -17,7 +23,7 @@ try {
   nav('analysis');const query=q('#tag-query');query.elements.tag_id.value=s.tags[0].id;query.requestSubmit();await wait(()=>q('#tag-summary').textContent.includes('1,000 元'));
   const before=await bytes();query.elements.tag_id.value=s.tags[1].id;query.requestSubmit();await wait(()=>q('#tag-summary').textContent.includes('聚餐'));check(q('#tag-summary').textContent.includes('1,000 元')&&await bytes()===before,'Tag query adds/double counts');
   query.elements.start.value=today;query.elements.end.value=today;query.requestSubmit();await wait(()=>q('#tag-results').children.length===1);lines.push('single-label all-time/range totals use full consumption independently and remain readonly');
-  nav('record');q('#search-form').elements.keyword.value='合成消費';q('#search-form').requestSubmit();await wait(()=>q('#search-results').children.length===1);q('#search-results button').click();
+  nav('record');q('#search-form').elements.keyword.value='合成消費';q('#search-form').requestSubmit();await wait(()=>q('#search-results').children.length===1);await editSearch();
   q('#tag-selected button').click();form.requestSubmit();await wait(()=>q('#form-title').textContent==='記錄消費');s=await ledger.readLedger(db);check(s.expense_tags.length===1&&s.tags.length===2,'Removing one label deleted definition');lines.push('search edit removes one association only and keeps original source/amount');
   nav('settings');const row=[...q('#tag-list').children].find(row=>row.textContent.includes('聚餐'));row.querySelector('[data-operation=hide]').click();await wait(()=>q('#tag-list [data-operation=show]'));
   nav('record');q('#expense-tags').open=true;q('#tag-input').value='聚';q('#tag-input').dispatchEvent(new Event('input'));check(![...q('#tag-suggestions').options].some(row=>row.value.includes('聚餐'))&&!q('#tag-options').textContent.includes('聚餐'),'Hidden label offered');
@@ -26,7 +32,7 @@ try {
   const active=[...q('#tag-list').children].find(row=>row.textContent.includes('聚餐'));active.querySelector('[data-operation=remove]').click();check(q('#tag-remove-dialog').open,'Removal has no confirmation');q('#cancel-tag-remove').click();check((await ledger.readLedger(db)).expense_tags.length===2,'Cancel removed relations');
   active.querySelector('[data-operation=remove]').click();q('#confirm-tag-remove').click();await wait(()=>!q('#tag-remove-dialog').open);s=await ledger.readLedger(db);check(s.expenses.length===2&&s.expense_tags.length===0&&s.tags.length===1,'Global remove changed expenses or kept links');lines.push('show again and explicit global removal/cancel preserve all consumption fields');
   const origin=s.expenses[0],other=await ledger.openDatabase();await ledger.editExpense(other,origin.id,origin.revision,{spent_on:origin.spent_on,amount:'1000',note:origin.note,category:origin.category,payment_source_id:'',tags:{ids:[],names:['跨頁追加']}},today);other.close();
-  nav('record');q('#search-form').requestSubmit();await wait(()=>q('#search-results').textContent.includes('跨頁追加'));q('#search-results button').click();check(q('#tag-selected').textContent.includes('跨頁追加'),'Fresh search used stale labels');form.requestSubmit();await wait(()=>q('#form-title').textContent==='記錄消費');s=await ledger.readLedger(db);
+  nav('record');q('#search-form').requestSubmit();await wait(()=>q('#search-results').textContent.includes('跨頁追加'));await editSearch();check(q('#tag-selected').textContent.includes('跨頁追加'),'Fresh search used stale labels');form.requestSubmit();await wait(()=>q('#form-title').textContent==='記錄消費');s=await ledger.readLedger(db);
   check(s.expense_tags.some(row=>row.expense_id===origin.id&&row.tag_id===s.tags.find(tag=>tag.name==='跨頁追加').id),'Editing fresh search removed peer label');lines.push('fresh search snapshot keeps peer-added associations through the existing edit form');
   nav('record');q('#expenses button').click();q('#tag-input').value='失敗新標籤';form.elements.amount.value='.31';const snapshot=await bytes(),transaction=IDBDatabase.prototype.transaction;
   IDBDatabase.prototype.transaction=function(...args){if(this.name===name&&args[1]==='readwrite')throw new DOMException('PRIVATE','QuotaExceededError');return transaction.apply(this,args);};

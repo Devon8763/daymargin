@@ -104,6 +104,9 @@ export function validateInput(form, state, today, previous = null) {
   }
   if (spent_on > isoDate(today)) throw new ValidationError('生活消費日期不可晚於台灣今天。');
   if (typeof form.note !== 'string' || !form.note.trim() || [...form.note].length > 200) throw new ValidationError('消費項目需填寫，且最多 200 字。');
+  return { cents: money(form.amount), spent_on, note: form.note, ...expenseOptions(form,state,previous) };
+}
+export function expenseOptions(form,state,previous=null) {
   const category = categoryOptions(state).find(option => option.name === form.category) ||
     (previous?.category === form.category ? {name:previous.category, active:0} : null);
   if (!category || (category.active !== 1 && previous?.category !== category.name)) throw new ValidationError('請選擇有效分類。');
@@ -114,7 +117,7 @@ export function validateInput(form, state, today, previous = null) {
     payment = state.payment_sources.find(option => option.id === form.payment_source_id && option.active === 1);
     if (!payment) throw new ValidationError('請選擇有效付款方式。');
   }
-  return { cents: money(form.amount), spent_on, category: category.name, note: form.note,
+  return { category: category.name,
     payment_source_id: payment.id, payment_source_name: payment.name };
 }
 

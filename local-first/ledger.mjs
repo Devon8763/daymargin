@@ -1,5 +1,5 @@
 import * as distribution from './vendor/lossless-json-4.3.1/lossless-json.js';
-import { validateInput, categoryOptions, categoryName, paymentName, orderedShortcuts, tagName, budgetCents, money, pythonStrip, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
+import { validateInput, expenseOptions, categoryOptions, categoryName, paymentName, orderedShortcuts, tagName, budgetCents, money, pythonStrip, cents, isoDate, fixedNextMonth, fixedDueDate, fixedSettings, validateFixed, recurringProgress, ValidationError } from './rules.mjs';
 import { emptyData, readBackup, writeBackup, integerValue, storedInteger, MAX_INTEGER, MAX_BYTES } from './backup.mjs';
 import { STORES, openLedgerDatabase, readSnapshot, scanTransaction, addState, portable, metadata, rowKey } from './idb.mjs';
 import {annualInput,annualItem,annualDefaults} from './annual.mjs';
@@ -62,11 +62,10 @@ export function restorePortableBackup(db, payload, confirmedMain = false) {
 }
 export const exportPortableBackup = async db => writeBackup(portable(await readSnapshot(db)));
 
-function current(state, id, expectedRevision, changing = true) {
-  const position = state.expenses.findIndex(row => row.id === id && row.kind === 'consumption' &&
-    ['manual', '固定', '訂閱', '分期'].includes(row.source) && row.voided === 0);
-  if (position < 0) throw new LedgerError('unavailable', '此筆消費無法操作，請重新載入。');
+function current(state, id, expectedRevision, changing = true, position = state.expenses.findIndex(row => row.id === id)) {
   const entry = state.expenses[position];
+  if (!entry || entry.id!==id || entry.kind!=='consumption' || !['manual','固定','訂閱','分期'].includes(entry.source) || entry.voided!==0)
+    throw new LedgerError('unavailable', '此筆消費無法操作，請重新載入。');
   let expected;
   try { expected = integerValue(expectedRevision); }
   catch { throw new LedgerError('conflict', '資料已變更，請重新載入後再操作。'); }
@@ -87,8 +86,9 @@ function applyUsage(state,id,input) {
     incrementRevision(row);state.usage_periods[state.usage_periods.indexOf(previous)]=row;
   } else state.usage_periods.push(row);
 }
-function applyTags(state,id,input) {
-  if(input===undefined)return;
+function applyTags(state,id,input,append=false,remove=[]) {
+  if(input===undefined&&!remove.length)return false;
+  if(input===undefined)input={ids:[],names:[]};
   if(!input || Object.keys(input).length!==2 || !Array.isArray(input.ids) || !Array.isArray(input.names) ||
       input.ids.length+input.names.length>100000 || new Set(input.ids).size!==input.ids.length)
     throw new ValidationError('請選擇有效且不重複的標籤。');
@@ -103,10 +103,11 @@ function applyTags(state,id,input) {
     selected.push(row.id);
   }
   if(new Set(selected).size!==selected.length)throw new ValidationError('請勿重複加入相同標籤。');
-  const previous=new Set(state.expense_tags.filter(row=>row.expense_id===id).map(row=>row.tag_id)),wanted=new Set(selected);
+  const removed=new Set(remove),previous=new Set(state.expense_tags.filter(row=>row.expense_id===id).map(row=>row.tag_id)),wanted=new Set((append?[...previous,...selected]:selected).filter(tag=>!removed.has(tag)));
   for(const tag of new Set([...previous,...wanted]))if(previous.has(tag)!==wanted.has(tag) && !created.has(tag))incrementRevision(byId.get(tag));
   state.expense_tags=state.expense_tags.filter(row=>row.expense_id!==id || wanted.has(row.tag_id));
   for(const tag of wanted)if(!previous.has(tag))state.expense_tags.push({expense_id:id,tag_id:tag});
+  return previous.size!==wanted.size||[...previous].some(tag=>!wanted.has(tag));
 }
 export function assignExpenseTags(state,id,input) {
   metadata(state);const changed={...emptyData(5),...structuredClone(state)};
@@ -190,6 +191,32 @@ export function voidExpense(db, id, expectedRevision) {
       structuredClone(entry), position);
   });
 }
+
+export function changeExpenseBatch(state,targets,changes,today) {
+  metadata(state);isoDate(today);
+  if(!Array.isArray(targets)||!targets.length||targets.length>100000||targets.some(row=>!row||Object.keys(row).length!==2||!Object.hasOwn(row,'id')||typeof row.id!=='string'||!Object.hasOwn(row,'revision'))||new Set(targets.map(row=>row.id)).size!==targets.length)
+    throw new ValidationError('請選取有效且不重複的消費。');
+  if(!changes||Array.isArray(changes)||Object.keys(changes).some(key=>!['category','payment_source_id','tags','remove_tag_ids'].includes(key))||
+      (!Object.hasOwn(changes,'category')&&!Object.hasOwn(changes,'payment_source_id')&&!(changes.tags?.ids?.length||changes.tags?.names?.length||changes.remove_tag_ids?.length)))
+    throw new ValidationError('請至少選擇一項批次更改。');
+  const remove=Object.hasOwn(changes,'remove_tag_ids')?changes.remove_tag_ids:[],tags=new Map(state.tags.map(row=>[row.id,row]));
+  if(!Array.isArray(remove)||remove.length>100000||new Set(remove).size!==remove.length||remove.some(id=>typeof id!=='string'||!tags.has(id)))throw new ValidationError('請選擇有效且不重複的待移除標籤。');
+  if(remove.some(id=>(Array.isArray(changes.tags?.ids)&&changes.tags.ids.includes(id))||(Array.isArray(changes.tags?.names)&&changes.tags.names.some(name=>tagName(name)===tags.get(id).name))))throw new ValidationError('同一標籤不能同時新增與移除。');
+  if(Object.hasOwn(changes,'category')&&!categoryOptions(state).some(row=>row.name===changes.category&&row.active===1))throw new ValidationError('請選擇有效分類。');
+  if(Object.hasOwn(changes,'payment_source_id')&&!state.payment_sources.some(row=>row.id===changes.payment_source_id&&row.active===1))throw new ValidationError('請選擇有效付款方式。');
+  const changed=structuredClone(state),positions=new Map(changed.expenses.map((row,index)=>[row.id,index]));
+  for(const target of targets) {
+    const {entry,position}=current(changed,target.id,target.revision,false,positions.get(target.id)??-1);
+    if(entry.spent_on>today)throw new LedgerError('unavailable','此筆消費無法操作，請重新載入。');
+    const updated={...entry,...expenseOptions({category:changes.category??entry.category,payment_source_id:changes.payment_source_id??''},changed,entry)};
+    const tagChanged=applyTags(changed,entry.id,changes.tags,true,remove);
+    if(!tagChanged&&['category','payment_source_id','payment_source_name'].every(key=>updated[key]===entry[key]))continue;
+    incrementRevision(updated);changed.expenses[position]=updated;
+    changed.actions.push({id:identifier('a_'),expense_id:entry.id,before:structuredClone(entry),undone:0});
+  }
+  metadata(changed);return changed;
+}
+export const editExpenseBatch=(db,targets,changes)=>financeWrite(db,state=>changeExpenseBatch(state,targets,changes,taiwanToday()));
 
 function incrementRevision(row) {
   const revision = integerValue(row.revision);
