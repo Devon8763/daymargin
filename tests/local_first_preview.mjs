@@ -5,6 +5,8 @@ const port = Number(process.argv[2] ?? 8767);
 const secureHeaders=process.argv[3]==='--secure'?securityHeaders:{}; // Test-only CSP source; fixed entry has no port option.
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid local preview port');
 const files = new Map([
+  ['/tests/local-first-site-search.html', ['../local-first/index.html','text/html']],
+  ['/tests/local_first_site_search_browser.mjs', ['local_first_site_search_browser.mjs','text/javascript']],
   ['/tests/local_first_schedule_browser.html', ['local_first_schedule_browser.html','text/html']],
   ['/tests/local_first_schedule_browser.mjs', ['local_first_schedule_browser.mjs','text/javascript']],
   ['/tests/local_first_schedule_migration_browser.html', ['local_first_schedule_migration_browser.html','text/html']],
@@ -108,6 +110,7 @@ createServer(async (request, response) => {
   if (request.method !== 'GET' || !file) { response.writeHead(404); response.end(); return; }
   try {
     let body = await readFile(new URL(file[0], import.meta.url));
+    if(path==='/tests/local-first-site-search.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_site_search_browser.mjs"');
     if(path==='/tests/local-first-schedule.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_schedule_ui_browser.mjs"');
     if(path==='/tests/local-first-product-frame.html') {
       body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/local-first/page.mjs"');
@@ -120,10 +123,10 @@ createServer(async (request, response) => {
     if(path==='/tests/local-first-shortcuts.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_shortcuts_ui_browser.mjs"');
     if(path==='/tests/local-first-usage.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_usage_ui_browser.mjs"');
     // Isolated update tests only; these flags do not exist in the fixed production entry.
-    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.19.0-v2','0.13.11-v1')
+    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.20.0-v3','0.13.11-v1')
       .replace("  '/local-first/comparison.mjs',\n",'').replace("  '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js',\n",'');
     if(process.argv[4]==='--next-worker'&&(path==='/local-first/sw.js'||path==='/local-first/'||path==='/local-first/index.html'))
-      body=body.toString('utf8').replace('0.19.0','0.19.1'); // Synthetic next-version label, not a release.
+      body=body.toString('utf8').replace('0.20.0','0.20.1'); // Synthetic next-version label, not a release.
     if(path==='/tests/local-first-comparison.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_comparison_ui_browser.mjs"');
     if (path === '/tests/local-first-recurring.html') {
       body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"')

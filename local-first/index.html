@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.19.0</p>
+  <p id="page-version">目前使用頁面版本：0.20.0</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -51,13 +51,14 @@
     </div>
   </section>
   <div id="ledger-page" hidden>
-  <div id="view-record" data-view="record" role="region" aria-labelledby="view-record-title"><h2 id="view-record-title" tabindex="-1">記帳</h2></div>
-  <div id="view-planning" data-view="planning" role="region" aria-labelledby="view-planning-title" hidden><h2 id="view-planning-title" tabindex="-1">規劃</h2></div>
-  <div id="view-analysis" data-view="analysis" role="region" aria-labelledby="view-analysis-title" hidden><h2 id="view-analysis-title" tabindex="-1">分析</h2></div>
-  <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 id="view-settings-title" tabindex="-1">設定</h2><p><a href="#privacy-view" data-privacy-link>隱私與資料</a></p></div>
+  <div id="view-record" data-view="record" role="region" aria-labelledby="view-record-title"><h2 data-search-feature id="view-record-title" tabindex="-1">記帳</h2><div id="home-search-entry" class="site-search-entry"><label><span class="sr-only">全站搜尋關鍵字</span><input id="home-search-keyword" type="search" placeholder="搜尋帳目、功能、分類或標籤（Enter）" autocomplete="off"></label><button type="button" data-search-open aria-label="開啟全站搜尋（記帳）"><span aria-hidden="true">🔍</span></button></div></div>
+  <div id="view-planning" data-view="planning" role="region" aria-labelledby="view-planning-title" hidden><h2 data-search-feature id="view-planning-title" tabindex="-1">規劃</h2><button type="button" data-search-open aria-label="開啟全站搜尋（規劃）"><span aria-hidden="true">🔍</span></button></div>
+  <div id="view-analysis" data-view="analysis" role="region" aria-labelledby="view-analysis-title" hidden><h2 data-search-feature id="view-analysis-title" tabindex="-1">分析</h2><button type="button" data-search-open aria-label="開啟全站搜尋（分析）"><span aria-hidden="true">🔍</span></button></div>
+  <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 data-search-feature id="view-settings-title" tabindex="-1">設定</h2><button type="button" data-search-open aria-label="開啟全站搜尋（設定）"><span aria-hidden="true">🔍</span></button><p><a href="#privacy-view" data-privacy-link>隱私與資料</a></p></div>
+  <div id="view-search" data-view="search" role="region" aria-labelledby="view-search-title" hidden><h2 id="view-search-title" tabindex="-1">全站搜尋</h2><button id="site-search-back" type="button">返回原區域</button></div>
   <p id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a></p>
   <section aria-labelledby="form-title">
-    <h2 id="form-title">記錄消費</h2>
+    <h2 id="form-title" data-search-feature>記錄消費</h2>
     <form id="expense-form">
       <fieldset id="fields" disabled>
         <div class="form-grid">
@@ -96,7 +97,7 @@
   <section aria-label="操作捷徑">
     <div id="shortcut-quick" class="buttons"></div>
     <details id="shortcut-settings">
-      <summary>操作捷徑管理</summary>
+      <summary data-search-feature>操作捷徑管理</summary>
       <p>首頁依手動順序顯示最多 3 個啟用捷徑。點選只替換未儲存的記帳欄位，不帶使用期間；請確認後記錄消費。設定與來源消費各自獨立。</p>
       <form id="shortcut-form" novalidate>
         <fieldset id="shortcut-fields">
@@ -122,7 +123,7 @@
     </details>
   </section>
   <section id="budget-overview" aria-labelledby="budget-title">
-    <h2 id="budget-title">本月預算</h2>
+    <h2 id="budget-title" data-search-feature>本月預算</h2>
     <p id="budget-month"></p><p id="budget-spent"></p>
     <div id="budget-total"></div>
     <details id="category-budget-overview">
@@ -131,7 +132,7 @@
     </details>
   </section>
   <section id="schedule-overview" aria-labelledby="schedule-overview-title">
-    <h2 id="schedule-overview-title">本月定期支出</h2>
+    <h2 id="schedule-overview-title" data-search-feature>本月定期支出</h2>
     <p id="schedule-total"></p>
     <p>依預定付款月份歸屬，已記錄採有效實付金額；不是銀行餘額，也不是額外消費。略過或已刪除的消費不計入。</p>
     <details><summary>查看本月明細</summary><ul id="schedule-month-items"></ul></details>
@@ -139,7 +140,7 @@
   <section aria-label="本機帳本設定">
     <div id="ledger-settings">
       <details id="fixed-settings">
-        <summary>定期支出</summary>
+        <summary data-search-feature>定期支出</summary>
         <p>固定支出、訂閱、分期及年度費用統一管理。可每隔指定日、週、月或年安排；月／年遇短月取月底。類型及分期總數建立後保留。</p>
         <p>更改從下一個尚未到期且未保存的期數生效，已到期及已保存期數保留原值。只有逐期記錄才入帳；這是記帳，不代表銀行已扣款。開頁、搜尋、月曆及匯出不會補記。</p>
         <form id="fixed-form" novalidate>
@@ -167,7 +168,7 @@
         <button id="schedule-more" type="button" hidden>顯示更多期數</button>
       </details>
       <details id="budget-settings">
-        <summary>預算</summary>
+        <summary data-search-feature>預算</summary>
         <p><a id="budget-category-link" href="#category-management-title">更改分類名稱</a></p>
         <p>新預算限正整數台幣，最多十億元。總預算須至少等於所有分類預算加總（含停用分類）；未設定總預算時可單獨設定分類預算。</p>
         <fieldset id="budget-fields">
@@ -177,14 +178,14 @@
         <p id="budget-error" role="alert"></p>
       </details>
       <fieldset id="settings-fields">
-        <h3 id="category-management-title" tabindex="-1">分類管理</h3>
+        <h3 id="category-management-title" tabindex="-1" data-search-feature>分類管理</h3>
         <p><a id="category-budget-back" href="#budget-settings">返回預算</a></p>
         <form id="category-add" novalidate>
           <label>新增分類名稱<input name="name" type="text" autocomplete="off"></label>
           <button type="submit">新增分類</button>
         </form>
         <ul id="category-list" class="settings-list"></ul>
-        <h3>付款方式</h3>
+        <h3 id="payment-management-title" data-search-feature>付款方式</h3>
         <form id="payment-add" novalidate>
           <label>新增付款方式名稱<input name="name" type="text" autocomplete="off"></label>
           <button type="submit">新增付款方式</button>
@@ -194,24 +195,41 @@
       <p id="settings-error" role="alert"></p>
     </div>
   </section>
-  <section aria-labelledby="list-title"><h2 id="list-title">有效消費</h2><ul id="expenses"></ul><p id="empty" hidden>尚無有效消費。</p></section>
+  <section aria-labelledby="list-title"><h2 id="list-title" data-search-feature>有效消費</h2><ul id="expenses"></ul><p id="empty" hidden>尚無有效消費。</p></section>
   <section aria-labelledby="search-title">
-    <h2 id="search-title">搜尋帳目</h2>
+    <h2 id="search-title">搜尋條件</h2>
     <form id="search-form" novalidate>
       <div class="form-grid">
-        <label>消費項目關鍵字<input name="keyword" type="search" autocomplete="off"></label>
+        <label>搜尋關鍵字<input name="keyword" type="search" autocomplete="off"></label>
         <label>開始日期<input name="start" type="date"></label>
         <label>結束日期<input name="end" type="date"></label>
       </div>
       <div class="buttons"><button type="submit">搜尋</button></div>
     </form>
     <p id="search-error" role="alert"></p>
+    <p id="search-progress" role="status" aria-live="polite"></p>
+    <p>輸入關鍵字搜尋帳目、功能、分類或標籤；也可只用開始日期查帳目。日期篩選適用於帳目及分類／標籤相關消費。</p>
+    <div id="search-groups" hidden>
+    <p id="site-search-counts" role="status" aria-live="polite"></p>
+    <div class="site-search-names">
+      <section aria-labelledby="search-functions-heading"><h3 id="search-functions-heading">功能（0）</h3><ul id="search-functions"></ul></section>
+      <section aria-labelledby="search-categories-heading"><h3 id="search-categories-heading">分類（0）</h3><ul id="search-categories"></ul></section>
+      <section aria-labelledby="search-tags-heading"><h3 id="search-tags-heading">標籤（0）</h3><ul id="search-tags"></ul></section>
+    </div>
+    <h3 id="search-expenses-heading">帳目（0）</h3>
     <p id="search-count" role="status"></p>
     <ul id="search-results"></ul>
     <button id="search-more" type="button" hidden>顯示更多</button>
+    </div>
+    <section id="search-selection" aria-labelledby="search-selection-title" hidden>
+      <h3 id="search-selection-title" tabindex="-1"></h3><p id="search-selection-summary" role="status"></p>
+      <button id="search-selection-back" type="button">返回搜尋結果</button>
+      <p id="search-selection-empty" hidden>沒有符合日期範圍的有效消費。</p><ul id="search-selection-results"></ul>
+      <button id="search-selection-more" type="button" hidden>顯示更多相關消費</button>
+    </section>
   </section>
   <section aria-labelledby="calendar-title">
-    <h2 id="calendar-title">月曆</h2>
+    <h2 id="calendar-title" data-search-feature>月曆</h2>
     <div class="buttons calendar-nav" aria-label="月份導覽">
       <button id="calendar-prev" type="button" aria-label="上個月">←</button>
       <strong id="calendar-month"></strong>
@@ -229,7 +247,7 @@
     <p id="calendar-error" role="alert"></p>
   </section>
   <section id="expense-comparison" aria-labelledby="comparison-title">
-    <h2 id="comparison-title">支出比較</h2>
+    <h2 id="comparison-title" data-search-feature>支出比較</h2>
     <form id="comparison-form" novalidate>
       <div class="form-grid">
         <label>期間 A 開始日期<input name="a_start" type="date" required></label>
@@ -246,7 +264,7 @@
     <div id="comparison-results" aria-live="polite"></div>
   </section>
   <section id="tag-analysis" aria-labelledby="tag-analysis-title">
-    <h2 id="tag-analysis-title">單一標籤消費</h2>
+    <h2 id="tag-analysis-title" data-search-feature>單一標籤消費</h2>
     <p>只查看一個標籤；同一筆消費可出現在多個標籤，請勿把不同標籤總額相加。只統計截至台灣今天已入帳、有效的生活消費。</p>
     <form id="tag-query" novalidate>
       <div class="form-grid">
@@ -259,7 +277,7 @@
     <ul id="tag-results"></ul><button id="tag-more" type="button" hidden>顯示更多標籤帳目</button>
   </section>
   <section id="tag-settings" aria-labelledby="tag-settings-title">
-    <h2 id="tag-settings-title">消費標籤管理</h2>
+    <h2 id="tag-settings-title" data-search-feature>消費標籤管理</h2>
     <p>不再顯示只隱藏選單及建議，舊關聯與統計保留；移除須確認，會從所有帳目取消此標籤，但不刪帳目。</p>
     <fieldset id="tag-fields">
       <form id="tag-add" novalidate><label>新增標籤名稱<input name="name" type="text" autocomplete="off"></label><button type="submit">新增標籤</button></form>
@@ -268,7 +286,7 @@
   </section>
   <section aria-label="收入與每月分配">
     <details id="income-planning">
-      <summary>收入與每月分配</summary>
+      <summary data-search-feature>收入與每月分配</summary>
       <p>收入是已收到的錢；分配只是用途規劃，不是消費、轉帳或實際存款餘額。</p>
       <fieldset id="income-fields">
         <form id="income-month-form" novalidate><label>查看收入與分配月份<input name="month" type="month" required></label><button type="submit">查看月份</button></form>
@@ -303,15 +321,15 @@
     </details>
   </section>
   <section id="data-management" aria-labelledby="data-management-title" hidden>
-    <h2 id="data-management-title">資料管理</h2>
+    <h2 id="data-management-title" data-search-feature>資料管理</h2>
     <p id="storage-status" role="status">正在查詢本來源的瀏覽器儲存狀態……</p>
     <button id="request-persistence" type="button" disabled>申請持久保存</button>
     <p>本機帳本保存在此瀏覽器來源；獲准持久保存仍可能遺失，請手動加密備份並自行確認檔案存在。</p>
-    <button id="download-backup" type="button">下載完整備份</button>
+    <button id="download-backup" type="button" data-search-feature>下載完整備份</button>
     <p><a href="#privacy-view" data-privacy-link>隱私與資料：帳本及備份存在哪裡？</a></p>
     <p>請在重要操作後手動備份。發出下載要求不代表檔案已保存，請確認檔案存在，並妥善保管備份與密碼。</p>
     <details id="csv-export">
-      <summary>CSV 支出匯出</summary>
+      <summary data-search-feature>CSV 支出匯出</summary>
       <p class="warning">CSV 未加密、不是完整備份、不能用來還原帳本。請妥善保管下載的帳目資料。</p>
       <p>日期包含開始與結束當日，只匯出截至台灣今天已入帳的有效生活消費，包含合法的手動、固定、訂閱及分期來源。</p>
       <form id="csv-form" novalidate>

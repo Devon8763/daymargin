@@ -19,8 +19,8 @@ try {
   check(!q('#welcome').hidden&&!q('#start-ledger').disabled&&reads===0,'First-use privacy writes or blocks start');armed=false;check(await raw()===blank,'Privacy initialized blank ledger');lines.push('first-use privacy is optional, independent and returns to untouched blank ledger');
   q('#start-ledger').click();await wait(()=>!q('#ledger-page').hidden);
   check(!q('#view-record').hidden&&q('#view-planning').hidden&&q('#view-analysis').hidden&&q('#view-settings').hidden,'Recording is not the default');
-  for(const [view,ids]of [['record',['expense-form','shortcut-quick','ending-soon','budget-overview','schedule-overview','expenses','search-form','calendar-grid']],['planning',['budget-settings','fixed-settings','income-planning']],['analysis',['expense-comparison']],['settings',['settings-fields','data-management']]])for(const id of ids)check(q('#'+id).closest('[data-view]')?.dataset.view===view,'Feature in wrong view: '+id);
-  lines.push('exact four regions; recording default; all existing features reachable in assigned view');
+  for(const [view,ids]of [['record',['expense-form','shortcut-quick','ending-soon','budget-overview','schedule-overview','expenses','calendar-grid']],['search',['search-form']],['planning',['budget-settings','fixed-settings','income-planning']],['analysis',['expense-comparison']],['settings',['settings-fields','data-management']]])for(const id of ids)check(q('#'+id).closest('[data-view]')?.dataset.view===view,'Feature in wrong view: '+id);
+  lines.push('four original regions and one shared search; recording default; original features reachable');
   nav('planning');
   const budget=q('#budget-settings'),recurring=q('#fixed-settings'),category=q('#settings-fields');
   check(budget.parentElement===recurring.parentElement&&!budget.parentElement.closest('details'),'Budget and recurring still share an outer disclosure');
@@ -59,7 +59,7 @@ try {
   q('#calendar-grid [data-day="'+today+'"]').click();q('#calendar-day-results button').click();q('#expense-form').elements.amount.value='100.03';q('#expense-form').requestSubmit();await wait(()=>q('#calendar-day-results').textContent.includes('100.03'));
   check(document.activeElement.closest('#calendar-day-results')&&!q('#calendar-day-details').hidden,'Calendar save did not return to selected day');lines.push('search/calendar reuse original edit and keep origin focus, conditions and selected day');
   q('#search-results button:last-child').click();check(q('#delete-dialog').open,'Delete dialog inaccessible');q('#cancel-delete').click();check(!q('#delete-dialog').open,'Delete cancel failed');
-  q('#search-results button:last-child').click();q('#confirm-delete').click();await wait(()=>q('#search-results').children.length===0);check(!q('#delete-dialog').open&&!q('#view-record').hidden,'Delete leaves wrong view');lines.push('global delete dialog remains reachable; confirmation refreshes original search/calendar');
+  q('#search-results button:last-child').click();q('#confirm-delete').click();await wait(()=>q('#search-results').children.length===0);check(!q('#delete-dialog').open&&!q('#view-search').hidden,'Delete leaves wrong result view');lines.push('global delete dialog remains reachable; confirmation refreshes original search/calendar');
   armed=true;nav('planning');q('#fixed-settings').open=true;check(q('#fixed-settings').open&&!q('#view-planning').hidden,'Recurring disclosure hidden');nav('analysis');nav('settings');q('#csv-export').open=true;nav('record');nav('settings');check(q('#csv-export').open&&reads===0,'CSV disclosure lost or navigation exported');armed=false;lines.push('existing anchors/disclosures remain usable without automatic posting or export');
   report.textContent='PASS：'+lines.length+' 組四區導覽／隱私驗證\n'+lines.join('\n');
 }catch(error){report.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{armed=false;IDBDatabase.prototype.transaction=transaction;db.close();}
