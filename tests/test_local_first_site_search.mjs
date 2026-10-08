@@ -48,3 +48,11 @@ test('category report rejects missing identities and future/invalid ranges with 
   for(const q of [{category:'不存在',start:'',end:''},{category:'旅行',start:'2024-2-29',end:''},{category:'旅行',start:'',end:'2099-01-01'}])assert.throws(()=>browse.categoryReport(s,q,today));
   assert.deepEqual(s,before);
 });
+test('explicit blank-keyword browse enumerates all four groups without weakening strict search or dates',()=>{
+  assert.equal(typeof browse.browseSite,'function');assert.equal(typeof browse.validateBrowse,'function');
+  const s=state(),before=structuredClone(s),functions=[{name:'預算',target:'budget-settings'}];
+  const result=browse.browseSite(s,{keyword:'',start:'',end:''},today,functions);assert.equal(result.expenses.length,4);assert.deepEqual(result.functions,functions);assert(result.categories.some(row=>row.name==='旅行'));assert.equal(result.tags.length,2);assert.deepEqual(s,before);
+  assert.throws(()=>browse.validateSearch({keyword:'',start:'',end:''},today));
+  const unread={get expenses(){throw Error('read executed');}};for(const query of [{keyword:'',start:'2026-02-30',end:''},{keyword:'',start:'',end:'2099-01-01'},{keyword:'',start:'2025-01-01',end:'2024-01-01'}])assert.throws(()=>browse.browseSite(unread,query,today,functions),error=>error.message!=='read executed');
+  assert.equal(browse.browseSite(s,{keyword:'',start:'2024-03-01',end:''},today,functions).expenses.length,0);
+});

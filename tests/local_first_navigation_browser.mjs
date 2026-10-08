@@ -1,4 +1,10 @@
 import * as ledger from '../local-first/ledger.mjs';
+const editSearch=async(list='search-results')=>{
+  const query=document.querySelector('#search-form');
+  if(document.querySelector('#view-search').hidden){document.querySelector('[data-view-button="record"]').click();document.querySelector('#home-search-keyword').value=query.elements.keyword.value;document.querySelector('#view-record [data-search-open]').click();for(let i=0;i<250;i++){if(!document.querySelector('#search-groups').hidden&&document.querySelector('#search-results [data-batch-id]'))break;await new Promise(resolve=>setTimeout(resolve,20));}}
+  if(list==='search-results')document.querySelector('#search-accounts').open=true;
+  document.querySelector('#batch-clear').click();const input=document.querySelector('#'+list+' [data-batch-id]');if(!input)throw Error('Missing selected consumption');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#batch-edit').click();
+};
 import {STORES} from '../local-first/idb.mjs';
 const q=selector=>document.querySelector(selector),check=(value,message)=>{if(!value)throw new Error(message);};
 const wait=async predicate=>{for(let i=0;i<300;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('Navigation UI timeout');};
@@ -55,7 +61,7 @@ try {
   const planDraft=formValues();reads=0;armed=true;nav('record');nav('planning');check(q('#income-planning').open&&formValues()===planDraft&&reads===0,'Navigation reopened income or reset allocations');armed=false;lines.push('opened income and allocation drafts survive hiding without a second load');
   nav('record');q('#expense-form').elements.usage_days.value='';q('#expense-form').requestSubmit();await wait(()=>q('#expenses').children.length===1);
   check(!q('#expenses img'),'Unsafe consumption rendered HTML');q('#search-form').elements.keyword.value='合成草稿';q('#search-form').requestSubmit();await wait(()=>q('#search-results').children.length===1);
-  q('#search-results button').click();q('#expense-form').elements.amount.value='100.02';nav('analysis');nav('record');check(q('#expense-form').elements.amount.value==='100.02','Expense edit lost across view');q('#cancel-edit').click();check(document.activeElement.closest('#search-results'),'Search cancel focus lost');
+  await editSearch();q('#expense-form').elements.amount.value='100.02';nav('analysis');nav('record');check(q('#expense-form').elements.amount.value==='100.02','Expense edit lost across view');q('#cancel-edit').click();check(document.activeElement.closest('#search-results'),'Search cancel focus lost');
   q('#calendar-grid [data-day="'+today+'"]').click();q('#calendar-day-results button').click();q('#expense-form').elements.amount.value='100.03';q('#expense-form').requestSubmit();await wait(()=>q('#calendar-day-results').textContent.includes('100.03'));
   check(document.activeElement.closest('#calendar-day-results')&&!q('#calendar-day-details').hidden,'Calendar save did not return to selected day');lines.push('search/calendar reuse original edit and keep origin focus, conditions and selected day');
   q('#search-results button:last-child').click();check(q('#delete-dialog').open,'Delete dialog inaccessible');q('#cancel-delete').click();check(!q('#delete-dialog').open,'Delete cancel failed');

@@ -73,6 +73,11 @@ export function siteSearch(state,query,today,functions=[]) {
     categories:keyword ? searchCategories(state,today).filter(row=>literalMatch(row.name,keyword)) : [],
     tags:keyword ? (state.tags || []).filter(row=>literalMatch(row.name,keyword)) : []};
 }
+export const validateBrowse=(query,today)=>validateSearch({...query,keyword:'',start:query.start||'0001-01-01'},today);
+export function browseSite(state,query,today,functions=[]) {
+  const {start,end}=validateBrowse(query,today);
+  return {expenses:searchExpenses(state,{keyword:'',start,end},today),functions:[...functions],categories:searchCategories(state,today),tags:state.tags||[]};
+}
 export function categoryReport(state,query,today) {
   const rows=searchExpenses(state,{keyword:'',start:query.start || '0001-01-01',end:query.end},today);
   if(!searchCategories(state,today).some(row=>row.name===query.category))throw new ValidationError('分類已變更，請重新搜尋。');
