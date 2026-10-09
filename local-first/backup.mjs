@@ -39,7 +39,12 @@ const TAG_FIELDS = {tags:['id','name','hidden','revision'],expense_tags:['expens
 export const V5_SECTIONS = [...V4_SECTIONS,...Object.keys(TAG_FIELDS)];
 const SCHEDULE_FIELDS = {scheduled_periods:['rule_id','index','defaults','status','expense_id','revision']};
 const SCHEDULE_VERSION_FIELDS = ['id','recurring_id','from_index','first_due_on','unit','every','name','cents','category','payment_source_id','payment_source_name'];
-export const ALL_SECTIONS = [...V5_SECTIONS,...Object.keys(SCHEDULE_FIELDS)];
+export const V6_SECTIONS = [...V5_SECTIONS,...Object.keys(SCHEDULE_FIELDS)];
+const GOAL_FIELDS = {
+  goals:['id','name','target_cents','saved_cents','deadline','remind','completed','revision'],
+  goal_actions:['id','goal_id','kind','month','before_cents','after_cents','delta_cents','contribution_before_cents','contribution_after_cents'],
+};
+export const ALL_SECTIONS = [...V6_SECTIONS,...Object.keys(GOAL_FIELDS)];
 export class BackupError extends Error {
   constructor(kind) { super('生活帳本備份資料異常：' + kind); this.code = 'backup'; }
 }
@@ -103,16 +108,16 @@ export function emptyData(version = 1) {
     ...(version >= 2 ? Object.fromEntries(FINANCE_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 3 ? Object.fromEntries(ANNUAL_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 4 ? {usage_periods:[]} : {}), ...(version >= 5 ? {tags:[],expense_tags:[]} : {}),
-    ...(version >= 6 ? {scheduled_periods:[]} : {}) };
+    ...(version >= 6 ? {scheduled_periods:[]} : {}),...(version>=7 ? {goals:[],goal_actions:[]} : {}) };
 }
 export function validateBackup(bundle) {
   shape(bundle, ['format', 'version', 'data'], '格式');
   if (bundle.format !== 'life-ledger-backup') invalid('格式／版本');
-  const version = integerValue(bundle.version, 1n, 6n);
-  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : version===5n ? V5_SECTIONS : ALL_SECTIONS, '生活帳本');
+  const version = integerValue(bundle.version, 1n, 7n);
+  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : version===5n ? V5_SECTIONS : version===6n ? V6_SECTIONS : ALL_SECTIONS, '生活帳本');
   let count = 0;
   const ids = [];
-  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {}),...(version>=6n ? SCHEDULE_FIELDS : {})})) {
+  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {}),...(version>=6n ? SCHEDULE_FIELDS : {}),...(version>=7n ? GOAL_FIELDS : {})})) {
     const rows = data[section];
     if (!Array.isArray(rows)) invalid(section + '結構');
     count += rows.length; if (count > 100000) invalid('資料筆數上限');
@@ -240,7 +245,7 @@ export function validateBackup(bundle) {
       iso(row.month, true); integerValue(row.revision);
       if (!Array.isArray(row.items) || row.items.length > 100) invalid('分配項目');
       for (const item of row.items) {
-        shape(item, ['id', 'name', 'cents'], '分配項目');
+        shape(item, ['id', 'name', 'cents',...(version>=7n&&Object.hasOwn(item??{},'goal_id')?['goal_id']:[])], '分配項目');
         if (typeof item.id !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(item.id)) invalid('分配識別');
         text(item.name); if ([...item.name].length > 30 || /[\u0000-\u001f]/u.test(item.name)) invalid('分配名稱');
         amount(item.cents, true);
@@ -311,6 +316,37 @@ export function validateBackup(bundle) {
     unique(data.tags.map(row=>row.name),'標籤名稱');const tags=new Set(data.tags.map(row=>row.id));
     for(const row of data.expense_tags)if(typeof row.expense_id!=='string' || !expenses.has(row.expense_id) || typeof row.tag_id!=='string' || !tags.has(row.tag_id))invalid('標籤消費引用');
     unique(data.expense_tags.map(row=>row.expense_id+'\0'+row.tag_id),'消費標籤');
+  }
+  if(version>=7n) {
+    const goals=new Map(data.goals.map(row=>[row.id,row])),totals=new Map(),contributions=new Map();
+    for(const row of data.goals) {
+      text(row.name);if([...row.name].length>200||/[\u0000-\u001f]/u.test(row.name))invalid('目標名稱');
+      amount(row.target_cents);amount(row.saved_cents,true);if(row.deadline!==null)iso(row.deadline);
+      integerValue(row.remind,0n,1n);integerValue(row.completed,0n,1n);integerValue(row.revision);
+    }
+    for(const row of data.goal_actions) {
+      if(typeof row.goal_id!=='string'||!goals.has(row.goal_id))invalid('目標紀錄引用');
+      amount(row.before_cents,true);amount(row.after_cents,true);
+      if(typeof row.delta_cents!=='string'||!/^-?(0|[1-9][0-9]*)$/.test(row.delta_cents)||row.delta_cents==='-0'||row.delta_cents.length>20)invalid('目標差額');
+      const delta=BigInt(row.delta_cents);integerValue(delta,-MAX_INTEGER,MAX_INTEGER);
+      if(BigInt(row.before_cents)!==(totals.get(row.goal_id)??0n)||BigInt(row.after_cents)-BigInt(row.before_cents)!==delta)invalid('目標紀錄順序／金額');
+      totals.set(row.goal_id,BigInt(row.after_cents));
+      if(row.kind==='manual') {
+        if(row.month!==null||row.contribution_before_cents!==null||row.contribution_after_cents!==null)invalid('手動校正欄位');
+      } else if(row.kind==='allocation') {
+        iso(row.month,true);amount(row.contribution_before_cents,true);amount(row.contribution_after_cents,true);
+        const key=row.goal_id+'\0'+row.month;
+        if(BigInt(row.contribution_before_cents)!==(contributions.get(key)??0n)||BigInt(row.contribution_after_cents)-BigInt(row.contribution_before_cents)!==delta||delta===0n)invalid('分配貢獻差額');
+        contributions.set(key,BigInt(row.contribution_after_cents));
+      } else invalid('目標紀錄種類');
+    }
+    for(const row of data.goals)if(!totals.has(row.id)||totals.get(row.id)!==BigInt(row.saved_cents))invalid('目標已存總額');
+    const actual=new Map();
+    for(const plan of data.monthly_allocations)for(const item of plan.items)if(Object.hasOwn(item,'goal_id')) {
+      if(typeof item.goal_id!=='string'||!goals.has(item.goal_id))invalid('分配目標引用');
+      const key=item.goal_id+'\0'+plan.month;actual.set(key,(actual.get(key)??0n)+BigInt(item.cents));
+    }
+    for(const key of new Set([...actual.keys(),...contributions.keys()]))if((actual.get(key)??0n)!==(contributions.get(key)??0n))invalid('分配目標貢獻');
   }
   return bundle;
 }

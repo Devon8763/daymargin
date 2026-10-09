@@ -1,4 +1,4 @@
-import { emptyData, SECTIONS as LEGACY_SECTIONS, ALL_SECTIONS as SECTIONS, FINANCE_SECTIONS, ANNUAL_SECTIONS, V2_SECTIONS, V3_SECTIONS, V4_SECTIONS, V5_SECTIONS, writeBackup } from './backup.mjs';
+import { emptyData, SECTIONS as LEGACY_SECTIONS, ALL_SECTIONS as SECTIONS, FINANCE_SECTIONS, ANNUAL_SECTIONS, V2_SECTIONS, V3_SECTIONS, V4_SECTIONS, V5_SECTIONS, V6_SECTIONS, writeBackup } from './backup.mjs';
 
 export class StorageError extends Error {
   constructor(code = 'storage', message = '本機測試帳本資料不完整，請保留資料並停止操作。') {
@@ -16,8 +16,9 @@ export const portable = state => {
   const usage = state.usage_periods?.length;
   const tags=state.tags?.length || state.expense_tags?.length;
   const scheduled=state.scheduled_periods?.length || state.recurring_versions?.some(row=>Object.hasOwn(row,'from_index'));
-  return {format:'life-ledger-backup', version:scheduled ? 6 : tags ? 5 : usage ? 4 : annual ? 3 : extended ? 2 : 1,
-    data:Object.fromEntries((scheduled ? SECTIONS : tags ? V5_SECTIONS : usage ? V4_SECTIONS : annual ? V3_SECTIONS : extended ? V2_SECTIONS : LEGACY_SECTIONS).map(section => [section,state[section] || []]))};
+  const goals=state.goals?.length||state.goal_actions?.length||state.monthly_allocations?.some(plan=>plan.items.some(item=>Object.hasOwn(item,'goal_id')));
+  return {format:'life-ledger-backup', version:goals ? 7 : scheduled ? 6 : tags ? 5 : usage ? 4 : annual ? 3 : extended ? 2 : 1,
+    data:Object.fromEntries((goals ? SECTIONS : scheduled ? V6_SECTIONS : tags ? V5_SECTIONS : usage ? V4_SECTIONS : annual ? V3_SECTIONS : extended ? V2_SECTIONS : LEGACY_SECTIONS).map(section => [section,state[section] || []]))};
 };
 
 export function rowKey(section, row) {
@@ -41,7 +42,7 @@ function checkedLegacy(state, marker, keys) {
       !state || state.format !== 'local-first-test-ledger' || state.owner !== OWNER ||
       ![1, 2].includes(state.version) || Object.keys(state).length !== fields.length ||
       fields.some(field => !Object.hasOwn(state, field))) fail();
-  const full = { ...emptyData(6), ...state, version:7 };
+  const full = { ...emptyData(7), ...state, version:8 };
   try { writeBackup(portable(full)); } catch { fail(); }
   return full;
 }
@@ -69,7 +70,7 @@ function snapshotFrom(records) {
   if (records.meta.length !== 4 || meta.created !== 1 || !Number.isSafeInteger(meta.next_action_order) ||
       !Number.isSafeInteger(meta.row_count) || !Number.isSafeInteger(meta.backup_bytes) ||
       records.settings.length !== 1 || meta.next_action_order !== rows.actions.length) fail();
-  const state = { format: 'local-first-test-ledger', version: 7, owner: OWNER, ...rows, settings: rows.settings[0] };
+  const state = { format: 'local-first-test-ledger', version: 8, owner: OWNER, ...rows, settings: rows.settings[0] };
   let actual;
   try { actual = metadata(state); } catch { fail(); }
   if (actual.row_count !== meta.row_count || actual.backup_bytes !== meta.backup_bytes ||
@@ -107,7 +108,7 @@ export function readSnapshot(db, optional = false) {
 export function openLedgerDatabase(name) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const request = indexedDB.open(name, 7);
+    const request = indexedDB.open(name, 8);
     const rejectSafe = message => {
       if (!settled) { settled = true; reject(new StorageError('storage', message)); }
     };
@@ -116,8 +117,8 @@ export function openLedgerDatabase(name) {
       const tx = request.transaction;
       if (settled) { tx.abort(); return; }
       try {
-        if ([2,3,4,5,6].includes(event.oldVersion)) {
-          const previous = [...(event.oldVersion === 2 ? LEGACY_SECTIONS : event.oldVersion === 3 ? V2_SECTIONS : event.oldVersion===4 ? V3_SECTIONS : event.oldVersion===5 ? V4_SECTIONS : V5_SECTIONS), 'meta'];
+        if ([2,3,4,5,6,7].includes(event.oldVersion)) {
+          const previous = [...(event.oldVersion === 2 ? LEGACY_SECTIONS : event.oldVersion === 3 ? V2_SECTIONS : event.oldVersion===4 ? V3_SECTIONS : event.oldVersion===5 ? V4_SECTIONS : event.oldVersion===6 ? V5_SECTIONS : V6_SECTIONS), 'meta'];
           if (db.objectStoreNames.length !== previous.length || previous.some(section => !db.objectStoreNames.contains(section))) fail();
           for (const section of SECTIONS.filter(section=>!previous.includes(section))) db.createObjectStore(section,{keyPath:'key'});
           // Validate every original row and metadata in the upgrade transaction.

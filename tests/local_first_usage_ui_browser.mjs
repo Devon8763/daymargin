@@ -10,7 +10,7 @@ try {
   const usageInputs=q('#usage-inputs');
   check(usageInputs?.tagName==='DETAILS'&&!usageInputs.open&&!q('#fields').disabled,'Missing optional collapsed usage fields');
   usageInputs.open=true;
-  for(const [name,text] of [['usage_remind','開啟快結束提示'],['usage_show_daily_cost','顯示每日平均成本（約數，元／天）']]){
+  for(const [name,text] of [['usage_remind','開啟提示'],['usage_show_daily_cost','顯示每日平均成本（約數，元／天）']]){
     const checkbox=form.elements[name],label=checkbox.closest('label'),textNode=[...label.childNodes].find(node=>node.nodeType===Node.TEXT_NODE&&node.textContent.includes(text));
     check(label&&textNode&&label.textContent.includes(text),'Checkbox label is not associated: '+name);
     check(checkbox.tabIndex===0,'Checkbox is not keyboard focusable: '+name);

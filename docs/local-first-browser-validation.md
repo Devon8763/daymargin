@@ -1,3 +1,229 @@
+# 0.24.1 有效消費／月曆首頁開關與排序 — 2026-10-09
+
+**僅供合成資料測試；IndexedDB未加密，Python Web尚未被取代。**起點仍是`codex/localhost-web-auth`、HEAD`880bf535216c09f433cccf2e240791db5966b3f6`、實際0.24.0，原25個修改與11個未追蹤檔完整保留；在既有`.worktrees/localhost-web-auth`工作，不另建worktree，不stage／commit／push。
+
+## 最小變更及舊偏好
+
+偏好新增expenses／calendar兩個固定區塊，預設true並接在原七區尾端；原搜尋／記帳仍不允許隱藏，其他偏好規則不改。有效消費沿用expanded.expenses，expanded不加入calendar。原九份節點由固定註解homeAnchor定位，排序不再依附可移動的有效消費。沒有建立新月曆頁、重複節點／事件或新的計算。
+
+保留`daymargin.home.v1`來源鍵，內容格式v1→v2。先嚴格驗證完整舊v1（七個唯一固定ID、五個visible、六個expanded、合法shortcut_count及完整頂層欄位），再於記憶體追加兩區；其餘設定逐項保留，不修改儲存內容。明確保存才寫v2。舊格式缺欄位、混合新欄位、未知ID、重複ID、非法型別／損壞皆安全回預設；沒有以忽略規則放寬解析。不觸碰IndexedDB／帳本／metadata或完整備份，也無新增依賴。
+
+## 本輪修改14檔
+
+- 產品4檔：`local-first/home-preferences.mjs`、`local-first/page.mjs`、`local-first/index.html`（頁面版本）、`local-first/sw.js`（快取版本）。
+- 測試7檔：`tests/test_local_first_home_preferences.mjs`、`tests/local_first_home_preferences_ui_browser.mjs`、`tests/local_first_preview.mjs`、`tests/local_first_offline_settings_browser.mjs`、`tests/local_first_update_browser.mjs`、`tests/test_local_first_offline.mjs`、`tests/test_local_first_update_status.mjs`。後五檔只同步候選版本／快取，不改產品範圍。
+- 文件3檔：`README.md`、`CHANGELOG.md`、本文件。沒有新增檔案；其他既有未提交內容仍保留，不當作本輪新增。
+
+## 實際驗證
+
+| 檢查 | 本輪結果 |
+| --- | --- |
+| TDD偏好核心 | 6項通過；新九區預設與舊格式保留先RED後GREEN，完整保留舊顯示、順序、shortcut_count、所有expanded且載入不寫；部分／偽造v1仍拒絕 |
+| Node完整local-first | 198／198；另隨機本機埠入口安全7／7，不占用固定8768，固定CLI案例未驗證 |
+| 原生畫面 | 新9、舊偏好4、損壞3組；各自隱藏／恢復、原節點身分、9區唯一、互換原插入位置、必要區塊、隱藏後搜尋與來源捷徑焦點；偏好／純導覽禁止財務transaction，財務原始列／metadata／完整備份逐位元組一致 |
+| 舊畫面回歸 | 導覽10／捷徑15／使用期間8／預算4／批次7／目標7／分析10，共61組通過；未停用原安全、XSS、revision、衝突或rollback檢查 |
+| Python完整隔離 | 460／460，39.015秒；使用正式data.db／Token／.env禁止、SQLite僅暫存的既有verify wrapper，跳過根dotenv後執行原隔離runner。中斷前執行輸出無法取回，已重跑，不使用先前未知結果 |
+| 靜態／文件 | Ruff、修改JS語法、差異空白、相對md連結及README／CHANGELOG／頁面／worker版本核對 |
+
+## 桌面／375px、重載與離線
+
+只使用24341獨立本機來源，原生測試使用UUID合成帳本。實際產品頁明確建立0.29元「合成兩區驗證」為基準，這是測試寫入、不稱為唯讀；之後首頁偏好只寫localStorage。桌面1265px與375px原生iframe（內容360px）用滑鼠／Enter更改兩區顯示與排序，九區無重複，兩者scrollWidth等於clientWidth。月曆仍顯示10月9日有效消費記號，兩區隱藏後搜尋仍找到原0.29元帳目。
+
+整頁重載確認兩區隱藏與順序、有效消費expanded=true保留，再各自恢復顯示；舊v1任意七區順序、捷徑數7與各種展開值以原生legacy案例確認完整保留，載入後原儲存字串未改。截圖`.tmp/home-extension-desktop.png`與`.tmp/home-extension-375.png`是忽略的合成產物，不入Git。
+
+快取`local-first-offline-0.24.1-v1`仍19個必要白名單資源，無新資源／schema。停止自己的預覽並確認24341無監聽，關閉自己產品頁後以相同網址開新文件，順序、顯示及有效消費展開仍保留；離線也可隱藏並恢復兩區。原生audit確認22類含metadata原始列／完整備份及最後偏好字串相同，未把偏好放進備份或worker快取。這不是重啟整個瀏覽器程序、換設定檔或手機飛航模式。
+
+更新先保存／自行保留草稿，等下載完成，關閉全部同來源舊頁再開，不skipWaiting、不初始化帳本。未實測實體手機、讀屏、其他瀏覽器／設定檔、清除網站資料、瀏覽器程序重啟、固定CLI案例、正式帳本、真OAuth／Discord或實體備份還原；沒有讀寫正式data.db、Token、.env、既有備份／匯出或使用者來源。
+
+---
+
+# 0.24.0 簡易首頁自訂與設定整理 — 2026-10-08
+
+**僅供合成資料測試；IndexedDB未加密，Python Web尚未被取代。**起點`codex/localhost-web-auth`、HEAD`880bf535216c09f433cccf2e240791db5966b3f6`、實際0.23.0，原24個修改與8個未追蹤檔完整保留。訊息省略了`.worktrees`的點，仍在既有`.worktrees/localhost-web-auth`實作；不stage／commit／push／PR／tag。
+
+## 行為與邊界
+
+設定順序為編輯首頁、分類、付款、標籤、資料管理。原分類／付款控制仍受同一`settings-fields`保護，保留表單、草稿及交易；資料管理內有原生隱私details，首次使用可將同一份原說明移到原首次使用頁，返回後移回，沒有複製或刪除風險提示。
+
+只提供七種固定首頁區塊的順序：搜尋／記帳不可隱藏，其餘五種可選；有效消費／月曆保持原有位置，不提供任意模組。目標摘要為同一state的唯讀呈現，預設不顯示；原規劃目標功能保留。預算額外的原始未設定規則不被偏好覆蓋。捷徑管理是同一DOM表單，首頁／設定間移動；隱藏首頁仍可操作。失效卡片不在功能搜尋留下無法到達的投影，規劃原入口保留。
+
+`home-preferences.mjs`只處理固定v1偏好：order、五個visible、非負安全整數shortcut_count、六個摘要expanded。來源localStorage鍵`daymargin.home.v1`，不含財務、姓名、帳目或憑證；不import帳本／資料庫，沒有儲存API。嚴格拒絕未知／缺少欄位、重複／未知區塊、舊版本、不合法型別與過大JSON；回到完整預設並固定提示。儲存失敗只影響本頁外觀，不更動財務與舊儲存內容；舊有效偏好可能仍存在。摘要預設只在初始化套用，儲存偏好後要下次開頁才套用摘要狀態，不壓過當下手動收合。
+
+## 本輪修改17檔
+
+- 新增：`local-first/home-preferences.mjs`、`tests/test_local_first_home_preferences.mjs`、`tests/local_first_home_preferences_ui_browser.mjs`。
+- 產品／入口：`local-first/index.html`、`local-first/page.mjs`、`local-first/style.css`、`local-first/sw.js`、`local-first/serve.mjs`（只補新靜態資源白名單）。
+- 既有測試／預覽：`tests/local_first_navigation_browser.mjs`、`tests/local_first_preview.mjs`、`tests/local_first_offline_settings_browser.mjs`、`tests/local_first_update_browser.mjs`、`tests/test_local_first_offline.mjs`、`tests/test_local_first_update_status.mjs`。
+- 文件：`README.md`、`CHANGELOG.md`、本文件。其他既有修改不是本輪新增；沒有修改財務核心、schema／IndexedDB版本、備份格式、加密或Python。git總工作樹含原修改，勿只依HEAD差異認定本輪範圍。
+
+## 本輪實際測試
+
+| 檢查 | 結果 |
+| --- | --- |
+| 新Node偏好 | 4項先RED後GREEN：新來源預設、來源內保存／另一來源預設、必要區塊／未知／重複／舊格式／損壞拒絕、拒絕讀寫安全回退 |
+| 全Node核心 | 196／196；新資源白名單順序修正後整套重跑通過 |
+| 入口安全 | 隨機127.0.0.1埠7／7；沒有啟動或停止固定8768 CLI，該CLI占用案例未驗證 |
+| 新原生畫面 | 8組先RED後GREEN，加損壞偏好3組；原生localStorage與IndexedDB合成帳本，禁止偏好／導覽開financial transaction，原始列／metadata／完整備份一致。核對可見管理表單與焦點，不只檢查預填值；未設定摘要、來源捷徑及隱藏搜尋問題有具體失敗再修正 |
+| 舊原生畫面 | 導覽10、捷徑15、使用期間8、預算4、批次7、目標7、分析10，共61；原始驗證／XSS／revision／衝突／Quota／rollback斷言保留，僅更新設定隱私的實際新呈現 |
+| Python | 受正式data.db／Token／.env防護，SQLite僅暫存，根dotenv跳過後執行原完整隔離runner：460／460，38.422秒；既有套件deprecation警告保留，未改依賴 |
+| 靜態／文件 | Ruff、修改JS語法、`git diff --check`、相對md連結、README／CHANGELOG／頁面／worker版本核對 |
+
+原生拒絕寫入案例是注入Storage.setItem的Quota錯誤，讀取拒絕為單元替身；不宣稱真實磁碟／瀏覽器政策故障已驗收。測試只在隨機DB名與24241／24242來源操作，測試偏好最後移除自用鍵，不清除帳本／網站資料，也不開使用者來源。
+
+## 真實產品頁、375px與離線
+
+產品頁在本輪24241來源手動建立0.29元合成消費、同一來源建立捷徑，以及100元／已存1.23元合成目標；這些是明確測試寫入。完成後開唯讀審核頁作基準，再調偏好、排序、展開隱私與導覽，22類含metadata原始列／完整備份逐位元組不變。沒有把新增消費／目標／捷徑稱為帳本不變。
+
+桌面1265px與375px原生iframe（內容360px）實測上移／下移滑鼠及Enter、五區順序、資料管理直接閱讀、目標摘要、捷徑上限4、未保存記帳草稿。兩者scrollWidth等於clientWidth，無頁面橫向溢位。照片在忽略的`.tmp/home-settings-desktop.png`、`.tmp/home-settings-375.png`，不入Git。
+
+整頁重新整理後排序／隱藏／4個快捷上限及目標／有效消費摘要預設展開保留；手動關閉摘要、切區不會強行重開。另一個新來源24242仍預設3、搜尋在記帳前且目標不顯示，沒有按開始記帳。沒有清除網站資料或更換真正瀏覽器設定檔。
+
+快取`local-first-offline-0.24.0-v2`有19個必要靜態資源，只多一個小型偏好模組；偏好與帳目不納入worker快取。候選v1→v2自然下載／等待，關閉自己的全部產品頁後啟用，不skipWaiting；原生核對全部資源、新偏好內容及舊快取移除。停止兩個本輪預覽、確認24241／24242零監聽，再從同網址新文件離線開頁，順序、隱藏、上限4、摘要預設與直接隱私閱讀可用；帳本、metadata、完整備份及localStorage偏好字串再次一致。不是重啟整個瀏覽器程序，也不是實體手機飛航模式。
+
+更新先儲存或自行保留草稿，等資源完整下載後關閉同來源全部舊頁再開；不初始化帳本。偏好與帳本各自分離，完整備份不攜帶首頁偏好；不要為清除偏好而清除正式帳本來源。
+
+未實測真正清除網站資料、換瀏覽器／設定檔、讀屏、實體手機、瀏覽器程序重啟、固定入口CLI案例、真OAuth／Discord、正式帳本或實體備份還原。已保留無關內容，沒有接觸正式data.db、Token、.env、既有備份、匯出或使用者資料。
+
+---
+
+# 0.23.0 支出分析 — 2026-10-08
+
+**僅供合成資料測試；IndexedDB未加密，Python Web尚未被取代。**從實際分支`codex/localhost-web-auth`、HEAD`880bf535216c09f433cccf2e240791db5966b3f6`、未提交0.22.0開始，保留原22個修改與6個未追蹤檔。使用者訊息中的`DiscordBOT.worktrees`不存在，沿用已確認的`.worktrees/localhost-web-auth`。本輪不stage、commit、push、PR或tag。
+
+## 功能與精確資料
+
+既有`comparison.mjs`增加唯讀`analysisPeriods(unit,start,end)`／`analyzeExpenses(state,input,today)`，重用`activeExpenses`、`literalMatch`、`ordered`及既有分類／日期／cents驗證，沒有另建SQL或帳本規則。日期選取所在的完整週／月／年，週以台灣今天及週一起點定義；一次只使用一個單位。比較組可含多段連續或不連續範圍，按期間去重，同一組同筆只計一次；跨組各自計算，逐期間標示重疊。
+
+每組總額、最高／最低取自所選已開始期間，最低包含零；所選期間數包含未來，有消費期間數只算正額消費。所有已開始期間平均的分母是已開始期數，有消費期間平均的分母是正額期數，分子均為同組去重後總額；保留BigInt分子／分母，顯示取到分的非整除平均加「約」。完全未來不是零、沒有分母就是無法計算；未結束只統計截至今天，保留不等長提醒。金額不從畫面字串或50筆清單加總。
+
+一次顯示一張長條／時間折線／所選期間圓餅；期別表、分類小計及帳目始終可讀，超過安全繪圖精度不畫假數據。帳目每批50筆可展開全部，分類付款名稱使用原保存值。無消費有正常空狀態。既有兩期間比較只改為原生收合入口，原計算與圖表保留；單一標籤分析不改。身分範圍是這一份已驗證本機帳本，不新增多帳號；查詢外部`user_id`欄位安全拒絕，不影響範圍。
+
+修正分類改名後的分析篩選／查詢同步，包含自定與內建分類；儲存開始取消待完成舊分析，避免延遲快照覆蓋儲存後結果。純分析與導覽不寫入、不補記定期消費，記帳草稿保留；測試中明確建立／改名屬合成寫入，與唯讀不變檢查分開。
+
+## 本輪修改清單（16檔）
+
+- 產品5檔：`local-first/comparison.mjs`、`local-first/page.mjs`、`local-first/index.html`、`local-first/style.css`、`local-first/sw.js`。
+- 新增測試2檔：`tests/test_local_first_analysis.mjs`、`tests/local_first_analysis_ui_browser.mjs`。
+- 既有測試／預覽6檔：`tests/local_first_preview.mjs`、`tests/local_first_comparison_ui_browser.mjs`、`tests/local_first_offline_settings_browser.mjs`、`tests/local_first_update_browser.mjs`、`tests/test_local_first_offline.mjs`、`tests/test_local_first_update_status.mjs`。
+- 文件3檔：`README.md`、`CHANGELOG.md`、本文件。未修改`ledger.mjs`、`browse.mjs`、資料庫／備份／加密核心或Python；這些檔案原有的0.22.0修改保留，不是本輪新增。
+
+## 本輪驗證
+
+| 檢查 | 實際結果 |
+| --- | --- |
+| TDD核心 | 6項先RED後GREEN；不連續月份、多組、組內／跨組重疊、週界、跨年／閏年、未結束／完全未來、零、兩種平均、多分類與停用歷史、四來源、撤銷／非消費／未來排除、65筆、巨大cents、安全拒絕非法條件及身分欄位、原始state不變；原比較9項仍通過 |
+| Node全local-first核心 | 192／192；另隨機本機埠入口安全7／7。固定8768CLI占用案例刻意不執行，不干擾既有服務 |
+| 原生IndexedDB／DOM | 新分析10組先RED後GREEN，含一張圖、完整65筆明細、文字XSS防護、切單位、圖表切換／建構失敗、草稿、22類原始列／metadata／完整備份逐位元組不變；分類改名及延遲tx完成後保存競態另先重現失敗再修正，明確寫入不稱唯讀 |
+| 真實圖表資源503 | 24132隔離來源實測本機Chart.js回503，1組通過；沒有canvas，精確表格、原始列及完整備份不變 |
+| 舊畫面回歸 | 比較11、導覽10、易用性7、批次7、目標7，共42組；未把既有測試改成假通過，只讓比較案例展開新的舊入口 |
+| Python完整隔離 | 460／460，38.598秒；既有暫存verify wrapper禁止非暫存SQLite與正式data.db／Token／.env存取，跳過專案根dotenv載入後執行既有`tests/run_discord_validation.py`。既有套件deprecation警告不在本輪變更依賴 |
+| 靜態／文件 | Ruff、修改JS語法、差異空白、相對文件連結及README／CHANGELOG／頁面／worker版本核對 |
+
+## 真實瀏覽器及離線範圍
+
+只開本輪24131／24132隔離合成來源，不開既有8767／8768或使用者來源。新測試頁每次建立UUID測試帳本；產品頁使用本輪舊比較測試插入的合成fixture（含安全文字攻擊與大整數）。桌面1265px、375px原生iframe（內容360px）實測滑鼠／Enter、週／月、多分類及期間明細。週趨勢2024-01-01～02-29實際選9個完整週、2期有消費、總額1.65元、平均約0.18元／約0.83元；跨月週結束為2024-03-03，與完整單位說明一致。展開65筆帳目正常，頁面scrollWidth等於clientWidth；表格保留自己的可捲動容器。圖表實際長條970×300與窄版折線已繪製；截圖`.tmp/analysis-desktop.png`及`.tmp/analysis-375.png`為忽略的合成產物，不入Git。
+
+快取`local-first-offline-0.23.0-v1`仍18個必要白名單資源，沒有新套件或靜態模組。先持有0.22.0候選快取、觀測新版等待與舊頁不自動更新，關閉自己同來源產品頁後自然啟用0.23.0；不skipWaiting。原生檢查核對新分析HTML／page／核心、全部資源與舊快取移除，22類含metadata原始列及完整備份逐位元組不變。
+
+停止本輪兩個預覽並確認24131／24132零監聽後，以同網址新文件離線開啟產品頁，再輸入2024年1／2月與`compare [x]`查詢，得到1元／0.65元並重新繪製本機圖表；唯讀檢查再次確認原始列及完整備份相同。這是相同瀏覽器來源的新文件，不是重啟整個瀏覽器、獨立設定檔或實體手機飛航模式。
+
+更新請先保存／自行保留草稿，等新版完整下載、關閉同來源全部舊頁再重開；不初始化資料庫。沒有schema／備份／加密變更，原0.22.0目標相關升級注意事項仍有效。
+
+未驗證實體手機、讀屏、其他瀏覽器／設定檔、瀏覽器程序重啟、跨數千年畫面／圖表效能、固定8768CLI占用案例、真實Discord／OAuth、正式帳本與實體備份還原。未讀寫正式data.db、Token、.env、既有備份／匯出或使用者資料。
+
+---
+
+# 0.22.0 存錢目標 — 2026-10-08
+
+**僅供合成資料測試；IndexedDB 未加密，Python Web 尚未被取代。**本輪起點為 `codex/localhost-web-auth`、HEAD `880bf535216c09f433cccf2e240791db5966b3f6`、工作檔0.21.1；原16修改／1未追蹤的易用性工作全部保留，staged原為0。以下0.21.1與更早紀錄是歷史，不冒稱本輪重跑。
+
+## 功能與資料流
+
+規劃提供預設收合目標，原首頁記帳不變。建立／更改走既有financeWrite交易；分配明確帶目標ID，交易重讀每個revision、按目標及月份算相對上次貢獻的差額，原子更新目標、分配、可讀校正紀錄及容量metadata。手動校正改當下總額，不改舊貢獻；後续差額使總額低於0時全部拒絕並保留輸入。完成手動確認，進度視覺最多100%、文字保留真額；期限提示不通知、不自動完成。目標不計入收入、消費或預算。
+
+IndexedDB v8、22 stores含meta；完整JSON v7二十一類新增goals／goal_actions及選填goal_id。舊v1～v6仍可空白還原，無新資料仍用原格式；crypto封裝v1不變。規則及欄位見[目標備份契約](local-first-goals.md)。沒有修改Python產品、固定網址或資料庫名稱，也沒有新增依賴。
+
+## 本輪自動測試與原生瀏覽器測試
+
+| 範圍 | 實際結果 |
+|---|---|
+| 完整相關Node | 186／186，含新增目標8例；先RED後GREEN。涵蓋差額、校正、負值拒絕、月份／目標隔離、完成、精確／極端金額、revision、100000列容量、v7嚴驗及v1～v6往返。 |
+| 原生IndexedDB | 新目標5組通過：舊v7→v8、雙連線／競態、put中斷與request成功後abort完整回滾、v7記憶體加密及空白原子還原、唯讀完整備份不變。既有遷移4組亦通過，含舊v6→v8及損壞升級中止。 |
+| 新目標畫面 | 7組通過：預設記帳／收合、建立時保留分配草稿及更新ID選項、重複儲存不累加、校正後負值拒絕保留輸入、超額／期限／完成／紀錄、peer舊revision、配額失敗。 |
+| 既有畫面回歸 | 收入10、導覽10、易用性7、批次7，共34組通過；保留安全文字、唯讀及原交易斷言。 |
+| 完整Python隔離 | 正式檔案及非暫存SQLite防護下460／460，34.908秒；新增v7解析／還原安全拒絕、暫存SQLite不變。沒有測正式帳本。 |
+| 入口及授權 | 隨機隔離埠入口7／7；7個原有授權資源SHA-256一致。沒有新增第三方資源。 |
+| 靜態檢查 | Ruff、88個非vendor JavaScript語法及git diff --check通過。 |
+| 舊local-first讀取器 | 從HEAD取得的v6備份讀取器，對合成新目標v7安全拒絕；不是降級資料庫操作。 |
+
+原生加密演練：相同帳本兩次加密密文不同；正確密碼解密後內容一致，錯密碼拒絕；空白帳本交易還原／重開一致，非空白再次還原拒絕。這些使用記憶體封裝及合成IndexedDB，**未證實實體下載落地或全新普通設定檔從同一檔還原**。
+
+最後靜態檢查時曾誤將固定入口測試納入較廣清單：194例中187通過、7例在受限環境因本機連線EACCES失敗，包含固定8768的CLI案例，不能列為全套通過。沒有重試固定埠、停止既有服務或取得使用者帳本內容；改回排除入口測試的186核心案例後重新全數通過。入口結果另以本輪先前隨機隔離埠7例為準，固定埠CLI行為沒有本輪通過證據。以上環境失敗保留為限制，不降低產品斷言。
+
+## 本輪代理工具實際操作
+
+全新隔離來源22631／22632，沒有操作8767／8768或使用者帳本。桌面鍵盤在實際產品新增「合成旅行目標」，100元目標／5元已存；10.29元分配明確連結，已存15.29元。375px同來源測試子頁以鍵盤校正16.29元、開啟紀錄；內容可用寬360px、scrollWidth360px無橫向溢出。重新整理回預設記帳，再開規劃可見16.29元及歷史。
+
+Service Worker最終快取`local-first-offline-0.22.0-v1`、18必要本機資源。用合成測試下一版0.22.1（不是發行版）演練：缺圖表資源安裝失敗、兩舊頁仍由0.22.0控制／新worker等待、草稿保留、只關一頁仍等待、全部舊頁關閉後自然啟用；原始列、metadata及完整v7備份不變。沒有skipWaiting、強制刷新或清除帳本。
+
+最後服務已停止且22632無監聽；但最後「同網址離線新頁」的結果尚未觀測。瀏覽器自動核准審查回報工具使用額度已滿，後續測試導覽未執行；不改工具或降低門檻繞過，不把離線資源檢查或自然啟用當成冷啟動通過。
+
+## 使用者先前手動驗證與未驗證
+
+此前使用者在合成隔離設定檔確認過加密檔落地、從同一檔錯密碼拒絕／正確還原、重開及再次下載；屬此前版本的**使用者手動驗證**，不是本輪工具獨立觀測，也不是新增v7目標資料的從檔驗收。
+
+仍需以全新合成設定檔手測v7檔案落地、從同一檔空白還原、重開後目標／連結／紀錄及再次下載；兩份加密檔不要求逐位元相同，核對解密後內容。工具額度恢復後補最終離線冷啟動。實體手機、讀屏、其他瀏覽器、整個瀏覽器程序退出、真磁碟耗盡／損壞、真OAuth與正式資料未驗證。不得據此宣稱正式帳本可搬移或安全認證。無stage／commit／push／PR／tag。
+
+## 目前工作樹修改清單
+
+交付核對為22個已追蹤修改、6個未追蹤，staged為0；包含保留的0.21.1工作。分支與HEAD未變，不stage／commit／push／PR／tag。
+
+- 產品8檔：`local-first/backup.mjs`、`idb.mjs`、`income.mjs`、`ledger.mjs`、`index.html`、`page.mjs`、`sw.js`；`style.css`為保留的0.21.1修改，本輪目標未改CSS。
+- 文件4檔：`README.md`、`CHANGELOG.md`、`docs/local-first-browser-validation.md`、新增`docs/local-first-goals.md`。
+- 新目標測試4檔：`tests/test_local_first_goals.mjs`、`local_first_goals_browser.html`、`local_first_goals_browser.mjs`、`local_first_goals_ui_browser.mjs`。
+- 其餘測試12檔：`tests/local_first_navigation_browser.mjs`、`local_first_offline_settings_browser.mjs`、`local_first_preview.mjs`、`local_first_schedule_migration_browser.mjs`、`local_first_shortcuts_ui_browser.mjs`、`local_first_update_browser.mjs`、`local_first_usage_ui_browser.mjs`、`test_browser_portable_backup.py`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`、`test_local_first_usage_layout.mjs`，以及既有未追蹤`local_first_usability_browser.mjs`。只因版本／結構調整更新相關斷言與fixture，其餘0.21.1工作保留。
+
+---
+
+# 0.21.1 易用性整理 — 2026-10-08
+
+**僅供合成資料測試；IndexedDB 未加密，Python Web 尚未被取代。**本輪由乾淨的 `codex/localhost-web-auth`、HEAD `880bf535216c09f433cccf2e240791db5966b3f6`、已提交 0.21.0 開始；不 stage、commit、push、PR 或 tag。
+
+## 本輪畫面及資料邊界
+
+設定提供獨立使用說明／返回與焦點恢復，隱私另頁、風險與即時錯誤不搬走。原有說明節點移到同一頁；預算、定期支出、收入與分配則搬為同層三區，不複製表單／事件。有效消費預設原生收合；使用期間為起訖與天數，停止追蹤不顯示假終點，原每日成本保留。必填標記有圖例且控制項本身 required；使用期間、分期、編輯付款及加密／未加密備份依狀態呈現。捷徑新增沿用原管理表單與交易；快捷預填、從消費建立及既有設定保留。首頁無總／分類預算才隱藏概況，規劃入口永遠可用。搜尋圖示外觀留待後續。
+
+未修改 ledger／browse／schedule／income／backup／加密核心、IndexedDB v7、JSON v1～v6 或加密封裝 v1，也未更動 Python Web／Discord。純說明與切區測試禁止任何 IndexedDB transaction，原有草稿／收合狀態、19 類資料列與 metadata、完整備份逐位元組相同；分類預算設定、建立捷徑與手動記帳是明確的合成寫入，不稱為帳本不變。
+
+## 本輪修改檔案
+
+- 產品4檔：`local-first/index.html`、`local-first/page.mjs`、`local-first/style.css`、`local-first/sw.js`。
+- 新增1檔：`tests/local_first_usability_browser.mjs`。
+- 既有測試／預覽9檔：`tests/local_first_navigation_browser.mjs`、`tests/local_first_offline_settings_browser.mjs`、`tests/local_first_preview.mjs`、`tests/local_first_shortcuts_ui_browser.mjs`、`tests/local_first_update_browser.mjs`、`tests/local_first_usage_ui_browser.mjs`、`tests/test_local_first_offline.mjs`、`tests/test_local_first_update_status.mjs`、`tests/test_local_first_usage_layout.mjs`。
+- 文件3檔：`README.md`、`CHANGELOG.md`、本文件。共16個既有修改與1個新增檔；index空白、HEAD未變。
+
+## 本輪重新執行
+
+| 驗證 | 實際結果 |
+| --- | --- |
+| TDD 原生畫面 | 7 組先 RED 後 GREEN：help、layout、usage、disclosure、required、budget、shortcuts；涵蓋說明返回、二次點擊、交易禁止、草稿、未設定／分類單獨預算、XSS、條件必填與新增／更改焦點 |
+| 原生畫面回歸 | 60 組：導覽10、捷徑15、使用期間8、定期6、預算4、加密10、批次7；保留衝突、revision、Quota／abort rollback、備份唯讀及安全文字斷言 |
+| Node | 核心178／178；隨機埠入口安全7／7。沙箱首次網路檢查 EACCES 後以隔離隨機埠重新通過。固定8768的CLI占用案例碰到既有服務，未完成，不停止或操作該服務 |
+| Python | 以既有暫存防護 wrapper 執行完整 `tests/run_discord_validation.py`，459／459，35.740秒；正式 DB／Token／.env 檔案禁止、SQLite 僅暫存路徑，dotenv 根目錄載入跳過 |
+| 靜態檢查 | Ruff、產品／相關測試 JS 語法、`git diff --check`；版本與本文件相對連結核對 |
+
+## 實際瀏覽器與離線
+
+只使用本輪隨機命名合成帳本及獨立 `http://127.0.0.1:22101` 來源，不開啟既有8767／8768或使用者帳本。原生自動化是上述測試頁，不等同人工驗收。另以實際產品頁手動新增 1.23 元／3 天的合成消費，設定只有餐飲100元的分類預算；實測滑鼠、Enter展開、設定→說明→返回焦點、三個規劃區、使用期間與每日0.41元顯示。桌面1265px與375px iframe（扣除垂直捲軸後360px）量測 scrollWidth 等於 clientWidth，沒有橫向溢位；窄版切區與返回保留記帳草稿。截圖位於忽略的 `.tmp/usability-planning-desktop.png` 與 `.tmp/usability-planning-375.png`，不納入產品或Git。
+
+快取仍18個白名單資源，名稱 `local-first-offline-0.21.1-v1`。同一合成來源先持有舊候選快取，觀測新版等待且舊頁仍顯示0.21.0；關閉本輪產品舊頁後自然啟用0.21.1，沒有skipWaiting。唯讀檢查驗證新版說明／收合／概況條件靜態內容、移除舊快取與全部資源，19類原始列／metadata／完整備份逐位元組不變。之後停止自己22101預覽並確認無監聽，以同網址新文件離線開啟，仍可進說明／返回、規劃三區，資料比對再次通過。不是重啟整個瀏覽器程序，也不是手機飛航模式；375px檢查為連線時的原生子頁。
+
+更新前請先儲存或自行保留草稿，等資源完整下載，關閉同來源全部舊頁再開；草稿只承諾頁內切區／返回保留，不新增跨重新整理持久化功能。無需初始化帳本或升級 schema。
+
+未驗證實體手機、讀屏、其他瀏覽器／獨立設定檔、瀏覽器程序重啟、固定8768 CLI案例、真實Discord／OAuth、正式帳本與實體備份還原；沒有讀寫正式data.db、Token、.env、既有備份／匯出或使用者資料。
+
+---
+
 # 0.21.0 搜尋與批次互動修正 — 2026-10-08
 
 **僅供合成資料測試；IndexedDB 未加密，Python Web 尚未被取代。**以下為修正後這一輪實際測試；下方初版紀錄另行保留。使用者曾回報舊畫面的交易可用、互動不符預期，不能當成新版畫面的手動驗收。

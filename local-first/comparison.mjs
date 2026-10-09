@@ -1,5 +1,5 @@
 import {isoDate,cents,categoryOptions,pythonStrip,ValidationError} from './rules.mjs';
-import {activeExpenses,literalMatch} from './browse.mjs';
+import {activeExpenses,literalMatch,ordered} from './browse.mjs';
 const dayNumber=date=>Date.parse(date+'T00:00:00Z')/86400000;
 const dateText=day=>new Date(day*86400000).toISOString().slice(0,10);
 // Decimal ROUND_HALF_UP, without converting money or ratios to floating point.
@@ -67,4 +67,69 @@ export function canPlotComparison(result) {
   const limit=BigInt(Number.MAX_SAFE_INTEGER);
   return [result.a,result.b].every(period=>period.total_cents===null||period.total_cents<=limit)&&
     result.categories.every(row=>[row.a_cents,row.b_cents].every(value=>value===null||value<=limit));
+}
+
+function analysisStart(unit,date) {
+  isoDate(date);
+  if(unit==='month')return date.slice(0,7)+'-01';
+  if(unit==='year')return date.slice(0,4)+'-01-01';
+  return dateText(dayNumber(date)-(new Date(date+'T00:00:00Z').getUTCDay()+6)%7);
+}
+function analysisNext(unit,start) {
+  if(unit==='week')return dayNumber(start)+7;
+  const date=new Date(start+'T00:00:00Z');
+  if(unit==='month')date.setUTCMonth(date.getUTCMonth()+1);else date.setUTCFullYear(date.getUTCFullYear()+1);
+  return date.getTime()/86400000;
+}
+export function analysisPeriods(unit,start,end) {
+  if(!['week','month','year'].includes(unit))throw new ValidationError('請選擇週、月或年。');
+  isoDate(start);isoDate(end);
+  if(start>end)throw new ValidationError('開始日期不可晚於結束日期。');
+  const periods=[];
+  for(let first=analysisStart(unit,start);first<=end;) {
+    const next=analysisNext(unit,first),last=dateText(next-1);
+    isoDate(first);isoDate(last);periods.push({start:first,end:last});
+    if(next>dayNumber(end))break;
+    first=dateText(next);
+  }
+  return periods;
+}
+export function analyzeExpenses(state,input,today) {
+  isoDate(today);
+  const validKeys=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
+  if(!validKeys(input,['unit','groups','categories','keyword'])||!Array.isArray(input.groups)||!input.groups.length||!Array.isArray(input.categories)||input.categories.some(name=>typeof name!=='string')||typeof input.keyword!=='string'||[...input.keyword].length>200)
+    throw new ValidationError('請確認分析期間、分類與關鍵字。');
+  const choices=comparisonCategories(state,today);
+  if(input.categories.some(name=>!choices.some(row=>row.name===name)))throw new ValidationError('分類已變動，請重新選擇。');
+  const keyword=pythonStrip(input.keyword),selectedCategories=new Set(input.categories);
+  const rows=activeExpenses(state,today).filter(row=>(!selectedCategories.size||selectedCategories.has(row.category))&&(!keyword||literalMatch(row.note,keyword)));
+  const seen=new Set();let cross_overlap=false;
+  const groups=input.groups.map(group=>{
+    if(!validKeys(group,['name','ranges'])||typeof group.name!=='string'||!group.name.trim()||[...group.name].length>80||!Array.isArray(group.ranges)||!group.ranges.length)throw new ValidationError('每組請填名稱及至少一段期間。');
+    const selected=new Map();let overlap=false;
+    for(const range of group.ranges) {
+      if(!validKeys(range,['start','end']))throw new ValidationError('請確認期間日期。');
+      for(const period of analysisPeriods(input.unit,range.start,range.end)) {
+        if(selected.has(period.start))overlap=true;
+        selected.set(period.start,period);
+      }
+    }
+    const periods=[...selected.values()].sort((a,b)=>a.start.localeCompare(b.start)).map(period=>({...period,started:period.start<=today,unfinished:period.end>today,actual_end:period.start<=today?(period.end<today?period.end:today):null,total_cents:period.start<=today?0n:null,rows:[],categories:new Map()}));
+    const byStart=new Map(periods.map(period=>[period.start,period]));
+    for(const period of periods){if(seen.has(period.start))cross_overlap=true;seen.add(period.start);}
+    for(const row of rows) {
+      const period=byStart.get(analysisStart(input.unit,row.spent_on));if(!period)continue;
+      const value=cents(row.cents);period.total_cents+=value;period.rows.push(row);period.categories.set(row.category,(period.categories.get(row.category)||0n)+value);
+    }
+    for(const period of periods)ordered(period.rows);
+    const started=periods.filter(period=>period.started),consumed=started.filter(period=>period.total_cents>0n),total=started.length?started.reduce((sum,period)=>sum+period.total_cents,0n):null;
+    return {name:group.name,periods,overlap,total_cents:total,selected_count:periods.length,started_count:started.length,consumed_count:consumed.length,
+      highest_cents:started.length?started.reduce((max,period)=>period.total_cents>max?period.total_cents:max,0n):null,
+      lowest_cents:started.length?started.reduce((min,period)=>period.total_cents<min?period.total_cents:min,started[0].total_cents):null,
+      all_average:started.length?{numerator:total,denominator:BigInt(started.length)}:null,consumed_average:consumed.length?{numerator:total,denominator:BigInt(consumed.length)}:null};
+  });
+  const memberships=new Map();
+  for(const group of groups)for(const period of group.periods)memberships.set(period.start,(memberships.get(period.start)||0)+1);
+  for(const group of groups)for(const period of group.periods)period.cross_overlap=memberships.get(period.start)>1;
+  return {unit:input.unit,today,groups,cross_overlap,plottable:groups.every(group=>group.total_cents===null||group.total_cents<=BigInt(Number.MAX_SAFE_INTEGER))};
 }
