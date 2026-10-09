@@ -3,7 +3,7 @@ import { validateInput, expenseOptions, categoryOptions, categoryName, paymentNa
 import { emptyData, readBackup, writeBackup, integerValue, storedInteger, MAX_INTEGER, MAX_BYTES } from './backup.mjs';
 import { STORES, openLedgerDatabase, readSnapshot, scanTransaction, addState, portable, metadata, rowKey } from './idb.mjs';
 import {annualInput,annualItem,annualDefaults} from './annual.mjs';
-import {incomeInput, allocationInput, allocationMonth, defaultAllocation} from './income.mjs';
+import {incomeInput, allocationInput, allocationMonth, defaultAllocation, goalInput} from './income.mjs';
 import {usageInput} from './usage.mjs';
 import {scheduleDue,scheduleModels,schedulePeriod,scheduleNext,scheduleDuePeriods} from './schedule.mjs';
 
@@ -41,7 +41,7 @@ function transaction(db, operation) {
 export function initializeLedger(db) {
   return transaction(db, (tx, state) => {
     if (state !== null) return state;
-    const initial = { format:'local-first-test-ledger', version:7, owner:'local-test-owner', ...emptyData(6),
+    const initial = { format:'local-first-test-ledger', version:8, owner:'local-test-owner', ...emptyData(7),
       payment_sources:[{ id:'p_cash', name:'現金', active:1 }, { id:'p_unspecified', name:'未指定', active:1 }] };
     addState(tx, initial);
     return initial;
@@ -55,7 +55,7 @@ export function restorePortableBackup(db, payload, confirmedMain = false) {
   const parsed = readBackup(payload);
   return transaction(db, (tx, state) => {
     if (state !== null) throw new LedgerError('nonempty', '目標測試帳本已有資料或建立標記，無法還原。');
-    const restored = { format:'local-first-test-ledger', version:7, owner:'local-test-owner', ...emptyData(6), ...parsed.data };
+    const restored = { format:'local-first-test-ledger', version:8, owner:'local-test-owner', ...emptyData(7), ...parsed.data };
     addState(tx, restored);
     return restored;
   });
@@ -250,11 +250,35 @@ export function changeIncome(state, operation, id, expected, form, today) {
   metadata(changed);
   return changed;
 }
-export function changeAllocation(state, month, expected, items) {
+export function changeGoal(state,operation,id,expected,form) {
+  metadata(state);const changed={...emptyData(7),...structuredClone(state)},previous=changed.goals.find(row=>row.id===id);
+  if(!['add','update'].includes(operation))throw new ValidationError('請選擇有效的目標操作。');
+  if(operation==='add'&&previous||operation==='update'&&!previous)throw new LedgerError('conflict','目標已變更，請重新載入後再操作。');
+  financeRevision(previous,expected);const row={id,...goalInput(form,previous),revision:previous?.revision??0};
+  if(previous){incrementRevision(row);changed.goals[changed.goals.indexOf(previous)]=row;}else changed.goals.push(row);
+  if(!previous||row.saved_cents!==previous.saved_cents)changed.goal_actions.push({id:identifier('ga_'),goal_id:id,kind:'manual',month:null,
+    before_cents:previous?.saved_cents??'0',after_cents:row.saved_cents,delta_cents:(cents(row.saved_cents)-cents(previous?.saved_cents??'0')).toString(),contribution_before_cents:null,contribution_after_cents:null});
+  metadata(changed);return changed;
+}
+export function changeAllocation(state, month, expected, items, goalExpected={}) {
   metadata(state); allocationMonth(month);
   const changed = structuredClone(state), previous = changed.monthly_allocations.find(row => row.month === month);
   financeRevision(previous,expected);
   const row = {month,items:allocationInput(items),excluded_recurring_ids:previous?.excluded_recurring_ids || [],revision:previous?.revision ?? 0};
+  const contributions=values=>{const result=new Map();for(const item of values)if(Object.hasOwn(item,'goal_id'))result.set(item.goal_id,(result.get(item.goal_id)??0n)+cents(item.cents));return result;};
+  const before=contributions(previous?.items??[]),after=contributions(row.items);
+  for(const id of new Set([...before.keys(),...after.keys()])) {
+    const goal=changed.goals?.find(item=>item.id===id),old=before.get(id)??0n,value=after.get(id)??0n,delta=value-old;
+    if(typeof id!=='string'||!goal)throw new ValidationError('請選擇有效目標。');
+    financeRevision(goal,goalExpected?.[id]??null);
+    if(goal.completed===1&&(!before.has(id)||delta>0n))throw new ValidationError('已完成目標不可新增分配；請先更改目標狀態。');
+    if(!delta)continue;
+    const total=cents(goal.saved_cents)+delta;
+    if(total<0n)throw new ValidationError('已存總額將低於 0，請先校正目標已存總額；分配沒有變更。');
+    if(total>MAX_INTEGER||value>MAX_INTEGER)throw new ValidationError('目標金額超出容量上限。');
+    changed.goal_actions.push({id:identifier('ga_'),goal_id:id,kind:'allocation',month,before_cents:goal.saved_cents,after_cents:total.toString(),delta_cents:delta.toString(),contribution_before_cents:old.toString(),contribution_after_cents:value.toString()});
+    goal.saved_cents=total.toString();incrementRevision(goal);
+  }
   if (previous) { incrementRevision(row); changed.monthly_allocations[changed.monthly_allocations.indexOf(previous)] = row; }
   else changed.monthly_allocations.push(row);
   metadata(changed); return changed;
@@ -283,7 +307,8 @@ const financeWrite = (db, change) => transaction(db,(tx,state) => {
   const changed = change(state); saveSettings(tx,state,changed); return changed;
 });
 export const updateIncome = (db,operation,id,expected,form) => financeWrite(db,state => changeIncome(state,operation,id,expected,form,taiwanToday()));
-export const updateAllocation = (db,month,expected,items) => financeWrite(db,state => changeAllocation(state,month,expected,items));
+export const updateGoal = (db,operation,id,expected,form) => financeWrite(db,state=>changeGoal(state,operation,id,expected,form));
+export const updateAllocation = (db,month,expected,items,goals={}) => financeWrite(db,state => changeAllocation(state,month,expected,items,goals));
 export const excludeSuggestion = (db,month,id,scope,expected) => financeWrite(db,state => changeSuggestion(state,month,id,scope,expected,taiwanToday()));
 
 export function shortcutDraft(state,id,expectedRevision,today) {

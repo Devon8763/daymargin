@@ -109,6 +109,26 @@ process.stdout.write(writeBackup(portable(state)));
         for table in ('expenses', 'expense_actions', 'assets', 'ai_preferences', 'users'):
             self.assertEqual(after[table], before[table])
 
+    def test_goal_json_v7_safely_rejects_in_python_without_changes(self):
+        code = """
+import {emptyData,writeBackup} from './local-first/backup.mjs';
+import {changeGoal,changeAllocation} from './local-first/ledger.mjs';
+import {portable} from './local-first/idb.mjs';
+let state={format:'local-first-test-ledger',version:8,owner:'local-test-owner',...emptyData(7)};
+state=changeGoal(state,'add','g_one',null,{name:'合成目標',target_amount:'100',saved_amount:'0',deadline:'',remind:1,completed:0});
+state=changeAllocation(state,'2026-10',null,[{id:'save',name:'目標分配',amount:'.29',goal_id:'g_one'}],{g_one:0});
+process.stdout.write(writeBackup(portable(state)));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['version'], 7)
+        before = self.helper.snapshot()
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            self.helper.bk.read_backup(result.stdout)
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            existing.service.restore_portable_backup('target', result.stdout)
+        self.assertEqual(self.helper.snapshot(), before)
+
     def test_usage_json_v4_safely_rejects_in_python_without_changes(self):
         code = """
 import {emptyData,writeBackup} from './local-first/backup.mjs';

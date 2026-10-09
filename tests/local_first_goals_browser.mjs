@@ -1,0 +1,40 @@
+import * as ledger from '../local-first/ledger.mjs';
+import {emptyData,V6_SECTIONS,readBackup,writeBackup} from '../local-first/backup.mjs';
+import {rowKey,metadata} from '../local-first/idb.mjs';
+import {encryptBackup,decryptBackup} from '../local-first/backup-crypto.mjs';
+const result=document.querySelector('#result'),lines=[],check=(v,m)=>{if(!v)throw new Error(m);};
+const done=tx=>new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onabort=()=>reject(new Error('abort'));});
+const opened=req=>new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(new Error('open'));});
+const form={name:'<img src=x onerror=alert(1)>合成',target_amount:'100',saved_amount:'0',deadline:'',remind:1,completed:0};
+const item=amount=>[{id:'goal',name:'自訂存錢',amount,goal_id:'g_one'}];
+let db,peer,target;
+try {
+  check(location.hostname==='127.0.0.1'&&Number(location.port)>19000,'isolated source required');
+  const oldName='goal-v7-'+crypto.randomUUID(),opening=indexedDB.open(oldName,7);
+  opening.onupgradeneeded=()=>{for(const section of [...V6_SECTIONS,'meta'])opening.result.createObjectStore(section,{keyPath:'key'});};
+  let old=await opened(opening);const oldState={...emptyData(6),format:'local-first-test-ledger',version:7,owner:'local-test-owner'};
+  oldState.monthly_allocations.push({month:'2026-09',items:[{id:'plain',name:'原本分配',cents:'29'}],excluded_recurring_ids:[],revision:0});
+  let tx=old.transaction([...V6_SECTIONS,'meta'],'readwrite');for(const section of V6_SECTIONS)for(const [position,row]of(section==='settings'?[oldState.settings]:oldState[section]).entries())tx.objectStore(section).add({key:rowKey(section,row),position,value:row});
+  for(const [key,value]of Object.entries(metadata(oldState)))tx.objectStore('meta').add({key,value});await done(tx);old.close();
+  db=await ledger.openDatabase(oldName);check(db.version===8,'v8 required');check(new TextDecoder().decode(await ledger.exportPortableBackup(db))===new TextDecoder().decode(writeBackup({format:'life-ledger-backup',version:2,data:Object.fromEntries(Object.entries(emptyData(2)).map(([key])=>[key,oldState[key]]))})),'migration changed bytes');
+  lines.push('v7 to v8 upgrade keeps prior allocation/backup bytes and adds empty goal stores atomically');
+  await ledger.updateGoal(db,'add','g_one',null,form);peer=await ledger.openDatabase(oldName);
+  let state=await ledger.updateAllocation(db,'2026-10',null,item('.29'),{g_one:0});check(state.goals[0].saved_cents==='29','exact linked total');
+  const bytes=()=>ledger.exportPortableBackup(db).then(x=>new TextDecoder().decode(x));
+  const reject=async task=>{const before=await bytes();let failed=false;try{await task();}catch{failed=true;}check(failed&&await bytes()===before,'partial data or unexpected success');};
+  await reject(()=>ledger.updateAllocation(peer,'2026-10',null,item('.99'),{g_one:0}));
+  await reject(()=>ledger.updateGoal(peer,'update','g_one',0,form));
+  const operations=await Promise.allSettled([ledger.updateAllocation(db,'2026-10',0,item('.30'),{g_one:1}),ledger.updateAllocation(peer,'2026-10',0,item('.31'),{g_one:1})]);check(operations.filter(x=>x.status==='fulfilled').length===1,'race lost protection');
+  lines.push('same-month and manual peer revisions reject; two simultaneous allocations have exactly one winner');
+  const fault=(database,abort,after)=>({name:database.name,transaction(...args){const tx=database.transaction(...args),objectStore=tx.objectStore.bind(tx);let n=0;tx.objectStore=key=>{const store=objectStore(key),put=store.put.bind(store);store.put=(...values)=>{const req=put(...values);if(++n===after){if(abort)req.addEventListener('success',()=>tx.abort());else throw new DOMException('synthetic','QuotaExceededError');}return req;};return store;};return tx;}});
+  for(const abort of [false,true]){state=await ledger.readLedger(db);await reject(()=>ledger.updateAllocation(fault(db,abort,2),'2026-10',state.monthly_allocations.find(x=>x.month==='2026-10').revision,item('.40'),{g_one:state.goals[0].revision}));state=await ledger.readLedger(db);await reject(()=>ledger.updateGoal(fault(db,abort,2),'update','g_one',state.goals[0].revision,{...form,saved_amount:'5'}));}
+  lines.push('mid-write quota and request-success abort roll back goal/allocation/actions/metadata together');
+  const payload=await ledger.exportPortableBackup(db),password='synthetic-goal-password';check(readBackup(payload).version===7,'v7 required');const first=await encryptBackup(payload,password),second=await encryptBackup(payload,password);check(new TextDecoder().decode(first)!==new TextDecoder().decode(second),'random encryption parameters');
+  check(new TextDecoder().decode(await decryptBackup(first,password))===new TextDecoder().decode(payload),'encrypted bytes changed');
+  let failed=false;try{await decryptBackup(first,'wrong');}catch{failed=true;}check(failed,'wrong password accepted');
+  target=await ledger.openDatabase(ledger.DB_NAME+'-portable-checks');await ledger.restorePortableBackup(target,await decryptBackup(first,password));check(new TextDecoder().decode(await ledger.exportPortableBackup(target))===new TextDecoder().decode(payload),'restore mismatch');
+  failed=false;try{await ledger.restorePortableBackup(target,payload);}catch{failed=true;}check(failed,'nonempty accepted');target.close();target=await ledger.openDatabase(ledger.DB_NAME+'-portable-checks');check(new TextDecoder().decode(await ledger.exportPortableBackup(target))===new TextDecoder().decode(payload),'reopen mismatch');
+  lines.push('JSON v7 encrypted roundtrip, fresh blank restore/reopen and nonempty refusal preserve exact relationships and action order');
+  const before=await bytes();await ledger.readLedger(db);check(await bytes()===before,'readonly changed data');lines.push('readonly goal view preserves full backup bytes');
+  result.textContent='PASS：'+lines.length+' 組目標原生交易\n'+lines.join('\n');
+}catch(error){result.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{db?.close();peer?.close();target?.close();}

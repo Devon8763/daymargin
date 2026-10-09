@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.21.0</p>
+  <p id="page-version">目前使用頁面版本：0.24.1</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -38,7 +38,7 @@
       <h3>解密備份</h3>
       <p>密碼只用來解密此備份；忘記密碼無法取回。驗證完成並確認後才會還原。</p>
       <form id="decrypt-form" novalidate autocomplete="off">
-        <label>備份密碼<input id="restore-password" type="password" maxlength="1024" autocomplete="off"></label>
+        <label>備份密碼<input id="restore-password" type="password" required maxlength="1024" autocomplete="off"></label>
         <p id="restore-password-error" role="alert"></p>
         <div class="buttons"><button id="decrypt-backup" type="submit">解密並驗證</button><button id="cancel-decrypt" type="button">取消解密</button></div>
       </form>
@@ -54,12 +54,26 @@
   <div id="view-record" data-view="record" role="region" aria-labelledby="view-record-title"><h2 data-search-feature id="view-record-title" tabindex="-1">記帳</h2><div id="home-search-entry" class="site-search-entry"><label><span class="sr-only">全站搜尋關鍵字</span><input id="home-search-keyword" type="search" placeholder="搜尋帳目、功能、分類或標籤（Enter）" autocomplete="off"></label><button type="button" data-search-open aria-label="開啟全站搜尋（記帳）"><span aria-hidden="true">🔍</span></button></div></div>
   <div id="view-planning" data-view="planning" role="region" aria-labelledby="view-planning-title" hidden><h2 data-search-feature id="view-planning-title" tabindex="-1">規劃</h2><button type="button" data-search-open aria-label="開啟全站搜尋（規劃）"><span aria-hidden="true">🔍</span></button></div>
   <div id="view-analysis" data-view="analysis" role="region" aria-labelledby="view-analysis-title" hidden><h2 data-search-feature id="view-analysis-title" tabindex="-1">分析</h2><button type="button" data-search-open aria-label="開啟全站搜尋（分析）"><span aria-hidden="true">🔍</span></button></div>
-  <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 data-search-feature id="view-settings-title" tabindex="-1">設定</h2><button type="button" data-search-open aria-label="開啟全站搜尋（設定）"><span aria-hidden="true">🔍</span></button><p><a href="#privacy-view" data-privacy-link>隱私與資料</a></p></div>
+  <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 data-search-feature id="view-settings-title" tabindex="-1">設定</h2><button type="button" data-search-open aria-label="開啟全站搜尋（設定）"><span aria-hidden="true">🔍</span></button><p><a href="#instructions-view" data-help-link>使用說明</a></p></div>
+  <section id="home-edit" data-settings-section="home" aria-labelledby="home-edit-title">
+    <h2 id="home-edit-title" data-search-feature>編輯首頁</h2>
+    <p>只保存在此瀏覽器、此網址來源，不屬於帳本或完整備份。搜尋與記帳必須顯示；其餘只隱藏首頁，不刪資料。摘要預設在下次重新開啟套用。</p>
+    <form id="home-preferences-form" novalidate>
+      <ul id="home-order"></ul>
+      <label>首頁最多顯示的操作捷徑數<input id="home-shortcut-count" type="number" min="0" step="1" value="3" required></label>
+      <fieldset id="home-expansion-settings"><legend>首頁摘要預設展開（未勾選為收合）</legend></fieldset>
+      <button id="save-home-preferences" type="submit">儲存首頁偏好</button>
+    </form>
+    <p id="home-preferences-status" role="status" aria-live="polite"></p>
+    <p><a id="home-shortcut-manager" href="#shortcut-settings">操作捷徑管理</a></p><div id="home-shortcut-settings-host"></div>
+  </section>
+  <section id="home-goals" aria-label="存錢目標"><details id="home-goals-details"><summary>存錢目標</summary><ul id="home-goals-list"></ul><a href="#goal-planning">管理存錢目標</a></details></section>
   <div id="view-search" data-view="search" role="region" aria-labelledby="view-search-title" hidden><h2 id="view-search-title" tabindex="-1">全站搜尋</h2><button id="site-search-back" type="button">返回原區域</button></div>
   <p id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a></p>
   <section aria-labelledby="form-title">
     <h2 id="form-title" data-search-feature>記錄消費</h2>
     <form id="expense-form">
+      <p class="required-legend"><span class="required-example" aria-hidden="true">*</span> 代表必填</p>
       <fieldset id="fields" disabled>
         <div class="form-grid">
           <label>金額（元）<input name="amount" type="text" inputmode="decimal" required autocomplete="off"></label>
@@ -70,20 +84,20 @@
         </div>
         <p id="expense-date-note" hidden>自動來源消費的原入帳日期不可更改；本次操作只影響這一筆消費。</p>
         <details id="usage-inputs">
-          <summary>使用期間（選填）</summary>
-          <p>起始日算第 1 天，只是使用估計，不代表實際庫存。未填天數維持一般記帳；清空已保存的天數可停止追蹤，不刪除消費。</p>
+          <summary>使用期間</summary>
+          <p data-help-topic="記帳與使用期間">起始日算第 1 天，只是使用估計，不代表實際庫存。未填天數維持一般記帳；清空已保存的天數可停止追蹤，不刪除消費。</p>
           <div class="form-grid">
             <label>使用起始日<input name="usage_started_on" type="date"></label>
             <label>可使用天數<input name="usage_days" type="number" min="1" max="36500" step="1"></label>
-            <label class="usage-checkbox"><input name="usage_remind" type="checkbox" checked>開啟快結束提示</label>
+            <label class="usage-checkbox"><input name="usage_remind" type="checkbox" checked>開啟提示</label>
             <label>提前提醒天數<input name="usage_reminder_days" type="number" min="0" max="36500" step="1" value="7"></label>
             <label class="usage-checkbox"><input name="usage_show_daily_cost" type="checkbox">顯示每日平均成本（約數，元／天）</label>
           </div>
           <button id="usage-stop" type="button" hidden>停止追蹤／不再提醒（儲存後生效）</button>
         </details>
         <details id="expense-tags">
-          <summary>加入標籤（選填）</summary>
-          <p>一次加入一個名稱；前後空白與開頭 #／＃ 會忽略，大小寫及不同文字仍區分。新標籤只在消費成功儲存時建立，不影響分類或金額。</p>
+          <summary>加入標籤</summary>
+          <p data-help-topic="標籤">區分大小寫、忽略前後空白與開頭 #／＃，一次新增一個標籤</p>
           <label>標籤名稱<input id="tag-input" type="text" list="tag-suggestions" autocomplete="off"></label>
           <datalist id="tag-suggestions"></datalist>
           <button id="tag-draft-add" type="button">加入這筆消費（儲存後生效）</button>
@@ -98,16 +112,17 @@
     <div id="shortcut-quick" class="buttons"></div>
     <details id="shortcut-settings">
       <summary data-search-feature>操作捷徑管理</summary>
-      <p>首頁依手動順序顯示最多 3 個啟用捷徑。點選只替換未儲存的記帳欄位，不帶使用期間；請確認後記錄消費。設定與來源消費各自獨立。</p>
+      <button id="shortcut-new" type="button">新增捷徑</button>
+      <p data-help-topic="操作捷徑">首頁依手動順序顯示最多 3 個啟用捷徑。點選只替換未儲存的記帳欄位，不帶使用期間；請確認後記錄消費。設定與來源消費各自獨立。</p>
       <form id="shortcut-form" novalidate>
         <fieldset id="shortcut-fields">
           <h3 id="shortcut-form-title">新增捷徑</h3>
           <div class="form-grid">
-            <label>捷徑名稱<input name="name" type="text" autocomplete="off"></label>
-            <label>捷徑消費項目<input name="note" type="text" autocomplete="off"></label>
-            <label>捷徑分類<select name="category"></select></label>
-            <label>捷徑付款方式<select name="payment_source_id"></select></label>
-            <label>預設金額（元，選填）<input name="amount" type="text" inputmode="decimal" autocomplete="off"></label>
+            <label>捷徑名稱<input name="name" type="text" autocomplete="off" required></label>
+            <label>捷徑消費項目<input name="note" type="text" autocomplete="off" required></label>
+            <label>捷徑分類<select name="category" required></select></label>
+            <label>捷徑付款方式<select name="payment_source_id" required></select></label>
+            <label>預設金額（元）<input name="amount" type="text" inputmode="decimal" autocomplete="off"></label>
           </div>
           <div class="buttons"><button id="save-shortcut" type="submit">儲存捷徑</button><button id="cancel-shortcut" type="button">取消／清空捷徑草稿</button></div>
         </fieldset>
@@ -118,7 +133,7 @@
   </section>
   <section id="ending-soon" aria-labelledby="ending-soon-title" hidden>
     <details><summary id="ending-soon-title">快結束</summary>
-      <p>使用天數是估計；分期顯示未處理期數（撤銷的已入帳期仍算已處理）。只供查看，不補記消費。</p>
+      <p data-help-topic="記帳與使用期間">使用天數是估計；分期顯示未處理期數（撤銷的已入帳期仍算已處理）。只供查看，不補記消費。</p>
       <ul id="ending-soon-list"></ul>
     </details>
   </section>
@@ -134,27 +149,27 @@
   <section id="schedule-overview" aria-labelledby="schedule-overview-title">
     <h2 id="schedule-overview-title" data-search-feature>本月定期支出</h2>
     <p id="schedule-total"></p>
-    <p>依預定付款月份歸屬，已記錄採有效實付金額；不是銀行餘額，也不是額外消費。略過或已刪除的消費不計入。</p>
+    <p data-help-topic="定期支出">依預定付款月份歸屬，已記錄採有效實付金額；不是銀行餘額，也不是額外消費。略過或已刪除的消費不計入。</p>
     <details><summary>查看本月明細</summary><ul id="schedule-month-items"></ul></details>
   </section>
   <section aria-label="本機帳本設定">
     <div id="ledger-settings">
       <details id="fixed-settings">
         <summary data-search-feature>定期支出</summary>
-        <p>固定支出、訂閱、分期及年度費用統一管理。可每隔指定日、週、月或年安排；月／年遇短月取月底。類型及分期總數建立後保留。</p>
-        <p>更改從下一個尚未到期且未保存的期數生效，已到期及已保存期數保留原值。只有逐期記錄才入帳；這是記帳，不代表銀行已扣款。開頁、搜尋、月曆及匯出不會補記。</p>
+        <p data-help-topic="定期支出">固定支出、訂閱、分期及年度費用統一管理。可每隔指定日、週、月或年安排；月／年遇短月取月底。類型及分期總數建立後保留。</p>
+        <p data-help-topic="定期支出">更改從下一個尚未到期且未保存的期數生效，已到期及已保存期數保留原值。只有逐期記錄才入帳；這是記帳，不代表銀行已扣款。開頁、搜尋、月曆及匯出不會補記。</p>
         <form id="fixed-form" novalidate>
           <fieldset id="fixed-fields">
             <h3 id="fixed-form-title">新增固定支出</h3>
             <div class="form-grid">
-              <label>支出類型<select name="kind"><option value="固定">固定支出</option><option value="訂閱">訂閱</option><option value="分期">分期</option><option value="年度費用">年度費用</option></select></label>
-              <label>消費項目<input name="name" type="text" autocomplete="off"></label>
-              <label>金額（元）<input name="amount" type="text" inputmode="decimal" autocomplete="off"></label>
-              <label>分類<select name="category"></select></label>
-              <label>預設付款方式<select name="payment_source_id"></select></label>
-              <label>首次付款／未來安排首期日期<input name="first_due_on" type="date"></label>
-              <label>每隔<input name="every" type="number" min="1" step="1" value="1"></label>
-              <label>頻率單位<select name="unit"><option value="day">日</option><option value="week">週</option><option value="month" selected>月</option><option value="year">年</option></select></label>
+              <label>支出類型<select name="kind" required><option value="固定">固定支出</option><option value="訂閱">訂閱</option><option value="分期">分期</option><option value="年度費用">年度費用</option></select></label>
+              <label>消費項目<input name="name" type="text" autocomplete="off" required></label>
+              <label>金額（元）<input name="amount" type="text" inputmode="decimal" required autocomplete="off"></label>
+              <label>分類<select name="category" required></select></label>
+              <label>預設付款方式<select name="payment_source_id" required></select></label>
+              <label>首次付款／未來安排首期日期<input name="first_due_on" type="date" required></label>
+              <label>每隔<input name="every" type="number" min="1" step="1" value="1" required></label>
+              <label>頻率單位<select name="unit" required><option value="day">日</option><option value="week">週</option><option value="month" selected>月</option><option value="year">年</option></select></label>
               <div id="installment-fields" hidden><label>總期數（1～600）<input name="periods" type="number" min="1" max="600" step="1" disabled></label></div>
             </div>
             <div class="buttons"><button id="save-fixed" type="submit">新增固定支出</button><button id="cancel-fixed-edit" type="button" hidden>取消更改固定支出</button></div>
@@ -163,14 +178,14 @@
         <p id="fixed-error" role="alert"></p>
         <ul id="fixed-list"></ul><p id="fixed-empty">尚無定期支出。</p>
         <h3>各期處理狀態</h3>
-        <p>未到期只可查看。到期可按預設值記錄，或帶入記帳表單更改實付資料；取消不會略過。已略過可恢復同一期，已記錄消費即使刪除也不會重建。</p>
+        <p data-help-topic="定期支出">未到期只可查看。到期可按預設值記錄，或帶入記帳表單更改實付資料；取消不會略過。已略過可恢復同一期，已記錄消費即使刪除也不會重建。</p>
         <div id="schedule-periods"><ul id="schedule-recent"></ul><details id="schedule-older"><summary>其他期數</summary><ul></ul></details></div>
         <button id="schedule-more" type="button" hidden>顯示更多期數</button>
       </details>
       <details id="budget-settings">
         <summary data-search-feature>預算</summary>
         <p><a id="budget-category-link" href="#category-management-title">更改分類名稱</a></p>
-        <p>新預算限正整數台幣，最多十億元。總預算須至少等於所有分類預算加總（含停用分類）；未設定總預算時可單獨設定分類預算。</p>
+        <p data-help-topic="預算">新預算限正整數台幣，最多十億元。總預算須至少等於所有分類預算加總（含停用分類）；未設定總預算時可單獨設定分類預算。</p>
         <fieldset id="budget-fields">
           <ul id="budget-setting-list"></ul>
           <button id="budget-sum" type="button">設為分類預算加總</button>
@@ -178,24 +193,27 @@
         <p id="budget-error" role="alert"></p>
       </details>
       <fieldset id="settings-fields">
+        <section data-settings-section="category">
         <h3 id="category-management-title" tabindex="-1" data-search-feature>分類管理</h3>
         <p><a id="category-budget-back" href="#budget-settings">返回預算</a></p>
         <form id="category-add" novalidate>
-          <label>新增分類名稱<input name="name" type="text" autocomplete="off"></label>
+          <label>新增分類名稱<input name="name" type="text" autocomplete="off" required></label>
           <button type="submit">新增分類</button>
         </form>
         <ul id="category-list" class="settings-list"></ul>
+        </section><section data-settings-section="payment">
         <h3 id="payment-management-title" data-search-feature>付款方式</h3>
         <form id="payment-add" novalidate>
-          <label>新增付款方式名稱<input name="name" type="text" autocomplete="off"></label>
+          <label>新增付款方式名稱<input name="name" type="text" autocomplete="off" required></label>
           <button type="submit">新增付款方式</button>
         </form>
         <ul id="payment-list" class="settings-list"></ul>
+        </section>
       </fieldset>
       <p id="settings-error" role="alert"></p>
     </div>
   </section>
-  <section aria-labelledby="list-title"><h2 id="list-title" data-search-feature>有效消費</h2><ul id="expenses"></ul><p id="empty" hidden>尚無有效消費。</p></section>
+  <section aria-labelledby="list-title"><details id="expenses-disclosure"><summary id="list-title" data-search-feature>有效消費</summary><ul id="expenses"></ul><p id="empty" hidden>尚無有效消費。</p></details></section>
   <section aria-labelledby="search-title">
     <h2 id="search-title">搜尋條件</h2>
     <form id="search-form" novalidate>
@@ -208,7 +226,7 @@
     </form>
     <p id="search-error" role="alert"></p>
     <p id="search-progress" role="status" aria-live="polite"></p>
-    <p>未輸入關鍵字可展開瀏覽；輸入後顯示符合項目。日期適用於帳目及分類／標籤相關消費。</p>
+    <p data-help-topic="搜尋與分析">未輸入關鍵字可展開瀏覽；輸入後顯示符合項目。日期適用於帳目及分類／標籤相關消費。</p>
     <div id="search-groups" hidden>
     <p id="site-search-counts" role="status" aria-live="polite"></p>
     <details id="search-functions-group"><summary id="search-functions-heading">功能（0）</summary><ul id="search-functions"></ul></details>
@@ -251,7 +269,26 @@
     </div>
     <p id="calendar-error" role="alert"></p>
   </section>
+  <section id="expense-analysis" aria-labelledby="analysis-title">
+    <h2 id="analysis-title" data-search-feature>支出分析</h2>
+    <form id="analysis-form" novalidate>
+      <div class="form-grid">
+        <label>操作<select name="mode"><option value="compare">自選期間比較</option><option value="trend">連續區間趨勢</option></select></label>
+        <label>時間單位<select name="unit"><option value="week">週（週一開始）</option><option value="month" selected>月</option><option value="year">年</option></select></label>
+        <label>消費項目關鍵字（最多200字）<input name="keyword" type="search" autocomplete="off"></label>
+        <label>主要圖表<select name="chart"><option value="bar">長條比較</option><option value="line">時間趨勢折線</option><option value="pie">所選期間分類占比</option></select></label>
+      </div>
+      <fieldset id="analysis-categories"><legend>共同分類篩選（未勾選為全部，含停用／歷史）</legend></fieldset>
+      <p>以所選單位的完整週、月或年統計；日期用來選取所在期間。各組共用分類及關鍵字，未來不預測。</p>
+      <div id="analysis-trend" class="form-grid" hidden><label>區間開始日期<input name="trend_start" type="date"></label><label>區間結束日期<input name="trend_end" type="date"></label></div>
+      <div id="analysis-custom"><div id="analysis-groups"></div><button id="analysis-add-group" type="button">新增比較組</button></div>
+      <div class="buttons"><button id="analysis-preset" type="button">本月與上月</button><button id="analysis-submit" type="submit">分析支出</button></div>
+    </form>
+    <p id="analysis-error" role="alert"></p>
+    <div id="analysis-results" aria-live="polite"></div>
+  </section>
   <section id="expense-comparison" aria-labelledby="comparison-title">
+    <details id="legacy-comparison"><summary>既有兩期間比較</summary>
     <h2 id="comparison-title" data-search-feature>支出比較</h2>
     <form id="comparison-form" novalidate>
       <div class="form-grid">
@@ -260,17 +297,18 @@
         <label>期間 B 開始日期<input name="b_start" type="date" required></label>
         <label>期間 B 結束日期<input name="b_end" type="date" required></label>
         <label>比較分類<select name="category" id="comparison-category"><option value="">全部分類</option></select></label>
-        <label>比較消費項目關鍵字（選填，最多 200 字）<input name="keyword" type="search" autocomplete="off"></label>
+        <label>比較消費項目關鍵字（最多 200 字）<input name="keyword" type="search" autocomplete="off"></label>
       </div>
-      <p>日期包含兩端；兩段套用相同條件，只統計截至台灣今天已入帳的有效生活消費，不補記或預測。</p>
+      <p data-help-topic="搜尋與分析">日期包含兩端；兩段套用相同條件，只統計截至台灣今天已入帳的有效生活消費，不補記或預測。</p>
       <button type="submit">比較支出</button>
     </form>
     <p id="comparison-error" role="alert"></p>
     <div id="comparison-results" aria-live="polite"></div>
+    </details>
   </section>
   <section id="tag-analysis" aria-labelledby="tag-analysis-title">
     <h2 id="tag-analysis-title" data-search-feature>單一標籤消費</h2>
-    <p>只查看一個標籤；同一筆消費可出現在多個標籤，請勿把不同標籤總額相加。只統計截至台灣今天已入帳、有效的生活消費。</p>
+    <p data-help-topic="搜尋與分析">只查看一個標籤；同一筆消費可出現在多個標籤，請勿把不同標籤總額相加。只統計截至台灣今天已入帳、有效的生活消費。</p>
     <form id="tag-query" novalidate>
       <div class="form-grid">
         <label>查看標籤<select name="tag_id" required></select></label>
@@ -281,18 +319,39 @@
     <p id="tag-query-error" role="alert"></p><p id="tag-summary" role="status"></p>
     <ul id="tag-results"></ul><button id="tag-more" type="button" hidden>顯示更多標籤帳目</button>
   </section>
-  <section id="tag-settings" aria-labelledby="tag-settings-title">
+  <section id="tag-settings" data-settings-section="tags" aria-labelledby="tag-settings-title">
     <h2 id="tag-settings-title" data-search-feature>消費標籤管理</h2>
-    <p>不再顯示只隱藏選單及建議，舊關聯與統計保留；移除須確認，會從所有帳目取消此標籤，但不刪帳目。</p>
+    <p data-help-topic="標籤">不再顯示只隱藏選單及建議，舊關聯與統計保留；移除須確認，會從所有帳目取消此標籤，但不刪帳目。</p>
     <fieldset id="tag-fields">
-      <form id="tag-add" novalidate><label>新增標籤名稱<input name="name" type="text" autocomplete="off"></label><button type="submit">新增標籤</button></form>
+      <form id="tag-add" novalidate><label>新增標籤名稱<input name="name" type="text" autocomplete="off" required></label><button type="submit">新增標籤</button></form>
       <ul id="tag-list"></ul>
     </fieldset><p id="tag-settings-error" role="alert"></p>
+  </section>
+  <section aria-label="目標">
+    <details id="goal-planning">
+      <summary data-search-feature>目標</summary>
+      <p data-help-topic="存錢目標">這是手動紀錄與用途規劃，不是銀行餘額。手動調整設定當下已存總額；之後連結分配只加減儲存差額。若差額使總額低於 0，整筆拒絕，請先校正目標。達成金額或期限不會自動完成。</p>
+      <form id="goal-form" novalidate>
+        <fieldset id="goal-fields">
+          <h3 id="goal-form-title">新增目標</h3>
+          <div class="form-grid">
+            <label>目標名稱<input name="name" type="text" maxlength="200" required autocomplete="off"></label>
+            <label>目標金額（元）<input name="target_amount" type="text" inputmode="decimal" required autocomplete="off"></label>
+            <label>目前已存總額（元）<input name="saved_amount" type="text" inputmode="decimal" value="0" required autocomplete="off"></label>
+            <label>目標期限（留空不限時）<input name="deadline" type="date"></label>
+            <label class="usage-checkbox"><input name="remind" type="checkbox" checked>查看時顯示期限提示</label>
+            <label class="usage-checkbox"><input name="completed" type="checkbox">已完成（自行確認）</label>
+          </div>
+          <div class="buttons"><button id="goal-save" type="submit">儲存目標</button><button id="goal-cancel" type="button">取消／清空目標草稿</button></div>
+        </fieldset>
+      </form>
+      <p id="goal-error" role="alert"></p><ul id="goal-list" aria-live="polite"></ul>
+    </details>
   </section>
   <section aria-label="收入與每月分配">
     <details id="income-planning">
       <summary data-search-feature>收入與每月分配</summary>
-      <p>收入是已收到的錢；分配只是用途規劃，不是消費、轉帳或實際存款餘額。</p>
+      <p data-help-topic="收入與分配">收入是已收到的錢；分配只是用途規劃，不是消費、轉帳或實際存款餘額。</p>
       <fieldset id="income-fields">
         <form id="income-month-form" novalidate><label>查看收入與分配月份<input name="month" type="month" required></label><button type="submit">查看月份</button></form>
         <div id="income-summary" aria-live="polite"></div>
@@ -307,31 +366,32 @@
         </form>
         <ul id="income-list"></ul>
         <h3>已規劃的分配</h3>
-        <p>未儲存時只有生活開銷草稿；不自動複製上月或套用建議。0 元表示暫不分配。</p>
+        <p data-help-topic="收入與分配">未儲存時只有生活開銷草稿；不自動複製上月或套用建議。0 元表示暫不分配。</p>
         <form id="allocation-form" novalidate>
           <div id="allocation-items"></div>
           <div class="buttons"><button id="add-allocation-item" type="button">新增分配項目</button><button type="submit">儲存本月分配</button></div>
         </form>
         <h3>生活開銷建議</h3>
-        <p>本月應扣款的啟用固定／訂閱／分期，含尚未到期項目，只供規劃參考；這裡不補記消費。排除建議不會停用扣款規則。</p>
+        <p data-help-topic="收入與分配">本月應扣款的啟用固定／訂閱／分期，含尚未到期項目，只供規劃參考；這裡不補記消費。排除建議不會停用扣款規則。</p>
         <p id="income-suggestion-total"></p>
         <button id="apply-income-suggestion" type="button">將建議合計填入生活開銷草稿</button>
         <details><summary>查看建議明細與本月排除</summary><ul id="income-suggestions"></ul></details>
         <h3>年度費用建議預留</h3>
-        <p>依目前年度設定計算的每月參考額，向上取至分；不是已存入或尚欠金額，不會套用分配。往月只保留已儲存規劃，不重算年度參考額。</p>
+        <p data-help-topic="收入與分配">依目前年度設定計算的每月參考額，向上取至分；不是已存入或尚欠金額，不會套用分配。往月只保留已儲存規劃，不重算年度參考額。</p>
         <p id="annual-reserve-total"></p>
         <details><summary>查看年度費用每月參考明細</summary><ul id="annual-reserve-items"></ul></details>
       </fieldset>
       <p id="income-error" role="alert"></p>
     </details>
   </section>
-  <section id="data-management" aria-labelledby="data-management-title" hidden>
+  <section id="data-management" data-settings-section="data" aria-labelledby="data-management-title" hidden>
     <h2 id="data-management-title" data-search-feature>資料管理</h2>
+    <details id="data-privacy"><summary>隱私與資料</summary></details>
     <p id="storage-status" role="status">正在查詢本來源的瀏覽器儲存狀態……</p>
     <button id="request-persistence" type="button" disabled>申請持久保存</button>
     <p>本機帳本保存在此瀏覽器來源；獲准持久保存仍可能遺失，請手動加密備份並自行確認檔案存在。</p>
     <button id="download-backup" type="button" data-search-feature>下載完整備份</button>
-    <p><a href="#privacy-view" data-privacy-link>隱私與資料：帳本及備份存在哪裡？</a></p>
+    <p><a href="#data-privacy">隱私與資料：帳本及備份存在哪裡？</a></p>
     <p>請在重要操作後手動備份。發出下載要求不代表檔案已保存，請確認檔案存在，並妥善保管備份與密碼。</p>
     <details id="csv-export">
       <summary data-search-feature>CSV 支出匯出</summary>
@@ -373,15 +433,22 @@
     </div>
   </section>
   </div>
+  <section id="instructions-view" aria-labelledby="instructions-title" hidden>
+    <h2 id="instructions-title" tabindex="-1">使用說明</h2><button id="instructions-back" type="button">返回設定</button>
+    <p>「*」代表必填；其他欄位可依需要使用。隱私、備份／還原風險及當下錯誤仍在原入口顯示。</p>
+    <div id="instructions-content"></div>
+  </section>
   <section id="privacy-view" aria-labelledby="privacy-title" hidden>
     <h2 id="privacy-title" tabindex="-1">隱私與資料</h2>
     <button id="privacy-back" type="button">返回設定</button>
+    <div id="privacy-content">
     <p>帳本存在這個瀏覽器設定檔、這個網址的本機儲存空間（IndexedDB）。即使是同一台電腦，換瀏覽器設定檔或網址／連接埠，也可能看不到原帳本；這不代表原資料已被刪除。</p>
     <p>瀏覽器內的帳本本身未加密。能存取這個瀏覽器設定檔的人或程式，可能讀取其中內容；本頁不能防禦本機惡意程式或瀏覽器擴充套件。</p>
     <p>加密完整備份只保護下載的備份檔，不會加密瀏覽器內帳本。請自行確認檔案已下載並保管密碼；發出下載要求不代表檔案已保存。遺失備份密碼，便無法解密，程式沒有密碼取回功能。</p>
     <p>清除網站資料、移除瀏覽器設定檔或換裝置，可能無法再讀取原帳本。已有可用完整備份時，可在另一個全新空白設定檔、相同固定網址還原並核對。原帳本開啟失敗時，請先保留原設定檔，不要清除網站資料或覆蓋原帳本。</p>
     <p>目前版本在瀏覽器內處理記帳與統計，本機服務提供頁面與程式資源。載入及檢查更新時，頁面會向本機服務要求靜態檔案；完整下載後才具備離線能力。目前沒有帳務上傳或雲端同步入口，這不等於對整台電腦、瀏覽器或其他軟體作出絕對不連線、不傳送或不記錄的保證。</p>
     <p>這是本機版本的資料說明，不是對外服務的正式隱私政策或安全認證。僅供合成資料測試，請勿輸入真實帳目；Python Web 尚未被取代。</p>
+    </div>
   </section>
 </main>
 <dialog id="fixed-stop-dialog" aria-labelledby="fixed-stop-title">
@@ -396,7 +463,7 @@
   <p id="settings-summary"></p>
   <form id="settings-form" novalidate>
     <fieldset id="setting-fields">
-      <label id="setting-name-label">新名稱<input id="setting-name" name="name" type="text" autocomplete="off"></label>
+      <label id="setting-name-label">新名稱<input id="setting-name" name="name" type="text" autocomplete="off" required></label>
       <p id="setting-error" role="alert"></p>
       <div class="buttons"><button id="confirm-setting" type="submit">確認</button><button id="cancel-setting" type="button">取消</button></div>
     </fieldset>

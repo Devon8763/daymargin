@@ -6,8 +6,8 @@ const name=ledger.DB_NAME+'-shortcuts-ui-'+crypto.randomUUID(),open=indexedDB.op
 const db=await ledger.openDatabase(),lines=[],today=ledger.taiwanToday();await ledger.initializeLedger(db);
 try {
   await import('../local-first/page.mjs');await wait(()=>!q('#ledger-page').hidden);
-  check(q('#shortcut-settings')?.tagName==='DETAILS'&&!q('#shortcut-settings').open&&q('#shortcut-quick').children.length===1,'Missing compact shortcut entry');
-  const fields=q('#shortcut-form').elements;q('#shortcut-quick button').click();await wait(()=>q('#shortcut-settings').open);
+  check(q('#shortcut-settings')?.tagName==='DETAILS'&&!q('#shortcut-settings').open&&q('#shortcut-quick').children.length===0&&q('#shortcut-new'),'Missing single shortcut management entry');
+  const fields=q('#shortcut-form').elements;q('#shortcut-settings').open=true;q('#shortcut-new').click();await wait(()=>document.activeElement===fields.name);
   const save=async(name,amount='')=>{fields.name.value=name;fields.note.value='合成餐點';fields.amount.value=amount;q('#shortcut-form').requestSubmit();await wait(()=>q('#status').textContent.includes('儲存完成')&&fields.name.value==='');};
   await save('早餐','.29');await save('午餐');await save('晚餐','1');await save('<img src=x onerror=alert(1)>','2');
   check(q('#shortcut-quick button').textContent==='早餐'&&q('#shortcut-quick').children.length===3&&q('#shortcut-list').children.length===4&&!q('#shortcut-list img'),'Top three or XSS');lines.push('collapsed management; four independent settings, only three quick buttons, optional amount, safe text');

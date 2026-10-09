@@ -17,10 +17,21 @@ export function incomeInput(form, today) {
 export function allocationInput(items) {
   if (!Array.isArray(items) || items.length > 100) throw new ValidationError('分配最多 100 個項目。');
   return items.map(item => {
-    if (!item || Object.keys(item).length !== 3 || !['id','name','amount'].every(key => Object.hasOwn(item,key))) throw new ValidationError('分配欄位不符合規則。');
+    if (!item || Object.keys(item).length !== (Object.hasOwn(item,'goal_id')?4:3) || !['id','name','amount'].every(key => Object.hasOwn(item,key))) throw new ValidationError('分配欄位不符合規則。');
     const zero = typeof item.amount === 'string' && /^0+(?:\.0{0,2})?$/.test(item.amount.trim());
-    return {id:item.id, name:incomeName(item.name,30), cents:zero ? '0' : money(item.amount)};
+    return {id:item.id, name:incomeName(item.name,30), cents:zero ? '0' : money(item.amount),...(Object.hasOwn(item,'goal_id')?{goal_id:item.goal_id}:{})};
   });
+}
+export function goalInput(form,previous=null) {
+  if(!form||Object.keys(form).length!==6||!['name','target_amount','saved_amount','deadline','remind','completed'].every(key=>Object.hasOwn(form,key)))throw new ValidationError('目標欄位不符合規則。');
+  if(![0,1].includes(form.remind)||![0,1].includes(form.completed))throw new ValidationError('請選擇有效的目標狀態。');
+  const value=(input,key,zero=false)=>{
+    if(previous){const exact=cents(previous[key]),fraction=(exact%100n).toString().padStart(2,'0').replace(/0+$/,'');
+      if(input===(exact/100n).toString()+(fraction?'.'+fraction:''))return previous[key];}
+    return zero?allocationInput([{id:'saved',name:'已存',amount:input}])[0].cents:money(input);
+  };
+  return {name:incomeName(form.name),target_cents:value(form.target_amount,'target_cents'),saved_cents:value(form.saved_amount,'saved_cents',true),
+    deadline:form.deadline===''?null:isoDate(form.deadline),remind:form.remind,completed:form.completed};
 }
 export function incomeMonth(state, month, today = '9999-12-31') {
   allocationMonth(month); isoDate(today);
