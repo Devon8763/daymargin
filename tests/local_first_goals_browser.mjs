@@ -16,8 +16,8 @@ try {
   oldState.monthly_allocations.push({month:'2026-09',items:[{id:'plain',name:'原本分配',cents:'29'}],excluded_recurring_ids:[],revision:0});
   let tx=old.transaction([...V6_SECTIONS,'meta'],'readwrite');for(const section of V6_SECTIONS)for(const [position,row]of(section==='settings'?[oldState.settings]:oldState[section]).entries())tx.objectStore(section).add({key:rowKey(section,row),position,value:row});
   for(const [key,value]of Object.entries(metadata(oldState)))tx.objectStore('meta').add({key,value});await done(tx);old.close();
-  db=await ledger.openDatabase(oldName);check(db.version===8,'v8 required');check(new TextDecoder().decode(await ledger.exportPortableBackup(db))===new TextDecoder().decode(writeBackup({format:'life-ledger-backup',version:2,data:Object.fromEntries(Object.entries(emptyData(2)).map(([key])=>[key,oldState[key]]))})),'migration changed bytes');
-  lines.push('v7 to v8 upgrade keeps prior allocation/backup bytes and adds empty goal stores atomically');
+  db=await ledger.openDatabase(oldName);check(db.version===10,'v10 required');check(new TextDecoder().decode(await ledger.exportPortableBackup(db))===new TextDecoder().decode(writeBackup({format:'life-ledger-backup',version:2,data:Object.fromEntries(Object.entries(emptyData(2)).map(([key])=>[key,oldState[key]]))})),'migration changed bytes');
+  lines.push('v7 to v10 upgrade keeps prior allocation/backup bytes and adds empty goal stores atomically');
   await ledger.updateGoal(db,'add','g_one',null,form);peer=await ledger.openDatabase(oldName);
   let state=await ledger.updateAllocation(db,'2026-10',null,item('.29'),{g_one:0});check(state.goals[0].saved_cents==='29','exact linked total');
   const bytes=()=>ledger.exportPortableBackup(db).then(x=>new TextDecoder().decode(x));
