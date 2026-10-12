@@ -132,3 +132,17 @@ class WebLedgerBackupTests(unittest.TestCase):
             self.assertEqual(response.content, (Path(__file__).parents[1] / path).read_bytes())
         for path in ('serve.mjs', 'ledger.mjs', 'page.mjs', '.env', 'vendor/'):
             self.assertEqual(self.client.get('/export/ledger/modules/' + path).status_code, 404)
+
+    def test_backup_page_serves_entire_local_module_graph(self):
+        pending = ['download.mjs']
+        seen = set()
+        while pending:
+            name = pending.pop()
+            if name in seen:
+                continue
+            seen.add(name)
+            response = self.client.get('/export/ledger/modules/' + name)
+            self.assertEqual(response.status_code, 200, name)
+            self.assertTrue(response.headers['content-type'].startswith('text/javascript'), name)
+            pending.extend(item.decode('ascii') for item in
+                           re.findall(rb"from\s*['\"]\./([^'\"]+)['\"]", response.content))

@@ -1,0 +1,32 @@
+import * as ledger from '../local-first/ledger.mjs';
+const q=selector=>document.querySelector(selector),check=(value,message)=>{if(!value)throw new Error(message);};
+const wait=async predicate=>{for(let i=0;i<200;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('Income entry timeout');};
+const report=document.createElement('pre');report.id='income-entry-result';document.body.prepend(report);
+const open=indexedDB.open.bind(indexedDB),name=ledger.DB_NAME+'-income-entry-'+crypto.randomUUID();indexedDB.open=(value,version)=>open(value===ledger.DB_NAME?name:value,version);
+const db=await ledger.openDatabase(),today=ledger.taiwanToday(),month=today.slice(0,7),lines=[];
+const backup=async()=>new TextDecoder().decode(await ledger.exportPortableBackup(db));
+await ledger.initializeLedger(db);
+try{
+  await import('../local-first/page.mjs');await wait(()=>!q('#ledger-page').hidden);
+  check(!q('#view-record').hidden&&q('#income-recording')&&!q('#income-recording').open,'Recording lacks optional collapsed income entry');
+  check(q('#income-form').closest('[data-home-block]')?.dataset.homeBlock==='record'&&q('#income-form').closest('[data-view]').dataset.view==='record','Income form not in original record block');
+  check(q('#income-record-section').parentElement===q('#expense-form').closest('section').parentElement,'Income and expense are not parallel regions');
+  check(q('#allocation-form').closest('[data-view]').dataset.view==='planning'&&!q('#income-planning #income-form'),'Allocation or income duplicated');
+  const before=await backup();q('#income-recording').open=true;await wait(()=>q('#income-record-summary').textContent.includes(month));check(await backup()===before,'Opening income posts data');lines.push('optional income records share original recording block, allocation stays planning, readonly opening');
+  const form=q('#income-form');form.elements.amount.value='.29';form.elements.name.value='<img src=x onerror=alert(1)>合成收入';form.requestSubmit();await wait(()=>q('#income-list').textContent.includes('0.29 元'));
+  check(!q('#income-list img')&&(await ledger.readLedger(db)).expenses.length===0,'Income leaks into expenses or HTML');lines.push('recording adds exact income without consumption or unsafe HTML');
+  q('[data-view-button="planning"]').click();q('#income-planning').open=true;await wait(()=>q('#allocation-items').children.length===1);
+  q('[data-item-id="living"] [data-field="amount"]').value='.10';q('#allocation-form').dispatchEvent(new Event('input',{bubbles:true}));
+  q('[data-view-button="record"]').click();form.elements.amount.value='1.31';form.elements.name.value='收入草稿';q('[data-view-button="planning"]').click();q('[data-view-button="record"]').click();
+  check(form.elements.amount.value==='1.31'&&q('[data-item-id="living"] [data-field="amount"]').value==='.10','Navigation lost either draft');form.requestSubmit();await wait(()=>q('#income-record-summary').textContent.includes('1.6 元'));
+  check(q('[data-item-id="living"] [data-field="amount"]').value==='.10'&&(await ledger.readLedger(db)).monthly_allocations.length===0,'New income overwrote or saved allocation draft');lines.push('two independent drafts survive navigation and income commits do not confirm allocation');
+  q('#income-list li button').click();form.elements.amount.value='.30';form.requestSubmit();await wait(()=>q('#income-record-summary').textContent.includes('0.59 元'));
+  q('#income-list li button:last-child').click();q('#cancel-income-void').click();check((await ledger.readLedger(db)).incomes.every(row=>row.voided===0),'Void cancellation wrote');
+  q('#income-list li button:last-child').click();q('#confirm-income-void').click();await wait(()=>q('#income-record-summary').textContent.includes('0.29 元'));lines.push('existing edit and confirmed soft void stay revision-protected, cancellation readonly');
+  q('#income-record-month-form').elements.month.value='2024-02';q('#income-record-month-form').requestSubmit();await wait(()=>q('#income-record-summary').textContent.includes('2024-02'));
+  check(q('#income-month-form').elements.month.value===month&&q('[data-item-id="living"] [data-field="amount"]').value==='.10','Record month silently changes allocation month or draft');lines.push('record month and planning month independent');
+  const transaction=IDBDatabase.prototype.transaction;IDBDatabase.prototype.transaction=function(...args){if(this.name===name&&args[1]==='readwrite')throw new DOMException('synthetic-private','QuotaExceededError');return transaction.apply(this,args);};
+  const unchanged=await backup();form.elements.amount.value='.99';form.elements.name.value='保留草稿';form.requestSubmit();await wait(()=>q('#income-record-error').textContent.length>0);IDBDatabase.prototype.transaction=transaction;
+  check(form.elements.amount.value==='.99'&&await backup()===unchanged&&!q('#income-record-error').textContent.includes('synthetic-private'),'Failure loses input or data');lines.push('fixed safe error, retained input and unchanged backup after unavailable write');
+  report.textContent='PASS：'+lines.length+' 組收入記帳入口\n'+lines.join('\n');
+}catch(error){report.textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{db.close();}

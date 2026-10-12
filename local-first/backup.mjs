@@ -44,7 +44,14 @@ const GOAL_FIELDS = {
   goals:['id','name','target_cents','saved_cents','deadline','remind','completed','revision'],
   goal_actions:['id','goal_id','kind','month','before_cents','after_cents','delta_cents','contribution_before_cents','contribution_after_cents'],
 };
-export const ALL_SECTIONS = [...V6_SECTIONS,...Object.keys(GOAL_FIELDS)];
+export const V7_SECTIONS = [...V6_SECTIONS,...Object.keys(GOAL_FIELDS)];
+const RECURRING_INCOME_FIELDS={
+  income_rules:['id','name','cents','first_due_on','due_day','effective_month','active','revision'],
+  income_periods:['rule_id','month','defaults','status','income_id','revision'],
+};
+export const V8_SECTIONS=[...V7_SECTIONS,...Object.keys(RECURRING_INCOME_FIELDS)];
+const INVOICE_FIELDS={invoice_imports:['key','expense_id']};
+export const ALL_SECTIONS=[...V8_SECTIONS,...Object.keys(INVOICE_FIELDS)];
 export class BackupError extends Error {
   constructor(kind) { super('生活帳本備份資料異常：' + kind); this.code = 'backup'; }
 }
@@ -108,16 +115,16 @@ export function emptyData(version = 1) {
     ...(version >= 2 ? Object.fromEntries(FINANCE_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 3 ? Object.fromEntries(ANNUAL_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 4 ? {usage_periods:[]} : {}), ...(version >= 5 ? {tags:[],expense_tags:[]} : {}),
-    ...(version >= 6 ? {scheduled_periods:[]} : {}),...(version>=7 ? {goals:[],goal_actions:[]} : {}) };
+    ...(version >= 6 ? {scheduled_periods:[]} : {}),...(version>=7 ? {goals:[],goal_actions:[]} : {}),...(version>=8?{income_rules:[],income_periods:[]}:{}) ,...(version>=9?{invoice_imports:[]}:{}) };
 }
 export function validateBackup(bundle) {
   shape(bundle, ['format', 'version', 'data'], '格式');
   if (bundle.format !== 'life-ledger-backup') invalid('格式／版本');
-  const version = integerValue(bundle.version, 1n, 7n);
-  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : version===5n ? V5_SECTIONS : version===6n ? V6_SECTIONS : ALL_SECTIONS, '生活帳本');
+  const version = integerValue(bundle.version, 1n, 9n);
+  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : version===5n ? V5_SECTIONS : version===6n ? V6_SECTIONS : version===7n ? V7_SECTIONS : version===8n?V8_SECTIONS:ALL_SECTIONS, '生活帳本');
   let count = 0;
   const ids = [];
-  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {}),...(version>=6n ? SCHEDULE_FIELDS : {}),...(version>=7n ? GOAL_FIELDS : {})})) {
+  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {}),...(version>=6n ? SCHEDULE_FIELDS : {}),...(version>=7n ? GOAL_FIELDS : {}),...(version>=8n?RECURRING_INCOME_FIELDS:{}),...(version>=9n?INVOICE_FIELDS:{})})) {
     const rows = data[section];
     if (!Array.isArray(rows)) invalid(section + '結構');
     count += rows.length; if (count > 100000) invalid('資料筆數上限');
@@ -347,6 +354,29 @@ export function validateBackup(bundle) {
       const key=item.goal_id+'\0'+plan.month;actual.set(key,(actual.get(key)??0n)+BigInt(item.cents));
     }
     for(const key of new Set([...actual.keys(),...contributions.keys()]))if((actual.get(key)??0n)!==(contributions.get(key)??0n))invalid('分配目標貢獻');
+  }
+  if(version>=9n) {
+    const expenses=new Map(data.expenses.map(row=>[row.id,row]));
+    for(const row of data.invoice_imports)if(typeof row.key!=='string'||!/^e_invoice_[0-9]{4}_[a-z]{2}[0-9]{8}$/.test(row.key)||row.key.slice(10,14)==='0000'||typeof row.expense_id!=='string'||expenses.get(row.expense_id)?.source!=='manual')invalid('發票去重識別／引用');
+    unique(data.invoice_imports.map(row=>row.key),'發票識別');unique(data.invoice_imports.map(row=>row.expense_id),'發票消費引用');
+  }
+  if(version>=8n) {
+    const rules=new Map(data.income_rules.map(row=>[row.id,row])),incomes=new Map(data.incomes.map(row=>[row.id,row]));
+    for(const row of data.income_rules) {
+      text(row.name);if([...row.name].length>200||/[\u0000-\u001f]/u.test(row.name))invalid('定期收入名稱');
+      amount(row.cents);iso(row.first_due_on);iso(row.effective_month,true);integerValue(row.due_day,1n,31n);integerValue(row.active,0n,1n);integerValue(row.revision);
+      if(row.effective_month<row.first_due_on.slice(0,7))invalid('定期收入生效月份');
+    }
+    const linked=[];
+    for(const row of data.income_periods) {
+      const rule=rules.get(row.rule_id);if(typeof row.rule_id!=='string'||!rule)invalid('定期收入引用');
+      iso(row.month,true);shape(row.defaults,['name','cents','due_on'],'定期收入快照');text(row.defaults.name);amount(row.defaults.cents);iso(row.defaults.due_on);integerValue(row.revision);
+      if([...row.defaults.name].length>200||/[\u0000-\u001f]/u.test(row.defaults.name)||row.defaults.due_on.slice(0,7)!==row.month||row.defaults.due_on<rule.first_due_on)invalid('定期收入日期／名稱');
+      if(!['pending','skipped','recorded'].includes(row.status))invalid('定期收入狀態');
+      if(row.status==='recorded'){if(typeof row.income_id!=='string'||!incomes.has(row.income_id))invalid('定期收入實收引用');linked.push(row.income_id);}
+      else if(row.income_id!==null)invalid('定期收入未記錄引用');
+    }
+    unique(data.income_periods.map(row=>row.rule_id+'\0'+row.month),'定期收入期數');unique(linked,'定期收入實收');
   }
   return bundle;
 }

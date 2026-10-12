@@ -3,9 +3,10 @@ import { validateInput, expenseOptions, categoryOptions, categoryName, paymentNa
 import { emptyData, readBackup, writeBackup, integerValue, storedInteger, MAX_INTEGER, MAX_BYTES } from './backup.mjs';
 import { STORES, openLedgerDatabase, readSnapshot, scanTransaction, addState, portable, metadata, rowKey } from './idb.mjs';
 import {annualInput,annualItem,annualDefaults} from './annual.mjs';
-import {incomeInput, allocationInput, allocationMonth, defaultAllocation, goalInput} from './income.mjs';
+import {incomeInput, allocationInput, allocationMonth, defaultAllocation, goalInput,incomeRuleInput,recurringIncomeItem,recurringIncomeItems} from './income.mjs';
 import {usageInput} from './usage.mjs';
 import {scheduleDue,scheduleModels,schedulePeriod,scheduleNext,scheduleDuePeriods} from './schedule.mjs';
+import {invoiceIdentity} from './csv.mjs';
 
 export const DB_NAME = 'discordbot-localfirst-synthetic-v1';
 const { stringify } = distribution.default ?? globalThis.LosslessJSON;
@@ -41,7 +42,7 @@ function transaction(db, operation) {
 export function initializeLedger(db) {
   return transaction(db, (tx, state) => {
     if (state !== null) return state;
-    const initial = { format:'local-first-test-ledger', version:8, owner:'local-test-owner', ...emptyData(7),
+    const initial = { format:'local-first-test-ledger', version:10, owner:'local-test-owner', ...emptyData(9),
       payment_sources:[{ id:'p_cash', name:'現金', active:1 }, { id:'p_unspecified', name:'未指定', active:1 }] };
     addState(tx, initial);
     return initial;
@@ -55,7 +56,7 @@ export function restorePortableBackup(db, payload, confirmedMain = false) {
   const parsed = readBackup(payload);
   return transaction(db, (tx, state) => {
     if (state !== null) throw new LedgerError('nonempty', '目標測試帳本已有資料或建立標記，無法還原。');
-    const restored = { format:'local-first-test-ledger', version:8, owner:'local-test-owner', ...emptyData(7), ...parsed.data };
+    const restored = { format:'local-first-test-ledger', version:10, owner:'local-test-owner', ...emptyData(9), ...parsed.data };
     addState(tx, restored);
     return restored;
   });
@@ -217,6 +218,22 @@ export function changeExpenseBatch(state,targets,changes,today) {
   metadata(changed);return changed;
 }
 export const editExpenseBatch=(db,targets,changes)=>financeWrite(db,state=>changeExpenseBatch(state,targets,changes,taiwanToday()));
+export function changeInvoiceImport(state,choices,today) {
+  metadata(state);
+  if(!Array.isArray(choices)||!choices.length||choices.length>1000)throw new ValidationError('請選取1～1000張發票後確認。');
+  const changed={...emptyData(9),...structuredClone(state)},known=new Set(changed.invoice_imports.map(row=>row.key));
+  for(const row of choices) {
+    if(!row||Object.keys(row).length!==3||!['number','date','form'].every(key=>Object.hasOwn(row,key))||!row.form||Object.keys(row.form).length!==5||!['spent_on','amount','note','category','payment_source_id'].every(key=>Object.hasOwn(row.form,key)))throw new ValidationError('請重新預覽有效的發票資料。');
+    const key=invoiceIdentity(row.number,row.date);
+    if(known.has(key))throw new LedgerError('conflict','這批發票已處理或被另一頁匯入；整批沒有變更，請重新載入後重新預覽。');
+    known.add(key);const id=identifier('e_');
+    const entry={id,...validateInput(row.form,changed,today),source:'manual',recurring_id:null,period:null,voided:0,kind:'consumption',revision:0};
+    changed.expenses.push(entry);changed.actions.push({id:identifier('a_'),expense_id:id,before:null,undone:0});
+    changed.invoice_imports.push({key,expense_id:id});
+  }
+  metadata(changed);return changed;
+}
+export const importInvoiceExpenses=(db,choices)=>{const input=structuredClone(choices);return financeWrite(db,state=>changeInvoiceImport(state,input,taiwanToday()));};
 
 function incrementRevision(row) {
   const revision = integerValue(row.revision);
@@ -258,6 +275,52 @@ export function changeGoal(state,operation,id,expected,form) {
   if(previous){incrementRevision(row);changed.goals[changed.goals.indexOf(previous)]=row;}else changed.goals.push(row);
   if(!previous||row.saved_cents!==previous.saved_cents)changed.goal_actions.push({id:identifier('ga_'),goal_id:id,kind:'manual',month:null,
     before_cents:previous?.saved_cents??'0',after_cents:row.saved_cents,delta_cents:(cents(row.saved_cents)-cents(previous?.saved_cents??'0')).toString(),contribution_before_cents:null,contribution_after_cents:null});
+  metadata(changed);return changed;
+}
+export function changeIncomeRule(state,operation,id,expected,form,today) {
+  metadata(state);isoDate(today);
+  const changed={...emptyData(8),...structuredClone(state)},previous=changed.income_rules.find(row=>row.id===id);
+  if(!['add','update','disable'].includes(operation))throw new ValidationError('請選擇有效的定期收入操作。');
+  if(operation==='add') {
+    if(previous||expected!==null)throw new LedgerError('conflict','此規則已處理，請重新載入。');
+    const values=incomeRuleInput(form);changed.income_rules.push({id,...values,effective_month:values.first_due_on.slice(0,7),active:1,revision:0});
+  }else{
+    if(!previous||previous.active!==1)throw new LedgerError('unavailable','定期收入已停用或不存在，請重新載入。');
+    financeRevision(previous,expected);
+    const values=operation==='update'?incomeRuleInput(form,previous):null;
+    const current=today.slice(0,7),effective=values?(fixedDueDate(current,values.due_day)>today?current:fixedNextMonth(current)):null;
+    const history=changed.income_periods.filter(row=>row.rule_id===id),known=new Set(history.map(row=>row.month));
+    const due=recurringIncomeItems({...changed,income_rules:[previous],income_periods:history},today,100000);
+    if(due.more)throw new LedgerError('limit','定期收入歷史超出容量，資料沒有變更。請停止操作並保留備份。');
+    for(const item of due.items)if((item.defaults.due_on<=today||(effective&&item.month<effective))&&!known.has(item.month)) {
+      changed.income_periods.push({rule_id:id,month:item.month,defaults:item.defaults,status:'pending',income_id:null,revision:0});known.add(item.month);
+    }
+    if(values) {
+      Object.assign(previous,values,{effective_month:effective<previous.first_due_on.slice(0,7)?previous.first_due_on.slice(0,7):effective});
+    }else previous.active=0;
+    incrementRevision(previous);
+  }
+  metadata(changed);return changed;
+}
+export function changeIncomePeriod(state,id,month,ruleExpected,periodExpected,operation,form,today) {
+  metadata(state);isoDate(today);
+  let changed={...emptyData(8),...structuredClone(state)};
+  const rule=changed.income_rules.find(row=>row.id===id);if(!rule)throw new LedgerError('unavailable','找不到定期收入，請重新載入。');
+  financeRevision(rule,ruleExpected);
+  const item=recurringIncomeItem(changed,id,month,today),saved=changed.income_periods.find(row=>row.rule_id===id&&row.month===month);
+  if(!item||item.defaults.due_on>today)throw new ValidationError('收入尚未到期或不存在，不能確認或略過。');
+  financeRevision(saved,periodExpected);
+  if(item.status==='recorded')throw new LedgerError('conflict','這期收入已處理；即使作廢也不會重建。');
+  if(operation==='restore'?item.status!=='skipped':item.status!=='pending')throw new ValidationError('這期狀態已變更，請重新載入。');
+  const row=saved??{rule_id:id,month,defaults:structuredClone(item.defaults),status:'pending',income_id:null,revision:0};
+  if(saved)incrementRevision(row);else changed.income_periods.push(row);
+  if(operation==='record') {
+    const incomeId=identifier('i_');
+    changed=changeIncome(changed,'add',incomeId,null,form??{name:item.defaults.name,amount:(cents(item.defaults.cents)/100n).toString()+'.'+(cents(item.defaults.cents)%100n).toString().padStart(2,'0'),received_on:item.defaults.due_on},today);
+    const recorded=changed.income_periods.find(entry=>entry.rule_id===id&&entry.month===month);recorded.status='recorded';recorded.income_id=incomeId;
+  }else if(operation==='skip')row.status='skipped';
+  else if(operation==='restore')row.status='pending';
+  else throw new ValidationError('請選擇有效的收入期數操作。');
   metadata(changed);return changed;
 }
 export function changeAllocation(state, month, expected, items, goalExpected={}) {
@@ -307,6 +370,8 @@ const financeWrite = (db, change) => transaction(db,(tx,state) => {
   const changed = change(state); saveSettings(tx,state,changed); return changed;
 });
 export const updateIncome = (db,operation,id,expected,form) => financeWrite(db,state => changeIncome(state,operation,id,expected,form,taiwanToday()));
+export const updateIncomeRule=(db,operation,id,expected,form)=>financeWrite(db,state=>changeIncomeRule(state,operation,id,expected,form,taiwanToday()));
+export const processIncomePeriod=(db,id,month,ruleExpected,periodExpected,operation,form=null)=>financeWrite(db,state=>changeIncomePeriod(state,id,month,ruleExpected,periodExpected,operation,form,taiwanToday()));
 export const updateGoal = (db,operation,id,expected,form) => financeWrite(db,state=>changeGoal(state,operation,id,expected,form));
 export const updateAllocation = (db,month,expected,items,goals={}) => financeWrite(db,state => changeAllocation(state,month,expected,items,goals));
 export const excludeSuggestion = (db,month,id,scope,expected) => financeWrite(db,state => changeSuggestion(state,month,id,scope,expected,taiwanToday()));

@@ -1,0 +1,32 @@
+import * as ledger from '../local-first/ledger.mjs';
+import {invoiceIdentity} from '../local-first/csv.mjs';
+import {readBackup,emptyData,V8_SECTIONS} from '../local-first/backup.mjs';
+import {rowKey,metadata} from '../local-first/idb.mjs';
+import {encryptBackup,decryptBackup} from '../local-first/backup-crypto.mjs';
+const check=(value,message)=>{if(!value)throw new Error(message);},lines=[],name='synthetic-invoices-'+crypto.randomUUID();
+const oldRequest=indexedDB.open(name,9);oldRequest.onupgradeneeded=()=>{for(const section of [...V8_SECTIONS,'meta'])oldRequest.result.createObjectStore(section,{keyPath:'key'});};
+const old=await new Promise((resolve,reject)=>{oldRequest.onsuccess=()=>resolve(oldRequest.result);oldRequest.onerror=reject;}),legacy={...emptyData(8),format:'local-first-test-ledger',version:9,owner:'local-test-owner',payment_sources:[{id:'p_cash',name:'現金',active:1}]};
+const legacyTx=old.transaction([...V8_SECTIONS,'meta'],'readwrite');for(const section of V8_SECTIONS)for(const [position,row]of(section==='settings'?[legacy.settings]:legacy[section]).entries())legacyTx.objectStore(section).add({key:rowKey(section,row),position,value:row});
+for(const [key,value]of Object.entries(metadata(legacy)))legacyTx.objectStore('meta').add({key,value});await new Promise((resolve,reject)=>{legacyTx.oncomplete=resolve;legacyTx.onabort=reject;});old.close();
+const db=await ledger.openDatabase(name),peer=await ledger.openDatabase(name),today=ledger.taiwanToday();let target;
+const choice=(number)=>({number,date:today,form:{spent_on:today,amount:'.29',note:'合成<img src=x onerror=alert(1)>',category:'餐飲',payment_source_id:'p_cash'}});
+const bytes=async()=>new TextDecoder().decode(await ledger.exportPortableBackup(db));
+try{
+  check(location.hostname==='127.0.0.1'&&Number(location.port)>19000,'isolated source required');await ledger.initializeLedger(db);check(db.version===10&&db.objectStoreNames.length===25,'v10 migration failed');
+  check((await ledger.readLedger(db)).invoice_imports.length===0&&new TextDecoder().decode(await ledger.exportPortableBackup(db)).includes('"version":1'),'upgrade rewrote old backup');lines.push('v9 to v10 adds only empty invoice link store and preserves old portable data and metadata');
+  const races=await Promise.allSettled([ledger.importInvoiceExpenses(db,[choice('AB00000001'),choice('AB00000002')]),ledger.importInvoiceExpenses(peer,[choice('AB00000001'),choice('AB00000002')])]);
+  check(races.filter(value=>value.status==='fulfilled').length===1,'duplicate race');let state=await ledger.readLedger(db);check(state.expenses.length===2&&state.actions.length===2,'partial batch');lines.push('two connections import one complete batch; no duplicate invoices or actions');
+  await ledger.voidExpense(db,state.invoice_imports.find(row=>row.key===invoiceIdentity('AB00000001',today)).expense_id,0);
+  const rejected=async task=>{const before=await bytes();let failed=false;try{await task();}catch{failed=true;}check(failed&&await bytes()===before,'failed import altered ledger');};
+  await rejected(()=>ledger.importInvoiceExpenses(peer,[choice('AB00000003'),choice('AB00000001')]));lines.push('voided invoice remains deduplicated and combined new/duplicate selection rejects completely');
+  const fault=(abort,after)=>({name:db.name,transaction(...args){const tx=db.transaction(...args),objectStore=tx.objectStore.bind(tx);let writes=0;tx.objectStore=key=>{const store=objectStore(key),put=store.put.bind(store);store.put=(...values)=>{const request=put(...values);if(++writes===after){if(abort)request.addEventListener('success',()=>tx.abort());else throw new DOMException('synthetic-private','QuotaExceededError');}return request;};return store;};return tx;}});
+  for(const abort of [false,true])for(const after of [2,6])await rejected(()=>ledger.importInvoiceExpenses(fault(abort,after),[choice('AB00000003'),choice('AB00000004')]));lines.push('quota during write and request-success abort, including after link requests, retain complete original backup');
+  await rejected(()=>ledger.importInvoiceExpenses(db,[choice('AB00000003'),{...choice('AB00000004'),form:{...choice('AB00000004').form,category:'不存在'}}]));lines.push('all choices revalidate options in one transaction; no partial success');
+  const original=await ledger.exportPortableBackup(db),encrypted=await encryptBackup(original,'synthetic-invoice-password'),restored=readBackup(await decryptBackup(encrypted,'synthetic-invoice-password'));
+  check(restored.version===9&&restored.data.expenses[0].voided===1&&restored.data.expenses[1].cents==='29','backup loses invoice identity or history');lines.push('v9 encrypted backup retains invoice identity, revisions, payment snapshot, voided state and action order');
+  target=await ledger.openDatabase(ledger.DB_NAME+'-portable-checks');await ledger.restorePortableBackup(target,await decryptBackup(encrypted,'synthetic-invoice-password'));
+  check(new TextDecoder().decode(await ledger.exportPortableBackup(target))===new TextDecoder().decode(original),'blank restore changes backup');target.close();target=await ledger.openDatabase(ledger.DB_NAME+'-portable-checks');
+  let denied=false;try{await ledger.importInvoiceExpenses(target,[choice('AB00000001')]);}catch{denied=true;}check(denied&&new TextDecoder().decode(await ledger.exportPortableBackup(target))===new TextDecoder().decode(original),'restored dedup lost');
+  denied=false;try{await ledger.restorePortableBackup(target,original);}catch{denied=true;}check(denied&&new TextDecoder().decode(await ledger.exportPortableBackup(target))===new TextDecoder().decode(original),'nonempty restore overwritten');lines.push('blank encrypted restore, database reopen, nonempty refusal and attempted re-import retain deduplication and exact complete content');
+  document.querySelector('#result').textContent='PASS：'+lines.length+' 組合成發票原生交易\n'+lines.join('\n');
+}catch(error){document.querySelector('#result').textContent='FAIL：'+error.message+'\n'+lines.join('\n');}finally{db.close();peer.close();target?.close();}

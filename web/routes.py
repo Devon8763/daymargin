@@ -355,7 +355,8 @@ async def ledger_backup_payload(request: Request):
 async def ledger_backup_module(request: Request, name: str):
     root = Path(__file__).resolve().parents[1]
     files = {item: root / 'local-first' / item for item in (
-        'backup-crypto.mjs', 'backup.mjs', 'rules.mjs', 'vendor/lossless-json-4.3.1/lossless-json.js')}
+        'backup-crypto.mjs', 'backup.mjs', 'rules.mjs', 'usage.mjs', 'schedule.mjs',
+        'vendor/lossless-json-4.3.1/lossless-json.js')}
     files['download.mjs'] = root / 'web/static/ledger-backup.mjs'
     if name not in files or request.url.query:
         return Response('此資源無法提供。', status_code=404, headers=BACKUP_HEADERS)

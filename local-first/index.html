@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.24.1</p>
+  <p id="page-version">目前使用頁面版本：0.25.0</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -351,20 +351,26 @@
   <section aria-label="收入與每月分配">
     <details id="income-planning">
       <summary data-search-feature>收入與每月分配</summary>
+      <p>收入是實收；分配是每月用途規劃，可未分完或超過當月收入；生活預算是支出上限。三者都不代表資金移轉。</p>
       <p data-help-topic="收入與分配">收入是已收到的錢；分配只是用途規劃，不是消費、轉帳或實際存款餘額。</p>
       <fieldset id="income-fields">
         <form id="income-month-form" novalidate><label>查看收入與分配月份<input name="month" type="month" required></label><button type="submit">查看月份</button></form>
         <div id="income-summary" aria-live="polite"></div>
-        <h3 id="income-form-title">新增已收到的收入</h3>
-        <form id="income-form" novalidate>
-          <div class="form-grid">
-            <label>收到日期<input name="received_on" type="date" required></label>
-            <label>收入金額（元）<input name="amount" type="text" inputmode="decimal" required autocomplete="off"></label>
-            <label>收入來源名稱<input name="name" type="text" maxlength="200" required autocomplete="off"></label>
-          </div>
-          <div class="buttons"><button id="save-income" type="submit">儲存收入</button><button id="cancel-income-edit" type="button" hidden>取消收入更改</button></div>
-        </form>
-        <ul id="income-list"></ul>
+        <details id="income-recurring">
+          <summary data-search-feature>定期收入</summary>
+          <p>每月固定日，短月取月底；到期僅待確認，不會自動算入實收。更改影響未到期期數，停用保留已到期草稿。</p>
+          <form id="income-rule-form" novalidate>
+            <div class="form-grid">
+              <label>收入名稱<input name="name" maxlength="200" required autocomplete="off"></label>
+              <label>預定金額（元）<input name="amount" inputmode="decimal" required autocomplete="off"></label>
+              <label>首次預定日期<input name="first_due_on" type="date" required></label>
+              <label>每月收款日（1～31）<input name="due_day" type="number" min="1" max="31" step="1" required></label>
+            </div>
+            <div class="buttons"><button id="income-rule-save" type="submit">新增定期收入</button><button id="income-rule-cancel" type="button">取消／清空規則草稿</button></div>
+          </form>
+          <p id="income-rule-error" role="alert"></p><ul id="income-rule-list"></ul>
+        </details>
+        <details><summary>查看已收到的收入明細</summary><ul id="income-history"></ul></details>
         <h3>已規劃的分配</h3>
         <p data-help-topic="收入與分配">未儲存時只有生活開銷草稿；不自動複製上月或套用建議。0 元表示暫不分配。</p>
         <form id="allocation-form" novalidate>
@@ -384,6 +390,26 @@
       <p id="income-error" role="alert"></p>
     </details>
   </section>
+  <section id="income-record-section" aria-label="記錄收入">
+    <details id="income-recording">
+      <summary data-search-feature>記錄收入</summary>
+      <fieldset id="income-record-fields">
+        <h3 id="income-form-title">新增已收到的收入</h3>
+        <form id="income-form" novalidate>
+          <div class="form-grid">
+            <label>收到日期<input name="received_on" type="date" required></label>
+            <label>收入金額（元）<input name="amount" type="text" inputmode="decimal" required autocomplete="off"></label>
+            <label>收入來源名稱<input name="name" type="text" maxlength="200" required autocomplete="off"></label>
+          </div>
+          <div class="buttons"><button id="save-income" type="submit">儲存收入</button><button id="cancel-income-edit" type="button" hidden>取消收入更改</button></div>
+        </form>
+        <form id="income-record-month-form" novalidate><label>查看已收到收入的月份<input name="month" type="month" required></label><button type="submit">查看收入</button></form>
+        <p id="income-record-summary" aria-live="polite"></p><ul id="income-list"></ul>
+        <details><summary>定期收入待確認與處理紀錄</summary><p>只有確認已收到才計入收入；未收到請略過，略過可恢復。不自動分配金額。</p><ul id="income-periods"></ul><button id="income-period-more" type="button" hidden>查看更多收入期數</button></details>
+      </fieldset>
+      <p id="income-record-error" role="alert"></p>
+    </details>
+  </section>
   <section id="data-management" data-settings-section="data" aria-labelledby="data-management-title" hidden>
     <h2 id="data-management-title" data-search-feature>資料管理</h2>
     <details id="data-privacy"><summary>隱私與資料</summary></details>
@@ -393,6 +419,22 @@
     <button id="download-backup" type="button" data-search-feature>下載完整備份</button>
     <p><a href="#data-privacy">隱私與資料：帳本及備份存在哪裡？</a></p>
     <p>請在重要操作後手動備份。發出下載要求不代表檔案已保存，請確認檔案存在，並妥善保管備份與密碼。</p>
+    <details id="invoice-import">
+      <summary data-search-feature>電子發票 CSV 匯入</summary>
+      <p>僅供合成資料測試。選檔只預覽；一張發票記一筆總額，合併品名，不逐品項重複記帳。按發票號碼與年份去重，已作廢的舊帳目也不重建。</p>
+      <p>第一版只接受 UTF-8 財政部品項 CSV、狀態「開立已確認」及折讓「否」；其他狀態／折讓排除，不處理退貨。最多 4 MiB、10000 列、1000 張。店家分類規則尚未提供，請逐筆選擇分類。</p>
+      <p>含發票去重識別的完整備份使用 JSON v9，舊 Python／舊 local-first 不支援；不要刪除識別或降版。瀏覽器帳本仍未加密。</p>
+      <p>有明細金額時加總每列，包含負數折扣，得到整張正數淨額；不再加一次發票總額。淨額為零或負數整張排除，不自動記退款或收入。相同明細列無法可靠判斷是否重複，需自行核對並填入總額。</p>
+      <fieldset id="invoice-fields">
+        <label>選取合成發票 CSV<input id="invoice-file" type="file" accept=".csv,text/csv"></label>
+        <p id="invoice-preview-status" role="status" aria-live="polite"></p>
+        <ul id="invoice-preview"></ul>
+        <button id="invoice-more" type="button" hidden>查看更多預覽（每批 50 張）</button>
+        <button id="invoice-review" type="button" disabled>確認選取的發票</button>
+        <button id="invoice-clear" type="button">取消／清空預覽</button>
+      </fieldset>
+      <p id="invoice-error" role="alert"></p>
+    </details>
     <details id="csv-export">
       <summary data-search-feature>CSV 支出匯出</summary>
       <p class="warning">CSV 未加密、不是完整備份、不能用來還原帳本。請妥善保管下載的帳目資料。</p>
@@ -408,8 +450,13 @@
         <p id="csv-error" role="alert"></p>
         <p id="csv-status" role="status" aria-live="polite"></p>
       </form>
-      <p>為防止試算表將文字當成公式，危險開頭的文字會加上單引號；只改匯出副本，部分軟體可能顯示該符號。CSV 不提供匯入。</p>
+      <p>為防止試算表將文字當成公式，危險開頭的文字會加上單引號；只改匯出副本，部分軟體可能顯示該符號。支出匯出 CSV 不能作完整還原；電子發票匯入是上方獨立流程。</p>
     </details>
+    <dialog id="invoice-dialog" aria-labelledby="invoice-dialog-title">
+      <h3 id="invoice-dialog-title">確認記錄發票消費</h3><p id="invoice-summary"></p><ul id="invoice-confirm-items"></ul><p id="invoice-dialog-error" role="alert"></p>
+      <p>只記錄選取的發票，不改定期規則、收入或分配。任何一張失敗，整批都不寫入。</p>
+      <button id="invoice-confirm" type="button">記錄這批消費</button><button id="invoice-cancel" type="button">返回預覽</button>
+    </dialog>
     <div id="export-panel" hidden>
       <h3>完整備份方式</h3>
       <p>備份密碼不會加密瀏覽器帳本；本頁不保存密碼或金鑰，忘記密碼無法取回。Python Web 尚未被取代。</p>

@@ -31,6 +31,25 @@ def synthetic_payload(helper):
 
 
 class BrowserPortableBackupTests(unittest.TestCase):
+    def test_invoice_json_v9_rejects_in_python_without_losing_deduplication(self):
+        code = """
+import {emptyData,writeBackup} from './local-first/backup.mjs';
+import {changeInvoiceImport} from './local-first/ledger.mjs';
+import {portable} from './local-first/idb.mjs';
+const state={...emptyData(8),payment_sources:[{id:'p_cash',name:'現金',active:1}]};
+const changed=changeInvoiceImport(state,[{number:'AB00000001',date:'2024-01-31',form:{spent_on:'2024-01-31',amount:'.29',note:'synthetic',category:'餐飲',payment_source_id:'p_cash'}}],'2024-02-01');
+process.stdout.write(writeBackup(portable(changed)));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['version'], 9)
+        before = self.helper.snapshot()
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            self.helper.bk.read_backup(result.stdout)
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            existing.service.restore_portable_backup('invoice-target', result.stdout)
+        self.assertEqual(self.helper.snapshot(), before)
+
     def test_schedule_json_v6_safely_rejects_in_python_without_changes(self):
         code = """
 import {emptyData,writeBackup} from './local-first/backup.mjs';
@@ -122,6 +141,26 @@ process.stdout.write(writeBackup(portable(state)));
         result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
                                 cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
         self.assertEqual(json.loads(result.stdout)['version'], 7)
+        before = self.helper.snapshot()
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            self.helper.bk.read_backup(result.stdout)
+        with self.assertRaises(self.helper.bk.PortableBackupError):
+            existing.service.restore_portable_backup('target', result.stdout)
+        self.assertEqual(self.helper.snapshot(), before)
+
+    def test_recurring_income_json_v8_safely_rejects_without_changes(self):
+        code = """
+import {emptyData,writeBackup} from './local-first/backup.mjs';
+import {changeIncomeRule,changeIncomePeriod} from './local-first/ledger.mjs';
+import {portable} from './local-first/idb.mjs';
+let state={format:'local-first-test-ledger',version:9,owner:'local-test-owner',...emptyData(8)};
+state=changeIncomeRule(state,'add','ir_synthetic',null,{name:'合成收入',amount:'.29',first_due_on:'2026-10-01',due_day:1},'2026-10-12');
+state=changeIncomePeriod(state,'ir_synthetic','2026-10',0,null,'record',null,'2026-10-12');
+process.stdout.write(writeBackup(portable(state)));
+"""
+        result = subprocess.run([shutil.which('node'), '--input-type=module', '-e', code],
+                                cwd=Path(__file__).resolve().parents[1], capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout)['version'], 8)
         before = self.helper.snapshot()
         with self.assertRaises(self.helper.bk.PortableBackupError):
             self.helper.bk.read_backup(result.stdout)
