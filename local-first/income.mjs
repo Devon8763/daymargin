@@ -71,9 +71,10 @@ export function goalInput(form,previous=null) {
   return {name:incomeName(form.name),target_cents:value(form.target_amount,'target_cents'),saved_cents:value(form.saved_amount,'saved_cents',true),
     deadline:form.deadline===''?null:isoDate(form.deadline),remind:form.remind,completed:form.completed};
 }
+export const activeIncomes=(state,today)=>(state.incomes||[]).filter(row=>row.voided===0&&row.received_on<=today);
 export function incomeMonth(state, month, today = '9999-12-31') {
   allocationMonth(month); isoDate(today);
-  const entries = (state.incomes || []).filter(row => row.voided === 0 && row.received_on.slice(0,7) === month && row.received_on <= today);
+  const entries = activeIncomes(state,today).filter(row=>row.received_on.slice(0,7)===month);
   const plan = (state.monthly_allocations || []).find(row => row.month === month) || null;
   const received = entries.reduce((sum,row) => sum + cents(row.cents),0n);
   const allocated = (plan?.items || []).reduce((sum,row) => sum + cents(row.cents),0n);

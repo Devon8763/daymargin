@@ -40,7 +40,7 @@ try {
   let {db:old,state}=await createOld(name),before=await raw(old),payload=text(writeBackup(portable(state)));
   old.close();const db=await openLedgerDatabase(name);connections.push(db);
   const snapshot=await readSnapshot(db);
-  check(db.version===10&&snapshot.version===10&&db.objectStoreNames.length===25,'Schema not upgraded to twenty-five stores');
+  check(db.version===11&&snapshot.version===11&&db.objectStoreNames.length===26,'Schema not upgraded to twenty-six stores');
   check(snapshot.scheduled_periods.length===0&&snapshot.recurring_versions.length===1,'Migration manufactured schedule rows or versions');
   check(await raw(db)===before&&text(writeBackup(portable(snapshot)))===payload,'Migration rewrote original rows, metadata or backup bytes');
   lines.push('v6 to v10 adds empty schedule, goal and recurring-income stores; all original records, keys, positions, metadata and JSON v5 bytes are identical');

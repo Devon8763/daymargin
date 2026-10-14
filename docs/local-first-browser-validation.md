@@ -1,4 +1,215 @@
-# 0.25.0 第三階段續作：合成正常發票路徑 — 2026-10-12
+# local-first 合成瀏覽器驗證紀錄
+
+## 0.26.6 分配預算對照與接近上限提示 — 2026-10-14
+
+**只用隔離合成資料，不代表正式帳本驗收。** 實際起點0.26.5；分支`codex/localhost-web-auth`，HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`。原33個tracked修改、13個未追蹤路徑全部保留；本輪未stage／commit／push／PR／tag，未操作使用者25154／8767／8768來源，未讀寫正式SQLite、Token、`.env`或既有備份。
+
+### 修改與重用
+
+本輪19檔：`local-first/browse.mjs`、`budget-preferences.mjs`（新）、`page.mjs`、`index.html`、`style.css`、`serve.mjs`、`sw.js`；`tests/test_local_first_budget_hints.mjs`（新）、`test_local_first_budget_preferences.mjs`（新）、`local_first_budget_hints_browser.mjs`（新）、`local_first_preview.mjs`、`local_first_update_browser.mjs`、`local_first_offline_settings_browser.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`、`test_local_first_entry_server.mjs`；README、CHANGELOG及本文件。
+
+- `monthBudget`沿用有效四來源及BigInt計算，增加嚴格選取月份參數供分配只讀對照；本月原呼叫者不變。零元仍是明確預算，分類-only不推算總額。分配與預算各自獨立，無名稱連結。
+- 提示純規則使用`spent * 10 >= budget * 9`，不靠顯示百分比；0元無90%或進度。原`renderBudgets`摘要部分分成局部繪製，偏好切換不重建預算編輯表單。沒有首頁可見性覆蓋。
+- 新偏好重用既有localStorage安全模式，獨立版本1鍵`daymargin.budget.v1`，1024字元上限／嚴格boolean與欄位；預設開啟，損壞讀取固定警告且不覆寫，寫入失敗保留舊值。既有首頁偏好不變，帳本／備份不保存偏好。
+- 資料庫v11、完整JSON v1～v10及加密封裝v1不變；未改收入、分配、預算寫入、revision或交易。SW／固定靜態服務白名單加入唯一必要模組，共20資源，快取`local-first-offline-0.26.6-v1`。
+
+### 本輪實際驗證
+
+1. 先看見3個純規則測試失敗（選取月份取不到總額／缺少門檻規則），實作後通過；再看見3個偏好測試失敗、實作通過。原生UI先出現`Missing precise near-limit status`，再完成畫面。
+2. 完整非固定入口Node **259/259**；隨機埠靜態安全 **7/7**（包含新偏好模組、Host／method／path、CSP、本機Chart.js）。首跑socket受沙箱EACCES阻擋，核准後重跑7/7；不把首跑算成產品失敗或通過。Ruff、**117**份非vendor JS語法、**7**份第三方雜湊及差異檢查通過。Node均使用Codex內建絕對路徑。
+3. 25861新原生情境通過，使用隔離UUID IndexedDB：選取本月及歷史18,000／零元／category-only／未設定、總與分類精確90%提示、現有預算導覽及返回聚焦／分配草稿、提示關閉及儲存失敗不洩漏底層文字、分配999元超出0元實收仍保存且不改100元預算。只查詢／導覽／偏好前後原始所有列、metadata與完整備份逐位元組不變。延遲舊月份被較新月份擋住；首頁預算隱藏後，開關、消費更改／新增／軟刪除仍保持隱藏且摘要更新。
+4. 同來源既有預算UI **4組**（歷史小數／停用／零元、下限與加總、跨連線revision、容量失敗不留半筆與XSS）及收入入口 **7組**通過，非沿用舊結果。
+5. 25862代理直接操作桌面與375px iframe：鍵盤展開、預算導覽／返回、Space切換；未送出的分配777與預算123均保留。重新整理後提示關閉仍保存。375px iframe內容clientWidth360／scrollWidth360，已檢視桌面分配對照與窄版設定截圖，標題、文字、金額及開關未溢出。截圖僅為合成資料，位於忽略的`.tmp/budget-allocation-desktop.jpg`與`.tmp/budget-settings-375.jpg`。
+6. 25862本版0.26.6的正式頁路徑，以畫面開始空白合成帳本、設100元總預算、記90元消費，確認近上限；關閉提示後停止本輪服務、關頁、從同網址離線開新頁，仍0.26.6／90元消費／剩10元／開關關閉，未清除網站資料。
+7. 25863原生SW演練：兩頁0.26.6與未送草稿；測試0.26.7故意缺Chart.js安裝拒絕且舊快取／帳本不變；恢復完整資源後waiting，關一頁仍等待，關最後一頁自然啟用；停止本輪服務後同網址離線冷啟動通過。**20靜態資源、25類合成列、metadata與完整備份不變**；測試0.26.7僅標籤，不是新版發行。所有被停止的服務均為本輪25861～25863。
+
+### 未驗證與手測
+
+未跑固定8768 CLI（避免碰使用者服務）；未跑Python完整隔離回歸，因未修改任何Python或帳務儲存／備份程式。尚未驗證實體手機、螢幕閱讀器、真正斷網、普通全新瀏覽器設定檔、本版實體備份檔落地／還原及正式帳本。本輪無新增使用者手動確認，不能以歷史手測冒稱新版驗證。
+
+使用原Windows雙擊啟動器，僅在另外準備的隔離合成來源手測：
+
+1. 設100元總／分類預算，記89.99、90、100與100.01元的代表性消費，分別查看剩餘、即將用完、已用完及已超支；不要把四筆同時加總後誤認單筆邊界。
+2. 規劃→收入與每月分配→展開分配，查看本月預算行；填未送草稿，查看預算後返回，核對原值。選過去月份核對YYYY-MM，無總預算不顯示。
+3. 預算關閉接近上限提示並重新整理，90%只顯示剩餘；100%／超支事實仍在。首頁隱藏預算不應被提示打開。
+4. 保存草稿與完整備份；新版完整下載後關閉此來源全部頁籤再開，確認版本及資料；不要清除網站資料。仍僅供合成資料測試，Python Web尚未被取代。
+
+## 0.26.5 月曆收支呈現 — 2026-10-14
+
+**僅供隔離合成資料測試，不代表正式帳本驗收。** 起點為實際0.26.4，分支`codex/localhost-web-auth`、HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`。原33個tracked修改、13個未追蹤檔完整保留，沒有新增路徑或暫存；未stage、commit、push、建立PR或tag。
+
+### 實際修改與邊界
+
+本輪12檔：產品`local-first/page.mjs`、`index.html`、`sw.js`；測試`tests/local_first_calendar_income_browser.mjs`、`local_first_preview.mjs`、`local_first_update_browser.mjs`、`local_first_offline_settings_browser.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`；文件`README.md`、`CHANGELOG.md`及本紀錄。
+
+- 沿用原`showCalendar`／`showDay`與金額格式，不改`calendarMonth`、`searchAccounts`、`monthlyAccounts`、帳目資格或精確cents。雙記號由收入／支出各自存在與否決定，不由差額決定。無障礙名稱仍是完整日期及當日收支狀態，記號對輔助技術隱藏，避免重複朗讀。
+- 只移除月曆每日差額文字；兩項合計與月曆明細加一次方向符號。共用帳目列以既有`daily`／`listId`辨認月曆，其他呼叫者保持原樣。三種篩選只改明細，保留更改、確認作廢及回到原月份／日期／類型。空狀態只縮短月曆，不改其他頁面。CSS未改，保留現有色彩，沒有新增色盤或全域樣式。
+- 無新依賴、資料表、IndexedDB版本、備份格式或升級步驟；Python Web／Discord未改。快取`local-first-offline-0.26.5-v1`，仍19必要靜態資源，不強制啟用或刷新。
+
+### 本輪代理實際驗證
+
+1. TDD先在原生瀏覽器看見空月長句、舊「收／支」、每日差額及無方向明細的預期失敗，再逐項修正。相關純核心收支／月曆10/10保留，沒有為呈現變更調整核心期望值。
+2. 完整非固定入口local-first Node **253/253**；隔離隨機埠靜態安全 **7/7**。明確不執行會占用固定8768的CLI測試；Node使用絕對執行檔`C:\Users\User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`。Ruff、8份修改JavaScript語法及差異空白檢查通過，沒有自動修復或新依賴。
+3. 原生IndexedDB月曆桌面／375px子頁面**各11組**。UUID測試帳本涵蓋四種消費來源、收入／支出各自存在、完全無資料、收支相等仍有雙記號、30,000.29／150.01元的精度與千分位、明細不重複符號、120筆完整明細、三種類型、正常空狀態、歷史付款名稱及惡意收入名稱安全文字。純查詢／導覽前後比較所有原始列、metadata及完整JSON備份內容一致；後續明確合成寫入測試另行驗證更改、雙擊確認、軟刪除、舊revision、延遲月份讀取與返回草稿，未刪原安全斷言。
+4. 每月收支**9組**、收支搜尋**12組**、既有搜尋／月曆**11組**回歸通過；每月收支與搜尋正／負／零差額、50筆以外完整合計、rollback、安全錯誤及競態保護保留。新增月曆fixture另核對每月合計收入60,065.84元、支出30,170.86元、差額29,894.98元不變。
+5. 使用本輪獨立24851／24853來源，不讀寫使用者21901或8768來源。代理實測375px iframe的Enter選日、全部／收入／支出切換、空月份「本月無記錄」及月份往返；摘要一直保留兩項合計。實際iframe375px、grid client／scroll均302，沒有橫向溢出。保存並檢視合成截圖；沒有將單元測試代稱為鍵盤或瀏覽器實測。
+6. 另用真正表單在24851建立30,000.29元合成收入及150.01元合成支出，重新整理後日期格仍「14＋−」，選日兩項合計及方向正確。19項必要資源檢查通過；停服、關閉頁面、相同來源冷啟動後仍可選日／篩選，版本0.26.5及兩項金額正確，快取檢查前後帳本／metadata／完整備份不變。
+7. 24853演練0.26.5→測試0.26.6（不是發行版）：必要Chart.js缺失時新版安裝失敗，舊頁及兩份未送出草稿保留；完整下載後waiting，關一頁仍waiting，全部舊頁關閉自然啟用。停服後新版冷啟動及收支／分析相容檢查通過；19靜態資源、25類原始合成資料／metadata／完整備份不變。只停止本輪自行建立的兩個測試服務。
+
+### 合成資料手動驗收與限制
+
+1. 確認使用的是合成帳本後，雙擊既有`start_local_first.local.cmd`；代理本輪沒有操作其8768來源。若顯示新版等待，先保存需要的草稿，等待完整下載並關閉此來源全部舊頁再開，不清網站資料或強制刷新；不需資料庫升級。
+2. 準備只有收入、只有支出、同日收支及空白日期。日期格應只有日期和「＋／−」，即使兩筆金額相等也顯示兩個記號，鍵盤可選日期。
+3. 選日確認只有收入／支出兩項合計，收入「＋」、支出「−」且只有一個方向符號；千分位及小數不變。切三種類型時合計不變，沒有明細顯示「無記錄」，空月顯示「本月無記錄」。
+4. 更改或確認作廢後回原日期及類型；最後一筆作廢後對應記號消失。再到每月收支及搜尋確認差額仍存在。重新整理與離線操作只在已確認合成來源測試。
+
+未重跑Python完整隔離回歸；未測固定8768 CLI、真實手機、螢幕閱讀器、普通瀏覽器設定檔、真正斷網、實體備份檔還原或正式帳本。沿用合成資料警語；本機IndexedDB未加密，Python Web未被取代，沒有把先前使用者手測或歷史通過數字列作本輪結果。
+
+## 0.26.4 每月收支概況 — 2026-10-14
+
+**只用隔離合成帳本；不是正式帳本、普通設定檔或實體手機驗收。** 起點實際0.26.3，分支`codex/localhost-web-auth`、HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`；原44個dirty／untracked路徑、0 staged完整保留。新增2個測試檔，最後46個路徑、staged仍空，HEAD不變；未stage／commit／push／PR／tag。
+
+### 修改範圍與規則
+
+本輪15檔：產品`local-first/browse.mjs`、`index.html`、`page.mjs`、`style.css`、`sw.js`；測試新增`tests/test_local_first_monthly_accounts.mjs`、`local_first_monthly_accounts_browser.mjs`，修改`local_first_preview.mjs`、`local_first_update_browser.mjs`、`local_first_offline_settings_browser.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`；文件`README.md`、`CHANGELOG.md`與本紀錄。所有既有收入、發票、備份、分類、月曆及其他未提交內容保留。
+
+`monthlyAccounts`重用原`calendarMonth → searchAccounts → activeIncomes／activeExpenses`資格與日期規則；收入來源使用已儲存的`name`，分類使用原分類，不另設收入分類或推測／合併不同名稱。完整結果分組以BigInt加總，頁面只呈現，不在DOM內重新統計金額。每次查詢取得一次台灣今天、一次IndexedDB唯讀快照；當月截至今天，過去月份至月底。
+
+沿用既有列／50筆呈現，僅增加唯讀選項以不顯示更改、作廢、捷徑或批次操作；使用期間、付款名稱及標籤取自同一快照。原搜尋／月曆操作入口仍有原身份、revision與交易流程，本輪沒有新增另一套更改或作廢。沒有新依賴、資料表、IndexedDB升級或JSON／加密格式變更；Python Web／Discord及正式SQLite不受影響。
+
+### 本輪實際測試
+
+- **TDD與自動測試**：先觀測6/6缺少計算介面的失敗，實作後與共用搜尋／月曆17/17通過。畫面先觀測「Monthly analysis entry missing」，接入原分析導覽後通過。初始合成發票關聯鍵不符合契約，由備份驗證安全拒絕；修正合成fixture鍵，沒有放寬驗證。完整非固定入口Node253/253、隨機連接埠靜態服務安全7/7、Ruff、113份非vendor JS語法、7項Chart.js／lossless-json授權資源SHA256及差異空白檢查通過。Node使用可用絕對執行檔路徑，不依賴裸node。
+- **純規則**：嚴格月份／未來拒絕、跨年／閏年／月底、當日截斷、三種差額、收入／支出單側與空月份、停用歷史分類、多來源、四種已入帳支出、發票一次計入、作廢／未來／未知來源／非生活消費排除、草稿／分配／目標不計入。大值精確cents、完整超過50筆、分組與總額一致、不同集合同ID、來源不同名稱及輸入原狀不變均有測試。
+- **原生IndexedDB畫面**：`/tests/local-first-monthly.html`與375px同來源子頁各9組；UUID隔離合成帳本，55筆薪資、另一來源、65筆四來源支出與發票關聯。每次查詢一份快照，分組完整合計／筆數與55／65筆可全部展開；展開不再讀庫、不執行惡意來源／分類／項目、不提供批次或編輯。無資料三項0元、無收入／無支出、過去／當月截至日期正常。
+- **互動與故障**：月份／模式／搜尋往返保留原比較條件及記帳草稿，跳轉聚焦可見月份。無效／未來月份在資料庫查詢前拒絕且保留輸入；故意使IndexedDB讀取失敗時只顯示固定安全錯誤，不顯示私人底層字串或舊總額。延遲舊月份讀取不能蓋新月份；成功支出及收入寫入後使用提交完成的新狀態刷新，舊快照不能倒退結果或鎖住按鈕。純查詢、展開、模式切換前後全部store、metadata及完整明文備份逐位元組不變；合成競態寫入在不變性核對之後另行進行。
+- **本輪既有瀏覽器回歸**：分析操作10組、收入月曆8組、收支搜尋12組通過，與新功能18組合計48組；原兩分頁舊revision、重複提交、交易abort與輸入保留等安全斷言保留，不以舊回報替代本輪結果。
+- **代理實際畫面與鍵盤**：全新25841／25842／25843來源，未開啟或停止8767／8768。恢復工作時25841已停止，改用25842，不把連線失敗算成產品通過。桌面按Enter查詢與展開來源／分類帳目；保存並檢視`.tmp/monthly-desktop.jpg`及`monthly-narrow.jpg`。375px原生iframe的body client／scroll各360px，摘要堆疊、月份／文字／按鈕無橫向溢出。工具對子頁視外節點的點擊失敗，改用乾淨合成demo wrapper保存完整窄版；只調整測試wrapper，產品CSP不變。
+- **更新／離線**：演練0.26.4→合成測試0.26.5（不是發行版），缺必要Chart.js時安裝失敗，兩舊頁、未送出草稿、帳本與備份保留；完整下載後waiting，關一頁仍等待，關全部舊頁自然啟用。停服同網址冷啟動與每月收支核對通過；19必要純靜態資源、25類合成資料／metadata／備份保持相同。另以最終0.26.4來源關頁、停服重開及完整資源核對，確認本月收入／支出0.29／0.29、差額0及空月份可用，無新增圖表或寫入。
+- **未驗證／未執行**：沒有沿用使用者先前手測作為本輪代理測試。未操作固定8768 CLI、普通瀏覽器設定檔、實體手機／螢幕閱讀器、真正裝置斷網、停用JavaScript、實體備份落地還原或正式帳本。Python無本輪程式、資料格式或帳務變更，故沒有重跑Python完整隔離回歸，也未將過去結果列為本輪通過。測試程序只停止本輪自行建立的服務。
+
+### 合成資料手測
+
+1. 自行確認使用合成帳本後，雙擊既有`start_local_first.local.cmd`。若新版等待，先保存草稿，完整下載後關閉同來源所有舊頁再開，不清網站資料、不強制刷新。
+2. 開「分析 → 每月收支」，預設台灣本月。選有資料的過去月份，核對收入／支出／差額，再展開收入來源與支出分類；超過50筆按顯示更多仍能查看全部。切換其他分析再返回，月份與原比較草稿應保留。
+3. 查看無收入、只有收入及空月份；空月份應三項0元，沒有空圖表。未來月份須拒絕。用鍵盤Enter展開明細、按查看收支；快速切月不可回跳舊月份。
+4. 首次完整快取後，關頁並停止自行啟動的服務，再用相同瀏覽器及網址重開；每月收支仍能查詢。只用隔離合成資料，不以此演練正式搬移。
+
+
+## 0.26.3 分析期間卡與排版整理 — 2026-10-13
+
+**僅供合成資料測試；不是正式帳本、普通瀏覽器設定檔或實體手機驗收。** 起點實際0.26.2，分支`codex/localhost-web-auth`、HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`，42個既有修改／未追蹤路徑、0 staged。保留全部既有內容，本輪新增2個測試檔；最後44個dirty／untracked路徑、staged仍為空，HEAD不變。沒有stage／commit／push／PR／tag。
+
+### 本輪範圍與實際證據
+
+- 修改17檔：產品`local-first/index.html`、`page.mjs`、`style.css`、`comparison.mjs`、`sw.js`；文件`README.md`、`CHANGELOG.md`、本紀錄；測試新增`tests/test_local_first_analysis_layout.mjs`、`local_first_analysis_layout_browser.mjs`，修改`local_first_analysis_controls_browser.mjs`、`local_first_analysis_ui_browser.mjs`、`local_first_preview.mjs`、`local_first_update_browser.mjs`、`local_first_offline_settings_browser.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`。既有收入、發票、備份、月曆等未提交內容完整保留，本輪沒有新增修改其規則。
+- TDD：純計算缺少完整週／月／年選擇與精確差額接口先4/4失敗，再4/4通過；新畫面先失敗「period controls split across locations」，期間卡整合後通過。補負小數差額畫面先重現`0.-36 元`，最小修正分析專用文字格式後確認`-0.36 元`；BigInt計算不變。支出變化模式亦先重現不適用的比較組名仍顯示，補測試後只切換其hidden狀態，保留原草稿。
+- 自動檢查：相關Node20/20含在完整非固定入口247/247；隨機連接埠靜態服務安全7/7，不執行會占8768的CLI。Ruff、111份非vendor JS語法、Chart.js與lossless-json共7項provenance SHA256及差異空白檢查通過。無新授權、依賴、資料表、IndexedDB或備份版本。
+- 原生IndexedDB畫面fixture：期間卡桌面與375px各6組，既有分析操作10組、支出分析10組，本機Chart.js HTTP503失敗1組；合計33組畫面案例。UUID隔離合成帳本，包含65筆0.01元、另一月份0.29元、隱藏標籤、停用分類及惡意文字；純查詢與切換前後全部store、metadata及完整明文備份逐位元組不變。單筆更改後刷新、跨模式延遲查詢與寫入競態仍由既有回歸驗證，沒有刪除安全斷言。
+- 期間卡驗證：本月／上月選單與完整日期相同，月份控制含閏年2月，週一完整週與完整年份不變；自訂日期、多組、多段、移除、組內去重、跨組重疊與自訂名稱保留。分類與關鍵字AND、收合仍顯示條件；兩組差額正／負／零與巨大值有純計算，負小數另有畫面斷言。未開始仍為尚未開始，錯誤日期在資料庫查詢前拒絕且保留輸入。
+- 單一唯讀快照及完整65筆明細有計數檢查；切長條／折線／分類占比不再讀IndexedDB。Chart建構失敗及實際HTTP503保留精確摘要與每期表格、安全錯誤不透露底層細節。原純計算亦驗證超過安全繪圖精度時不丟棄精確文字資料。
+- 代理實際畫面檢視：使用25781／25782／25783／25784／25785新隔離來源，未碰8767／8768。桌面1280px兩張477px卡片並排；375px同來源原生iframe兩卡上下排列，body client／scroll均360px。逐張保存並檢視`.tmp/analysis-default.jpg`、`analysis-custom-multirange.jpg`、`analysis-result-chart.jpg`、`analysis-narrow.jpg`，日期、選單、標題、長文字及按鈕均在所屬容器內；Tab可從期間選擇到可見開始日期。375px為iframe實測，不是真手機；只有測試wrapper允許同來源frame，產品CSP不變。
+- 更新／離線：0.26.3→合成測試0.26.4（不是發行版）先模擬缺Chart.js安裝失敗，兩頁與未送出草稿保留；完整安裝後waiting，關一頁仍等待，全部舊頁關閉自然啟用。停服同網址重開後仍可分析與繪圖，19個必要純靜態資源、25類合成原始列／metadata／完整備份不變。另從最終0.26.3新來源完整快取後停服、關舊頁、重新開啟及分析，確認相同不變性；未skipWaiting、強制刷新或清資料。
+- 本輪沒有把舊0.26.2／使用者手測結果算入上述通過數。未重跑Python完整隔離回歸（Python未改），未驗證實體手機／螢幕閱讀器、普通瀏覽器設定檔、真正裝置斷網、停用JavaScript或實體備份檔還原；沒有聲稱正式帳本可用。測試服務只停止本輪自己建立的來源。
+
+### 合成資料手測
+
+1. 自行確認使用合成帳本後，雙擊原`start_local_first.local.cmd`。若顯示新版等待，先保存需要的草稿，完整下載後關閉同來源全部舊頁再開；不清網站資料。代理沒有啟動或停止8768服務。
+2. 開「分析」：預設「期間比較」，A本月／B上月，選單、月份與摘要應一致。改月份或週／年，再選自訂日期；只有自訂日期顯示起訖欄位，按「分析」才查詢。
+3. 直接新增第三個比較期間、加入另一段日期並移除；在「更多條件」自訂名稱／關鍵字，分類選兩項，收合仍顯示已啟用條件。切三種模式再返回確認草稿與記帳草稿保留。
+4. 看A／B總額與A−B，交換期間應看到負差額；未來期間不能當0元。切圖不重填條件，展開「統計明細」「每期資料與查看帳目」及超過50筆的下一批。
+5. 用Tab／Enter操作，將畫面縮至375px確認上下堆疊。首次完整快取後停服務並關頁重開，分析與本機圖表仍可用。只使用隔離合成資料，不拿正式帳本進行這些步驟。
+
+
+## 0.26.2 分析操作簡化 — 2026-10-13
+
+**僅供合成資料測試；沒有正式帳本、真OAuth、實體手機或檔案還原驗收。** 本輪由實際0.26.1工作樹延伸，分支`codex/localhost-web-auth`、HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`未變。保留原31個tracked修改及7個未追蹤檔，index原本及交付均為空；不stage、commit、push或操作PR。
+
+### 修改與驗證
+
+- 產品：`local-first/index.html`、`page.mjs`、`style.css`、`comparison.mjs`、`sw.js`。僅新增常用日期帶入及操作狀態，統計仍重用原核心；三模式重用原表單，首段日期節點移到主要區，外移欄位以`form`維持`FormData`／`form.elements`契約。分類及進階條件收合，不刪除草稿；圖表控制在結果旁，詳情可展開。
+- 測試：新增`tests/test_local_first_analysis_controls.mjs`、`local_first_analysis_controls_browser.mjs`；調整`local_first_preview.mjs`、`local_first_analysis_ui_browser.mjs`、`local_first_tag_monthly_ui_browser.mjs`、`local_first_comparison_ui_browser.mjs`、`local_first_update_browser.mjs`、`local_first_offline_settings_browser.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`。同步README、CHANGELOG及本文件，共18檔；無資料庫／依賴／備份格式變更。
+- TDD：日期helper缺失先失敗後3/3；瀏覽器先重現沒有模式分流，再驗證每組時間帶入、跨模式草稿、舊比較互斥及標籤讀取取消後寫入的按鈕鎖定，最小修正後通過。唯讀程式審查指出的跨模式預設覆寫與取消查詢鎖定兩項已各有回歸測試。
+- Node完整非固定入口243/243、隨機埠靜態安全7/7、Ruff、107份非vendor JS語法、`git diff --check`通過。使用本機絕對Node路徑`C:\Users\User\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`；會使用固定8768的CLI測試未執行，並非完整固定入口驗收。
+- 新操作fixture `/tests/local-first-analysis-controls.html`與375px同來源子頁面各10組。採UUID隔離IndexedDB、65筆合成標籤消費與另一月份支出，純切換／查詢／搜尋前後原始列、metadata及完整備份相同；額外合成寫入獨立驗證取消查詢後可再查。既有支出分析10組、標籤月分析6組、舊比較11組、全站搜尋14組通過，保留精確平均、歷史分類、完整明細、XSS及成功寫入後舊快照不得覆蓋的斷言。
+- 使用獨立24621／24623／24625／24627來源，不操作8767／8768。瀏覽器視窗尺寸覆寫未改變實際1920px視窗，375px改以原生iframe驗證：實際內容寬375、分析區client／scroll各334，沒有橫向溢出；未放寬產品CSP，只有測試頁允許同來源frame。實測Enter展開進階／分類、模式切換、折線切換；本機資源503時支出及標籤各1組精確文字／帳本不變。
+- 更新演練0.26.2→測試0.26.3（不是發行版）：Chart.js缺失時安裝失敗，原頁及兩份未送出草稿保留；完整下載後waiting，關一頁仍waiting，全部舊頁關閉自然啟用。停服冷啟動通過，19純靜態資源與25類合成資料／metadata／備份逐位元組不變。另以24627全新來源建立一筆0.65元合成支出，最終0.26.2停服後關頁重開，仍可查本月／上月及本機圖表。
+- 額外Python完整隔離執行設有正式檔案拒讀與只准暫存SQLite的audit guard；只有FastAPI／Authlib的既有棄用提示，長時間未完成後中止本輪程序，沒有通過數可回報。未降低安全設定或新增依賴，未以歷史Python結果替代。
+- 舊比較fixture重載時因來源已有合成帳本而安全拒絕，沒有清除它；改用全新24629來源重跑最終版本11/11。最後再核對107份JS語法、145個本機Markdown連結、Ruff、空白差異及版本一致性；工作樹33個修改、9個未追蹤檔（含既有工作），staged為空，HEAD未變。測試服務僅停止本輪自行建立的獨立來源。
+
+### 合成資料手動驗收
+
+1. 自行確認使用的是合成帳本，再雙擊既有`start_local_first.local.cmd`；本輪沒有啟動或停止其8768來源。若提示新版，先保存需要的草稿／自行備份，等待下載完整後關閉同來源所有舊頁再開，不清網站資料、不強制刷新。
+2. 開分析，預設期間比較及本月／上月。填自訂組名、分類與關鍵字，切支出變化與標籤分析，再返回確認草稿保留、只顯示對應表單，沒有自動查詢；按主要查詢按鈕才取得結果。
+3. 各組常用時間／趨勢近三月只帶入日期；標籤全部時間不被縮小。展開分類選兩項，收合仍顯示已選2項；進階加入組及不連續期間，收合摘要仍揭示啟用條件。
+4. 結果先看總支出、兩種平均及一張圖；切圖不丟條件。展開完整期間、分類及帳目，超過50筆可繼續顯示；開啟進階的舊兩期間比較時，不同時攤開主要表單。
+5. 用鍵盤Enter／Tab操作收合與選單；全站搜尋「支出變化」或「標籤分析」後，跳到對應可見控制。停服後已完整快取的相同來源重新開啟，確認分析與文字仍可用。正式來源、真正斷網、真手機／螢幕閱讀器、停用JavaScript及實體備份還原仍未驗證。
+
+## 0.26.1 收入加入月曆 — 2026-10-13
+
+起點為實際`codex/localhost-web-auth`、HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`、0.26.0，35個既有dirty／untracked路徑、0 staged。保留所有0.25.3／0.26.0及其他既有工作，不stage／commit／push／PR／tag。只使用新25571／25572合成來源、合成fixture與獨立IndexedDB，不操作8767／8768、正式SQLite、憑證／.env或使用者備份。
+
+本輪修改15檔：產品`local-first/browse.mjs`、`page.mjs`、`index.html`、`sw.js`；文件`README.md`、`CHANGELOG.md`及本紀錄；測試新增`tests/test_local_first_calendar_income.mjs`、`local_first_calendar_income_browser.mjs`，修改`local_first_browse_browser.mjs`、`local_first_preview.mjs`、`local_first_offline_settings_browser.mjs`、`local_first_update_browser.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`。未修改income／ledger／backup／idb／comparison／CSV及偏好規則，沒有新資料表、備份版本或依賴。
+
+- **本輪自動測試**：4組純計算先失敗再實作，涵蓋收入／支出專屬日、混合／空日、精確小數／巨大值、69筆、四來源、跨年／閏日、作廢／未來／投資／草稿排除、不同集合同ID及輸入不變。相關16/16包含在完整非固定入口Node240/240；另隨機連接埠靜態安全7/7，不啟動固定8768的CLI。Ruff、107份非vendor JS語法、7項vendor SHA256及`git diff --check`通過，原MIT授權與必要資源範圍不變。
+- **本輪原生瀏覽器內畫面fixture**：桌面／375px各8組；先RED「daily type missing」及延遲切月蓋掉新寫入／選日，再實作GREEN。120筆完整每日合計、明細50筆分批可展開完整120筆、單側篩選仍保留三項全部合計；三種文字記號狀態、無金額日期格、完整ARIA日期狀態／圖例、未來及待確認草稿不標記、零／負差額、惡意名稱不執行。純瀏覽前後所有store、metadata及完整備份逐位元組不變；收入／支出原更改與確認流程返回同月／同日／類型並保留草稿、重複確認只寫一次、兩連線舊revision拒絕及輸入保留；首頁月曆hide/show/order仍同一DOM節點且不改帳本。
+- **本輪既有回歸**：共用搜尋12組、舊月曆／搜尋11組、四區導覽10組通過。舊月曆首次同快照斷言失敗的原因是已確認要改為「當日有支出」而仍查「當日有消費」，僅同步該ARIA文案斷言，保留筆數及原帳本／備份一致性檢查。沒有刪除失敗的安全保護。
+- **代理實際瀏覽器操作**：在新合成來源用Enter記錄收入10.29／支出3.1元，按日期Enter開明細、鍵盤切明細類型，三項始終10.29／3.1／7.19，日期同時有收／支記號。375px內容寬360／scrollWidth360，沒有水平溢出。
+- **更新及離線**：以0.26.1→測試0.26.2演練，必要Chart.js資源缺失時安裝失敗，舊頁與兩份未送出草稿保留；完整下載後waiting，關一頁仍waiting，全部舊頁關閉後自然啟用。停服冷啟動仍有收入日期記號及選日收入0.29元，19個純靜態資源、25類合成資料／metadata／完整備份內容逐位元組不變。另實際0.26.1-v1完整必要快取檢查通過；停止25571本輪服務、關原頁後重開0.26.1，日期仍有收／支，Enter選日仍為10.29／3.1／7.19元，重做唯讀快取／原始列／metadata／備份不變檢查通過。0.26.2僅演練標籤，不是產品升版。
+- **使用者手動確認與未驗證**：本輪沒有新增使用者確認，不借用舊驗收回報。未重跑完整Python隔離回歸、會用8768的CLI／啟動器雙擊、真實手機／螢幕閱讀器、普通新設定檔及實體備份檔還原。仍僅供合成資料測試，IndexedDB未加密，Python Web尚未被取代，差額不是存款或可用餘額。
+
+合成手測：在全新瀏覽器設定檔，沿用Windows雙擊`start_local_first.local.cmd`及固定網址（不清原設定檔／帳本、不中止既有服務），確認頁面0.26.1；記錄同日收入10.29／支出3.1元，日期應有收／支、沒有金額，選日應顯示10.29／3.1／7.19；切單側明細三項合計不變。另查看無收入日／無支出日／空日、更改取消返回、刷新及自行核對離線重開。只用合成資料。
+
+
+## 0.26.0 收入與支出共用搜尋 — 2026-10-13
+
+起點實際`codex/localhost-web-auth`、HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`、0.25.3；30個既有dirty／untracked路徑、0 staged，全數保留。實際工作樹為`C:\Users\User\Desktop\DiscordBOT\.worktrees\localhost-web-auth`。本輪只用全新25461／25462來源與合成帳本，不開原8767／8768、正式SQLite、真實CSV、Token、.env或既有備份。
+
+- 本輪修改16檔：產品`local-first/browse.mjs`、`income.mjs`、`page.mjs`、`index.html`、`sw.js`；文件`README.md`、`CHANGELOG.md`及本紀錄；測試新增`tests/test_local_first_account_search.mjs`、`local_first_account_search_browser.mjs`，修改`test_local_first_site_search.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`、`local_first_preview.mjs`、`local_first_offline_settings_browser.mjs`、`local_first_update_browser.mjs`。沒有修改ledger、backup、idb、comparison或其他既有產品程式／格式；它們的既有dirty狀態保持，不是本輪新增。
+- **本輪自動測試**：7組純查詢先RED（缺共用查詢）後GREEN，包含全部／單側、AND條件、跨年／閏日／兩端、不同集合同ID、四來源／作廢／未來／草稿排除、120筆與極大cents、正零負差額、身分注入、相關分類／標籤／功能契約。相關搜尋／收入子集29/29（包含在236，不另加總）；完整非固定入口Node236/236；隨機連接埠靜態安全7/7，不啟動8768的CLI占埠測試。Ruff、105份非vendor JS語法、7項vendor SHA256及差異檢查通過；依賴及授權檔未變。
+- **本輪實際瀏覽器內測試fixture**：收支搜尋桌面／375px各12組，先失敗「default account type missing」；負差額、查詢／新寫入競爭及組字舊結果皆取得RED後修正。涵蓋原生IndexedDB單快照、原始所有store／metadata／完整備份不變、120筆／50筆批次、全選65筆支出、兩邊草稿、原更改／作廢／軟刪除、更換條件清除選取、雙連線舊revision、重複送出、quota拒絕、request-success後abort、安全讀取錯誤、惡意收入名及延遲舊查詢。另本輪重跑既有全站搜尋14組、批次7組、收入入口7組與定期收入5組。
+- **代理透過瀏覽器操作**：用Enter建立合成收入、鍵盤切換帳目類型／展開清單；合成收入10.29、支出3.1、差額7.19元，混合全選只取1筆支出。375px內容body clientWidth360／scrollWidth360。更新演練0.26.0→測試0.26.1，安裝缺Chart.js會失敗而保留舊快取／兩頁草稿；完整下載waiting，關一頁不啟用，全部舊頁關閉才自然啟用；停服後同網址冷啟動仍可查到合成已收到收入。19個純靜態資源、25類原始合成列／metadata／完整備份內容逐位元組不變。演練標籤不代表升為0.26.1。
+- **最終發行資源**：實際0.26.0-v1十九項必要快取檢查通過，含收支搜尋新介面；純檢查保留原始列／metadata／備份。沒有新增快取資料範圍或第三方請求，不快取帳目。停止25461本輪服務、關原頁後重新開0.26.0，仍能離線查詢收入10.29／支出3.1／差額7.19；重做快取／原始列／metadata／備份不變檢查通過。
+- **環境過程**：初次375px嵌入被仍在執行的舊測試服務frame規則拒絕，重啟本輪服務才載入測試限定的同來源規則；正式頁frame-ancestors仍none。後續寬度972是測試用pre結果報告不換行，並非帳目列，改用p後360／360。不把這兩次失敗列為通過；修正並重跑後才記通過。
+- **使用者手動確認**：本輪尚無新增使用者確認，不沿用0.25.3或更早手測作新版本通過。
+- **未驗證**：未重跑完整Python隔離回歸（本輪不改Python）、會占8768的CLI、0.25.3標籤圖表完整畫面、真實手機／螢幕閱讀器、跨普通瀏覽器設定檔與實體備份下載還原。0.25.3原未完成驗收紀錄保留以下，這輪不是全產品正式資料驗收；仍僅供合成資料測試，IndexedDB未加密、Python Web尚未被取代。
+
+合成手動驗收（使用全新普通瀏覽器設定檔，不開原帳本）：
+1. 雙擊工作樹的`start_local_first.local.cmd`，以全新設定檔開固定網址；若入口已由使用者執行，不停止它。確認頁面0.26.0，等待完整更新後關閉同來源所有舊頁再開，不清網站資料。
+2. 明確建立合成帳本，新增收入「合成薪資」10.29元及支出「合成早餐」3.1元。全站搜尋留空／全部後展開帳目，應顯示2筆、收入10.29、支出3.1、差額7.19；切收入／支出及日期／關鍵字核對。
+3. 先在兩邊表單留下未送出合成草稿，再從收入／支出搜尋列進更改並取消，確認返回條件及草稿保留。更改／確認作廢後核對筆數及合計；全選混合結果只選支出，收入沒有勾選框。
+4. 另一頁更改同筆合成帳目後，在舊頁儲存應拒絕並保留輸入；重新查詢。關頁重開與離線僅在合成來源測試，勿停止使用者現有服務。不要將差額解讀為存款或資產。
+
+
+## 0.25.3 標籤每月分析 — 2026-10-13（畫面驗收待補）
+
+- 修改產品：`local-first/comparison.mjs`、`page.mjs`、`index.html`、`style.css`、`sw.js`。計算重用tagReport完整四來源清單與原分析摘要；僅單一標籤，同筆消費不重計，日期首末仍含兩端。初始全部時間從第一筆符合消費所在月份計至今天，明確日期保留首末部分月；沒有歷史也未選開始日時不創造平均窗口。零消費月份留在含零平均，有消費平均另列；未開始月份不作零元，未結束月份截止今天。
+- 修改測試：新增`tests/test_local_first_tag_monthly.mjs`與`local_first_tag_monthly_ui_browser.mjs`；更新`local_first_preview.mjs`測試白名單，以及離線／更新的`local_first_offline_settings_browser.mjs`、`local_first_update_browser.mjs`、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`。產品未增加靜態資源、依賴、schema或備份格式。README／CHANGELOG同步0.25.3。
+- 實際純計算RED：7項因缺少analyzeTagMonths而失敗。實作後新增7項、比較／分析／標籤相關28項及完整非固定入口Node229項通過；子集不另加總。Ruff、10檔JS語法及git diff --check通過。極大整數維持BigInt，65筆加總不受50筆展示限制；原輸入物件不變。
+- 入口測試實際跑出1通過／7環境失敗，錯誤為connect EACCES，含固定入口CLI案；測試子程序已結束，沒有將其記為入口安全通過。Python由既有`.tmp/stage0_guard.py`禁止正式資料／憑證與非暫存SQLite，完整回歸停在Windows asyncio socketpair，120秒輸出逾時後停止，沒有完成數。
+- 新畫面測試已編寫，包含一份唯讀快照、兩種平均、隱藏標籤／惡意文字、長條／折線、單月完整帳目、圖表失敗、無效日期查詢前拒絕、未來及舊讀取失效；**本輪未觀測其執行結果**。升權重啟19343隔離預覽時自動核准審查因額度不足未完成；一般權限重啟後，內建瀏覽器仍連線逾時。沒有以工具限制為由降低CSP或改用使用者資料。
+- 修改前已用19343隔離來源重跑舊0.25.2分析畫面10組並擷取趨勢／兩組比較表單，僅用於操作建議。此證據不能替代0.25.3新標籤畫面、375px、鍵盤、自然SW更新或停服冷啟動驗證。
+- 手動驗收：沿用Windows啟動器與合成帳本，等待新資源完整下載並保留草稿，關閉同來源舊頁重開，確認0.25.3。在「分析 → 標籤每月分析」選單一合成標籤與任意日期，核對總額、月份數、兩種平均、長條／折線、每月資料與單月／全部帳目往返；修改日期時舊結果消失，無效日期保留輸入；最後停服／關頁／同網址重開再查。結果尚未由使用者確認。
+- 未驗證實體手機、其他瀏覽器、讀屏、正式帳本搬移、本輪實體備份復原；資料庫與備份格式不變。保留所有既有未提交內容，未stage／commit／push。
+
+## 0.25.1 店家規則與發票預設分類 — 2026-10-13
+
+本輪修改檔案（23個已追蹤修改＋1個新測試，0 staged）：
+- 程式9檔：`local-first/backup.mjs`、`csv.mjs`、`idb.mjs`、`index.html`、`ledger.mjs`、`page.mjs`、`rules.mjs`、`style.css`、`sw.js`。
+- 文件4檔：`README.md`、`CHANGELOG.md`、`docs/local-first-browser-validation.md`、`docs/local-first-invoice-import.md`。
+- 測試11檔：`tests/test_local_first_merchants.mjs`（新增）、`test_local_first_offline.mjs`、`test_local_first_update_status.mjs`、`local_first_invoice_browser.mjs`、`local_first_invoice_ui_browser.mjs`、`local_first_goals_browser.mjs`、`local_first_recurring_income_browser.mjs`、`local_first_schedule_migration_browser.mjs`、`local_first_offline_settings_browser.mjs`、`local_first_update_browser.mjs`、`local_first_preview.mjs`。既有migration／更新測試僅同步schema、版本斷言或補相關新資料，不移除既有保護。
+
+
+起點核對為`codex/localhost-web-auth`、HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`、0.25.0，staged／未提交均為0。本輪不讀真實CSV、正式帳本、憑證、既有備份或8767／8768來源；只使用全新25342／25343隔離來源、合成測試帳本及既有合成格式fixture。測試完成停止本輪服務；未stage／commit／push。
+
+- **自動測試**：新增5組單元測試先失敗（缺店名、建議、延後分類建立、規則交易與新備份），畫面先失敗「merchant management missing」，追加長店名窄版失敗測試並修正換行；實作後完整Node222/222。另使用`.tmp/usage-entry-checks.mjs`隨機連接埠安全7/7；刻意不執行會啟動8768的CLI占埠／啟動器測試。Python由正式資料／SQLite路徑audit防護完整隔離執行463/463；Ruff通過、非vendor JS101份語法通過、7項vendor SHA256及既有MIT授權通過、`git diff --check`通過。
+- **本輪原生瀏覽器測試fixture**：10組，v9／v10→v11升級保留舊備份內容；雙連線重複發票／同名規則競爭；已撤銷不重建；重新讀取選項；分類與消費同交易；quota／request-success後abort；規則更改／移除回滾、舊revision；JSON v10加密記憶體往返與空白原子還原／資料庫重開／非空白拒絕。
+- **本輪實際瀏覽器畫面fixture**：桌面及375px iframe各13組。新增／更改／確認移除店家規則、惡意店名只作文字、精確金額、分類建議、逐張覆寫不學習、預覽取消不寫入、50張分批保留完整選取、重複確認、錯檔及儲存錯誤保留輸入、停用發票→其他、兩者停用留空。窄版body寬360／scrollWidth360無水平溢出。
+- **本輪代理透過瀏覽器操作**：以Enter新增合成規則；375px以Enter收合／展開管理入口；停服後管理可達，重新整理仍看到同一合成規則。更新演練以0.25.1舊頁／測試0.25.2新頁，資源故障不留下不完整新版，完整下載等待且保留兩頁草稿，只關一頁仍等待，全部關閉後自然啟用，停服冷啟動。19個靜態資源、25類原始資料列／metadata／完整備份內容逐位元組不變（比對明文帳本，不要求兩份隨機密文相同）。
+- **最終發行資源再核對**：長店名換行修正後，0.25.1-v1完整19檔快取與帳本不變檢查通過；停止本輪25342服務、關閉原頁後開新頁，顯示0.25.1並保留「合成最終離線店」規則，離線再次只讀檢查原始列／metadata／備份不變。
+- **使用者手動驗證**：本輪沒有新增使用者手測確認，不把先前下載或還原回報當成本輪結果。
+- **未驗證**：實體下載檔落地／兩個全新普通設定檔同檔還原、螢幕閱讀器／真實手機、真實發票、正式帳本。原生加密往返不替代實體檔驗收。仍僅供合成資料測試，IndexedDB未加密、Python Web尚未被取代；格式限制見[發票契約](local-first-invoice-import.md)。
+
 
 **已完成使用者縮小範圍的發票匯入／去重，含明細折扣；店家規則及退款仍未實作。只用合成帳本驗證，IndexedDB未加密，Python Web尚未被取代。**下方前兩階段紀錄保留當時狀態及數字，不冒稱本次重跑；目前資料契約與限制見[發票文件](local-first-invoice-import.md)。
 

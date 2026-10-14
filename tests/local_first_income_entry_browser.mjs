@@ -8,15 +8,25 @@ const backup=async()=>new TextDecoder().decode(await ledger.exportPortableBackup
 await ledger.initializeLedger(db);
 try{
   await import('../local-first/page.mjs');await wait(()=>!q('#ledger-page').hidden);
-  check(!q('#view-record').hidden&&q('#income-recording')&&!q('#income-recording').open,'Recording lacks optional collapsed income entry');
+  check(!q('#view-record').hidden&&!q('#expense-entry').hidden&&q('#income-record-section').hidden,'Expense is not the default recording choice');
+  check(q('#record-expense-choice').getAttribute('aria-pressed')==='true'&&q('#record-income-choice').getAttribute('aria-pressed')==='false','Recording choices do not announce the default');
   check(q('#income-form').closest('[data-home-block]')?.dataset.homeBlock==='record'&&q('#income-form').closest('[data-view]').dataset.view==='record','Income form not in original record block');
-  check(q('#income-record-section').parentElement===q('#expense-form').closest('section').parentElement,'Income and expense are not parallel regions');
+  check(q('#income-record-section').closest('[data-home-block]')===q('#expense-form').closest('[data-home-block]'),'Income and expense are not one recording entry');
   check(q('#allocation-form').closest('[data-view]').dataset.view==='planning'&&!q('#income-planning #income-form'),'Allocation or income duplicated');
-  const before=await backup();q('#income-recording').open=true;await wait(()=>q('#income-record-summary').textContent.includes(month));check(await backup()===before,'Opening income posts data');lines.push('optional income records share original recording block, allocation stays planning, readonly opening');
+  const before=await backup();q('#expense-form').elements.note.value='支出草稿';q('#income-form').elements.name.value='收入草稿';
+  q('#record-income-choice').click();check(q('#expense-entry').hidden&&!q('#income-record-section').hidden&&q('#income-form').elements.name.value==='收入草稿','Switching to income loses its draft or keeps expense form visible');
+  q('#record-expense-choice').click();check(!q('#expense-entry').hidden&&q('#income-record-section').hidden&&q('#expense-form').elements.note.value==='支出草稿','Switching back loses expense draft');
+  q('#record-income-choice').click();await wait(()=>q('#income-record-summary').textContent.includes(month));check(await backup()===before,'Changing recording choice posts data');lines.push('one expense-first recording choice preserves separate drafts and changes no ledger data');
   const form=q('#income-form');form.elements.amount.value='.29';form.elements.name.value='<img src=x onerror=alert(1)>合成收入';form.requestSubmit();await wait(()=>q('#income-list').textContent.includes('0.29 元'));
   check(!q('#income-list img')&&(await ledger.readLedger(db)).expenses.length===0,'Income leaks into expenses or HTML');lines.push('recording adds exact income without consumption or unsafe HTML');
+  q('#record-expense-choice').click();q('#expense-form').elements.amount.value='.05';q('#expense-form').requestSubmit();await wait(()=>q('#expenses li')?.dataset.expenseId);
+  q('#record-income-choice').click();q('#expenses-disclosure').open=true;q('#expenses li button').click();
+  check(!q('#expense-entry').hidden&&q('#income-record-section').hidden&&q('#form-title').textContent==='更改消費','Opening an expense from income leaves its edit form hidden');
+  q('#cancel-edit').click();q('#record-income-choice').click();lines.push('expense edit switches back to its own visible form');
   q('[data-view-button="planning"]').click();q('#income-planning').open=true;await wait(()=>q('#allocation-items').children.length===1);
+  check(!q('#allocation-details').open&&!q('#income-suggestion-total').closest('#allocation-details'),'Monthly allocation should start collapsed without hiding suggestions');q('#allocation-details').open=true;
   q('[data-item-id="living"] [data-field="amount"]').value='.10';q('#allocation-form').dispatchEvent(new Event('input',{bubbles:true}));
+  q('#allocation-details').open=false;q('#allocation-details').open=true;check(q('[data-item-id="living"] [data-field="amount"]').value==='.10','Collapsing allocation loses draft');
   q('[data-view-button="record"]').click();form.elements.amount.value='1.31';form.elements.name.value='收入草稿';q('[data-view-button="planning"]').click();q('[data-view-button="record"]').click();
   check(form.elements.amount.value==='1.31'&&q('[data-item-id="living"] [data-field="amount"]').value==='.10','Navigation lost either draft');form.requestSubmit();await wait(()=>q('#income-record-summary').textContent.includes('1.6 元'));
   check(q('[data-item-id="living"] [data-field="amount"]').value==='.10'&&(await ledger.readLedger(db)).monthly_allocations.length===0,'New income overwrote or saved allocation draft');lines.push('two independent drafts survive navigation and income commits do not confirm allocation');

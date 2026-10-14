@@ -48,7 +48,7 @@ test('fixed entry constants and Windows launcher preserve failures without chang
   assert.ok(!/(?<!\r)\n/.test(text),'CMD must use CRLF');
 });
 test('required local assets are byte-identical, correctly typed and covered by CSP',async()=>withServer(async port=>{
-  const paths=['index.html','style.css','page.mjs','rules.mjs','income.mjs','annual.mjs','usage.mjs','browse.mjs','csv.mjs','ledger.mjs','idb.mjs','backup.mjs','backup-crypto.mjs','sw.js','vendor/lossless-json-4.3.1/lossless-json.js'];
+  const paths=['index.html','style.css','page.mjs','home-preferences.mjs','budget-preferences.mjs','rules.mjs','income.mjs','annual.mjs','usage.mjs','browse.mjs','csv.mjs','ledger.mjs','idb.mjs','backup.mjs','backup-crypto.mjs','sw.js','vendor/lossless-json-4.3.1/lossless-json.js'];
   for(const name of paths){const response=await get(port,'/local-first/'+name);assert.equal(response.status,200,name);security(response.headers);
     assert.deepEqual(response.body,await readFile(new URL('../local-first/'+name,import.meta.url)),name);
     assert.match(response.headers['content-type'],name.endsWith('.css')?/^text\/css/:name.endsWith('.html')?/^text\/html/:/^text\/javascript/);

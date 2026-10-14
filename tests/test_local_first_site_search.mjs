@@ -33,7 +33,7 @@ test('site search preserves literal ASCII matching and historical categories wit
   assert.equal(browse.siteSearch(s,{...query,keyword:'abc[.*]'},today,[]).expenses[0].id,'history');
   assert.equal(browse.siteSearch(s,{...query,keyword:'.*'},today,[]).expenses.length,1);
   assert.equal(browse.siteSearch(s,{...query,keyword:'歷史'},today,[]).categories[0].historical,true);
-  assert.deepEqual(browse.siteSearch(s,{...query,keyword:'沒有'},today,[]),{expenses:[],functions:[],categories:[],tags:[]});
+  assert.deepEqual(browse.siteSearch(s,{...query,keyword:'沒有'},today,[]),{expenses:[],accounts:{rows:[],expenses:[],incomeTotal:0n,expenseTotal:0n,difference:0n},functions:[],categories:[],tags:[]});
 });
 test('dates reject before querying; dates alone search expenses without enumerating all names',()=>{
   assert.equal(typeof browse.siteSearch,'function','Missing site search');

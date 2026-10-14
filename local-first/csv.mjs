@@ -1,5 +1,5 @@
 import { activeExpenses, ordered } from './browse.mjs';
-import { cents, isoDate, money, ValidationError } from './rules.mjs';
+import { cents, isoDate, money, merchantName, ValidationError } from './rules.mjs';
 
 export const MAX_INVOICE_BYTES=4*1024*1024;
 const invoiceError=()=>new ValidationError('發票 CSV 格式不符或資料矛盾；未匯入。請確認 UTF-8、必要欄位、日期、總金額與發票號碼。');
@@ -43,17 +43,18 @@ export function invoicePreview(payload) {
     if(!/^[0-9]{8}$/.test(rawDate))throw invoiceError();
     const date=rawDate.slice(0,4)+'-'+rawDate.slice(4,6)+'-'+rawDate.slice(6),id=invoiceIdentity(number,date);
     const status=get(row,'發票狀態'),allowance=get(row,'折讓'),declared=invoiceCents(get(row,'發票金額')),amount=detail?invoiceCents(get(row,'消費明細_金額')):declared;
-    const note=get(row,'消費明細_品名');
+    const note=get(row,'消費明細_品名'),rawMerchant=get(row,'賣方名稱');
+    const merchant=rawMerchant?merchantName(rawMerchant):'';
     if(!note||[...note].length>4096)throw invoiceError();
-    if(current?.id!==id){current={id,number,date,status,allowance,rows:[]};blocks.push(current);}
-    if(current.date!==date||current.status!==status||current.allowance!==allowance)throw invoiceError();
+    if(current?.id!==id){current={id,number,date,status,allowance,merchant,rows:[]};blocks.push(current);}
+    if(current.date!==date||current.status!==status||current.allowance!==allowance||current.merchant!==merchant)throw invoiceError();
     current.rows.push({note,amount,declared,quantity:get(row,'消費明細_數量'),unit:get(row,'消費明細_單價')});
   }
   if(!blocks.length)throw invoiceError();
   const items=[];let excluded=0,nonpositive=0;
   for(const value of blocks) {
     const lines=value.rows.map(row=>[row.note,row.amount.toString(),row.declared.toString(),row.quantity,row.unit]);
-    const signature=JSON.stringify([value.date,value.status,value.allowance,lines]);
+    const signature=JSON.stringify([value.date,value.status,value.allowance,value.merchant,lines]);
     if(seen.has(value.id)){if(seen.get(value.id)!==signature)throw invoiceError();continue;}
     if(seen.size>=1000)throw invoiceError();seen.set(value.id,signature);
     if(value.status!=='開立已確認'||value.allowance!=='否'){excluded++;continue;}
@@ -63,7 +64,7 @@ export function invoicePreview(payload) {
     const amount=decimalAmount(sum.toString());money(amount);
     const note=[...new Set(value.rows.map(row=>row.note))].join('、');if([...note].length>4096)throw invoiceError();
     const needsTotal=detail&&new Set(lines.map(row=>JSON.stringify(row))).size!==lines.length;
-    items.push({number:value.number,date:value.date,amount,note,needsTotal});
+    items.push({number:value.number,date:value.date,amount,note,needsTotal,merchant:value.merchant});
   }
   return {items,excluded,nonpositive,footerRows};
 }

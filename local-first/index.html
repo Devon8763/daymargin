@@ -11,7 +11,7 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.25.0</p>
+  <p id="page-version">目前使用頁面版本：0.26.6</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
@@ -70,9 +70,11 @@
   <section id="home-goals" aria-label="存錢目標"><details id="home-goals-details"><summary>存錢目標</summary><ul id="home-goals-list"></ul><a href="#goal-planning">管理存錢目標</a></details></section>
   <div id="view-search" data-view="search" role="region" aria-labelledby="view-search-title" hidden><h2 id="view-search-title" tabindex="-1">全站搜尋</h2><button id="site-search-back" type="button">返回原區域</button></div>
   <p id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a></p>
-  <section aria-labelledby="form-title">
-    <h2 id="form-title" data-search-feature>記錄消費</h2>
-    <form id="expense-form">
+  <section aria-label="記帳">
+    <div id="record-kind" class="buttons" role="group" aria-label="記帳類型"><button id="record-expense-choice" type="button" aria-pressed="true">支出</button><button id="record-income-choice" type="button" aria-pressed="false">收入</button></div>
+    <div id="expense-entry">
+      <h2 id="form-title" data-search-feature>記錄消費</h2>
+      <form id="expense-form">
       <p class="required-legend"><span class="required-example" aria-hidden="true">*</span> 代表必填</p>
       <fieldset id="fields" disabled>
         <div class="form-grid">
@@ -106,7 +108,8 @@
         </details>
         <div class="buttons"><button type="submit" id="save">儲存消費</button><button type="button" id="cancel-edit" hidden>取消更改</button></div>
       </fieldset>
-    </form>
+      </form>
+    </div>
   </section>
   <section aria-label="操作捷徑">
     <div id="shortcut-quick" class="buttons"></div>
@@ -184,6 +187,9 @@
       </details>
       <details id="budget-settings">
         <summary data-search-feature>預算</summary>
+        <p><a id="budget-allocation-back" href="#income-planning" hidden>返回收入與每月分配</a></p>
+        <label class="budget-preference"><input id="budget-near-enabled" type="checkbox" checked>接近上限提示</label>
+        <p id="budget-preference-status" role="status" aria-live="polite"></p>
         <p><a id="budget-category-link" href="#category-management-title">更改分類名稱</a></p>
         <p data-help-topic="預算">新預算限正整數台幣，最多十億元。總預算須至少等於所有分類預算加總（含停用分類）；未設定總預算時可單獨設定分類預算。</p>
         <fieldset id="budget-fields">
@@ -201,6 +207,18 @@
           <button type="submit">新增分類</button>
         </form>
         <ul id="category-list" class="settings-list"></ul>
+        <details id="merchant-management">
+          <summary>店家分類規則</summary>
+          <p>依 CSV「賣方名稱」去除前後空白後完整匹配，只建議啟用分類；不改舊帳目。手動更改預覽不建立規則。</p>
+          <form id="merchant-form" novalidate>
+            <label>店家名稱<input name="merchant" type="text" maxlength="200" autocomplete="off"></label>
+            <label>建議分類<select name="category"></select></label>
+            <button id="merchant-save" type="submit">新增店家規則</button>
+            <button id="merchant-cancel" type="button" hidden>取消更改</button>
+          </form>
+          <p id="merchant-error" role="alert"></p>
+          <ul id="merchant-list" class="settings-list"></ul>
+        </details>
         </section><section data-settings-section="payment">
         <h3 id="payment-management-title" data-search-feature>付款方式</h3>
         <form id="payment-add" novalidate>
@@ -218,6 +236,7 @@
     <h2 id="search-title">搜尋條件</h2>
     <form id="search-form" novalidate>
       <div class="form-grid">
+        <label>帳目類型<select name="type"><option value="all">全部</option><option value="expense">支出</option><option value="income">收入</option></select></label>
         <label>搜尋關鍵字<input name="keyword" type="search" autocomplete="off"></label>
         <label>開始日期<input name="start" type="date"></label>
         <label>結束日期<input name="end" type="date"></label>
@@ -226,7 +245,7 @@
     </form>
     <p id="search-error" role="alert"></p>
     <p id="search-progress" role="status" aria-live="polite"></p>
-    <p data-help-topic="搜尋與分析">未輸入關鍵字可展開瀏覽；輸入後顯示符合項目。日期適用於帳目及分類／標籤相關消費。</p>
+    <p data-help-topic="搜尋與分析">未輸入關鍵字可展開瀏覽；輸入後顯示符合項目。帳目類型只篩選帳目；日期以收入收到日／支出消費日計，分類／標籤相關清單仍是支出。</p>
     <div id="search-groups" hidden>
     <p id="site-search-counts" role="status" aria-live="polite"></p>
     <details id="search-functions-group"><summary id="search-functions-heading">功能（0）</summary><ul id="search-functions"></ul></details>
@@ -234,6 +253,7 @@
     <details id="search-tags-group"><summary id="search-tags-heading">標籤（0）</summary><ul id="search-tags"></ul></details>
     <details id="search-accounts"><summary id="search-expenses-heading">帳目（0）</summary>
     <p id="search-count" role="status"></p>
+    <p id="search-totals" role="status"></p>
     <ul id="search-results"></ul>
     <button id="search-more" type="button" hidden>顯示更多</button>
     </details>
@@ -258,34 +278,58 @@
       <strong id="calendar-month"></strong>
       <button id="calendar-next" type="button" aria-label="下個月">→</button>
     </div>
+    <p id="calendar-legend">圖例：＋收入／−支出</p>
     <div id="calendar-grid" class="calendar-grid" role="group" aria-label="月份日期"></div>
-    <p id="calendar-empty" hidden>本月尚無已記錄的消費。</p>
+    <p id="calendar-empty" hidden>本月無記錄</p>
     <div id="calendar-day-details" hidden>
       <h3 id="calendar-day-title"></h3>
       <p id="calendar-day-total"></p>
+      <label>明細類型<select id="calendar-day-type"><option value="all">全部</option><option value="expense">支出</option><option value="income">收入</option></select></label>
       <ul id="calendar-day-results"></ul>
-      <p id="calendar-day-empty" hidden>此日期沒有已記錄的消費。</p>
+      <p id="calendar-day-empty" hidden>無記錄</p>
       <button id="calendar-day-more" type="button" hidden>顯示更多</button>
     </div>
     <p id="calendar-error" role="alert"></p>
   </section>
   <section id="expense-analysis" aria-labelledby="analysis-title">
-    <h2 id="analysis-title" data-search-feature>支出分析</h2>
+    <div id="analysis-navigation" class="analysis-tabs" role="group" aria-label="分析選擇">
+      <button id="analysis-trend-entry" data-search-feature data-analysis-mode="trend" type="button">支出變化</button>
+      <button id="analysis-compare-entry" data-search-feature data-analysis-mode="compare" type="button" aria-pressed="true">期間比較</button>
+      <button id="analysis-tag-entry" data-search-feature data-analysis-mode="tag" type="button">標籤分析</button>
+      <button id="analysis-monthly-entry" data-search-feature data-analysis-mode="monthly" type="button">每月收支</button>
+      <label id="analysis-choice-label" hidden>分析方式<select id="analysis-choice"><option value="trend">支出變化</option><option value="compare" selected>期間比較</option><option value="tag">標籤分析</option><option value="monthly">每月收支</option></select></label>
+    </div>
+    <h2 id="analysis-title" data-search-feature>期間比較</h2>
     <form id="analysis-form" novalidate>
-      <div class="form-grid">
-        <label>操作<select name="mode"><option value="compare">自選期間比較</option><option value="trend">連續區間趨勢</option></select></label>
+      <div class="analysis-query-bar">
+        <select name="mode" hidden aria-label="支出分析模式"><option value="compare">自選期間比較</option><option value="trend">連續區間趨勢</option></select>
         <label>時間單位<select name="unit"><option value="week">週（週一開始）</option><option value="month" selected>月</option><option value="year">年</option></select></label>
-        <label>消費項目關鍵字（最多200字）<input name="keyword" type="search" autocomplete="off"></label>
-        <label>主要圖表<select name="chart"><option value="bar">長條比較</option><option value="line">時間趨勢折線</option><option value="pie">所選期間分類占比</option></select></label>
+        <label>常用時間<select id="analysis-time-choice"><option value="custom">自訂日期</option><option value="month">本月</option><option value="previous">上月</option><option value="three">近三月</option><option value="year">今年</option></select></label>
+        <button id="analysis-submit" type="submit">分析</button>
       </div>
-      <fieldset id="analysis-categories"><legend>共同分類篩選（未勾選為全部，含停用／歷史）</legend></fieldset>
-      <p>以所選單位的完整週、月或年統計；日期用來選取所在期間。各組共用分類及關鍵字，未來不預測。</p>
       <div id="analysis-trend" class="form-grid" hidden><label>區間開始日期<input name="trend_start" type="date"></label><label>區間結束日期<input name="trend_end" type="date"></label></div>
-      <div id="analysis-custom"><div id="analysis-groups"></div><button id="analysis-add-group" type="button">新增比較組</button></div>
-      <div class="buttons"><button id="analysis-preset" type="button">本月與上月</button><button id="analysis-submit" type="submit">分析支出</button></div>
+      <div id="analysis-basic-periods"><div id="analysis-custom"><div id="analysis-groups"></div><div class="buttons"><button id="analysis-add-group" type="button">＋新增比較期間</button><button id="analysis-preset" type="button">本月與上月</button></div></div></div>
+      <div class="analysis-filters"><details id="analysis-category-details"><summary id="analysis-category-summary">分類：全部</summary><fieldset id="analysis-categories"><legend>選擇分類（含停用／歷史）</legend></fieldset></details><p id="analysis-active-filters" role="status"></p></div>
     </form>
-    <p id="analysis-error" role="alert"></p>
+    <details id="analysis-advanced"><summary id="analysis-advanced-summary">更多條件</summary>
+      <div id="analysis-advanced-controls"><label>消費項目關鍵字（最多200字）<input form="analysis-form" name="keyword" type="search" autocomplete="off"></label><div id="analysis-group-names"></div></div>
+      <div id="analysis-legacy-host"></div>
+    </details>
+    <p data-help-topic="搜尋與分析">支出分析依所選日期所在的完整週、月或年統計；週一開始。各組共用篩選、只計已入帳有效支出，截至台灣今天；近三月為本月及前兩個曆月。組內重疊只計一次，跨組獨立計算，不能直接相加；未結束及不等長期間不能解讀為花費速度變化。</p>
+    <p id="analysis-pending" role="status">請按分析查詢。</p><p id="analysis-error" role="alert"></p>
+    <div id="analysis-chart-controls" hidden><label>主要圖表<select form="analysis-form" name="chart"><option value="bar">長條比較</option><option value="line">時間趨勢折線</option><option value="pie">所選期間分類占比</option></select></label></div>
     <div id="analysis-results" aria-live="polite"></div>
+  </section>
+  <section id="monthly-analysis" aria-labelledby="monthly-title" hidden>
+    <h2 id="monthly-title">每月收支</h2>
+    <form id="monthly-query" novalidate><div class="buttons"><label>月份<input name="month" type="month" required></label><button type="submit">查看收支</button></div></form>
+    <p id="monthly-error" role="alert"></p><p id="monthly-pending" role="status"></p>
+    <div id="monthly-results" hidden>
+      <dl id="monthly-summary" class="monthly-summary" aria-live="polite"></dl><p id="monthly-through"></p>
+      <p id="monthly-empty" hidden>本月尚無已記錄收支。</p>
+      <details id="monthly-income"><summary>收入來源</summary><div id="monthly-income-groups"></div></details>
+      <details id="monthly-expense"><summary>支出分類</summary><div id="monthly-expense-groups"></div></details>
+    </div>
   </section>
   <section id="expense-comparison" aria-labelledby="comparison-title">
     <details id="legacy-comparison"><summary>既有兩期間比較</summary>
@@ -307,17 +351,27 @@
     </details>
   </section>
   <section id="tag-analysis" aria-labelledby="tag-analysis-title">
-    <h2 id="tag-analysis-title" data-search-feature>單一標籤消費</h2>
+    <h2 id="tag-analysis-title" data-search-feature>標籤每月分析</h2>
     <p data-help-topic="搜尋與分析">只查看一個標籤；同一筆消費可出現在多個標籤，請勿把不同標籤總額相加。只統計截至台灣今天已入帳、有效的生活消費。</p>
     <form id="tag-query" novalidate>
       <div class="form-grid">
-        <label>查看標籤<select name="tag_id" required></select></label>
+        <label>常用時間<select id="tag-time-choice"><option value="all">全部時間</option><option value="month">本月</option><option value="previous">上月</option><option value="three">近三月</option><option value="year">今年</option><option value="custom">自選</option></select></label>
         <label>標籤統計開始日期（留空為全部時間）<input name="start" type="date"></label>
         <label>標籤統計結束日期（留空截至今天）<input name="end" type="date"></label>
+        <label>查看標籤<select name="tag_id" required></select></label>
       </div><button type="submit">查看標籤消費</button>
     </form>
     <p id="tag-query-error" role="alert"></p><p id="tag-summary" role="status"></p>
-    <ul id="tag-results"></ul><button id="tag-more" type="button" hidden>顯示更多標籤帳目</button>
+    <div id="tag-monthly-results" hidden>
+      <dl id="tag-monthly-summary" class="form-grid"></dl>
+      <label>每月圖表<select id="tag-chart-kind"><option value="bar">長條圖</option><option value="line">折線圖</option></select></label>
+      <div id="tag-monthly-chart" class="comparison-chart" hidden></div><p id="tag-chart-status" role="status"></p>
+      <details id="tag-monthly-data"><summary>統計明細與每期資料</summary><p id="tag-month-count"></p><dl id="tag-extra-summary" class="form-grid"></dl><div id="tag-monthly-table"></div></details>
+    </div>
+    <details id="tag-expense-details"><summary id="tag-expense-caption">查看標籤帳目</summary>
+      <button id="tag-all-expenses" type="button">查看全部符合帳目</button>
+      <ul id="tag-results"></ul><button id="tag-more" type="button" hidden>顯示更多標籤帳目</button>
+    </details>
   </section>
   <section id="tag-settings" data-settings-section="tags" aria-labelledby="tag-settings-title">
     <h2 id="tag-settings-title" data-search-feature>消費標籤管理</h2>
@@ -371,12 +425,15 @@
           <p id="income-rule-error" role="alert"></p><ul id="income-rule-list"></ul>
         </details>
         <details><summary>查看已收到的收入明細</summary><ul id="income-history"></ul></details>
+        <details id="allocation-details"><summary>本月分配</summary>
         <h3>已規劃的分配</h3>
+        <p id="allocation-budget" hidden><span id="allocation-budget-text"></span> <a id="allocation-budget-link" href="#budget-settings" hidden>查看預算</a></p>
         <p data-help-topic="收入與分配">未儲存時只有生活開銷草稿；不自動複製上月或套用建議。0 元表示暫不分配。</p>
         <form id="allocation-form" novalidate>
           <div id="allocation-items"></div>
           <div class="buttons"><button id="add-allocation-item" type="button">新增分配項目</button><button type="submit">儲存本月分配</button></div>
         </form>
+        </details>
         <h3>生活開銷建議</h3>
         <p data-help-topic="收入與分配">本月應扣款的啟用固定／訂閱／分期，含尚未到期項目，只供規劃參考；這裡不補記消費。排除建議不會停用扣款規則。</p>
         <p id="income-suggestion-total"></p>
@@ -390,11 +447,10 @@
       <p id="income-error" role="alert"></p>
     </details>
   </section>
-  <section id="income-record-section" aria-label="記錄收入">
-    <details id="income-recording">
-      <summary data-search-feature>記錄收入</summary>
+  <section id="income-record-section" aria-label="記錄收入" hidden>
+    <div id="income-recording">
       <fieldset id="income-record-fields">
-        <h3 id="income-form-title">新增已收到的收入</h3>
+        <h2 id="income-form-title" data-search-feature>新增已收到的收入</h2>
         <form id="income-form" novalidate>
           <div class="form-grid">
             <label>收到日期<input name="received_on" type="date" required></label>
@@ -408,7 +464,7 @@
         <details><summary>定期收入待確認與處理紀錄</summary><p>只有確認已收到才計入收入；未收到請略過，略過可恢復。不自動分配金額。</p><ul id="income-periods"></ul><button id="income-period-more" type="button" hidden>查看更多收入期數</button></details>
       </fieldset>
       <p id="income-record-error" role="alert"></p>
-    </details>
+    </div>
   </section>
   <section id="data-management" data-settings-section="data" aria-labelledby="data-management-title" hidden>
     <h2 id="data-management-title" data-search-feature>資料管理</h2>
@@ -422,8 +478,8 @@
     <details id="invoice-import">
       <summary data-search-feature>電子發票 CSV 匯入</summary>
       <p>僅供合成資料測試。選檔只預覽；一張發票記一筆總額，合併品名，不逐品項重複記帳。按發票號碼與年份去重，已作廢的舊帳目也不重建。</p>
-      <p>第一版只接受 UTF-8 財政部品項 CSV、狀態「開立已確認」及折讓「否」；其他狀態／折讓排除，不處理退貨。最多 4 MiB、10000 列、1000 張。店家分類規則尚未提供，請逐筆選擇分類。</p>
-      <p>含發票去重識別的完整備份使用 JSON v9，舊 Python／舊 local-first 不支援；不要刪除識別或降版。瀏覽器帳本仍未加密。</p>
+      <p>第一版只接受 UTF-8 財政部品項 CSV、狀態「開立已確認」及折讓「否」；其他狀態／折讓排除，不處理退貨。最多 4 MiB、10000 列、1000 張。有「賣方名稱」時可依設定的店家規則建議分類，逐張選擇優先；未匹配預設「發票」，確認時才建立。停用後只退回啟用的「其他」；兩者停用須自行選擇。</p>
+      <p>含發票去重識別使用 JSON v9；含店家規則使用 JSON v10，舊 Python／舊 local-first 不支援；不要刪除識別或降版。瀏覽器帳本仍未加密。</p>
       <p>有明細金額時加總每列，包含負數折扣，得到整張正數淨額；不再加一次發票總額。淨額為零或負數整張排除，不自動記退款或收入。相同明細列無法可靠判斷是否重複，需自行核對並填入總額。</p>
       <fieldset id="invoice-fields">
         <label>選取合成發票 CSV<input id="invoice-file" type="file" accept=".csv,text/csv"></label>
@@ -452,6 +508,10 @@
       </form>
       <p>為防止試算表將文字當成公式，危險開頭的文字會加上單引號；只改匯出副本，部分軟體可能顯示該符號。支出匯出 CSV 不能作完整還原；電子發票匯入是上方獨立流程。</p>
     </details>
+    <dialog id="merchant-remove-dialog" aria-labelledby="merchant-remove-title">
+      <h3 id="merchant-remove-title">移除店家規則</h3><p id="merchant-remove-summary"></p><p id="merchant-remove-error" role="alert"></p>
+      <button id="merchant-remove-confirm" type="button">確認移除規則</button><button id="merchant-remove-cancel" type="button">取消</button>
+    </dialog>
     <dialog id="invoice-dialog" aria-labelledby="invoice-dialog-title">
       <h3 id="invoice-dialog-title">確認記錄發票消費</h3><p id="invoice-summary"></p><ul id="invoice-confirm-items"></ul><p id="invoice-dialog-error" role="alert"></p>
       <p>只記錄選取的發票，不改定期規則、收入或分配。任何一張失敗，整批都不寫入。</p>

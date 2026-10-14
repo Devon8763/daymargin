@@ -1,4 +1,5 @@
 import { cents, isoDate, categoryOptions, ValidationError } from './rules.mjs';
+import {activeIncomes} from './income.mjs';
 
 const asciiLower = text => text.replace(/[A-Z]/g, char => char.toLowerCase());
 export const literalMatch = (text, keyword) => asciiLower(text).includes(asciiLower(keyword));
@@ -25,8 +26,16 @@ export function tagReport(state,query,today) {
   return {rows,total:rows.reduce((total,row)=>total+cents(row.cents),0n)};
 }
 
-export function monthBudget(state, today) {
-  const month = isoDate(today).slice(0, 7);
+export function budgetStatus(row, enabled = true) {
+  if (row.spent > row.cents) return 'over';
+  if (row.spent === row.cents) return 'used';
+  return enabled && row.cents > 0n && row.spent * 10n >= row.cents * 9n ? 'near' : 'remaining';
+}
+
+export function monthBudget(state, today, month = isoDate(today).slice(0, 7)) {
+  isoDate(today);
+  if (typeof month !== 'string' || !/^\d{4}-\d{2}$/.test(month)) throw new ValidationError('請輸入有效月份。');
+  isoDate(month + '-01');
   const totals = new Map();
   let spent = 0n;
   for (const row of activeExpenses(state, today)) {
@@ -60,6 +69,21 @@ export function searchExpenses(state, query, today) {
   return ordered(activeExpenses(state, today).filter(row => row.spent_on >= start && row.spent_on <= end &&
     (!keyword || literalMatch(row.note, keyword))));
 }
+export function validateAccountSearch(query,today) {
+  if(!query||typeof query!=='object'||Array.isArray(query)||Object.keys(query).some(key=>!['keyword','start','end','type'].includes(key))||['keyword','start','end'].some(key=>typeof query[key]!=='string'))throw new ValidationError('請輸入有效搜尋條件。');
+  const type=Object.hasOwn(query,'type')?query.type:'all';
+  if(!['all','expense','income'].includes(type))throw new ValidationError('請選擇全部、支出或收入。');
+  return {...(query.keyword.trim()?validateSearch(query,today):validateBrowse(query,today)),type};
+}
+export function searchAccounts(state,query,today) {
+  const {keyword,start,end,type}=validateAccountSearch(query,today);
+  const expenses=type==='income'?[]:searchExpenses(state,{keyword,start,end},today);
+  const incomes=type==='expense'?[]:activeIncomes(state,today).filter(row=>row.received_on>=start&&row.received_on<=end&&(!keyword||literalMatch(row.name,keyword)));
+  const rows=[...expenses.map(entry=>({type:'expense',id:entry.id,date:entry.spent_on,entry})),...incomes.map(entry=>({type:'income',id:entry.id,date:entry.received_on,entry}))]
+    .sort((a,b)=>b.date.localeCompare(a.date)||(a.id<b.id?1:a.id>b.id?-1:a.type.localeCompare(b.type)));
+  const incomeTotal=incomes.reduce((sum,row)=>sum+cents(row.cents),0n),expenseTotal=expenses.reduce((sum,row)=>sum+cents(row.cents),0n);
+  return {rows,expenses,incomeTotal,expenseTotal,difference:incomeTotal-expenseTotal};
+}
 
 function searchCategories(state,today) {
   const options=new Map(categoryOptions(state).map(row=>[row.name,row]));
@@ -67,16 +91,17 @@ function searchCategories(state,today) {
   return [...options.values()];
 }
 export function siteSearch(state,query,today,functions=[]) {
-  const expenses=searchExpenses(state,query,today),keyword=query.keyword.trim();
-  return {expenses,
+  validateAccountSearch(query,today);validateSearch(query,today);
+  const accounts=searchAccounts(state,query,today),keyword=query.keyword.trim();
+  return {expenses:accounts.expenses,accounts,
     functions:keyword ? functions.filter(row=>literalMatch(row.name,keyword)) : [],
     categories:keyword ? searchCategories(state,today).filter(row=>literalMatch(row.name,keyword)) : [],
     tags:keyword ? (state.tags || []).filter(row=>literalMatch(row.name,keyword)) : []};
 }
 export const validateBrowse=(query,today)=>validateSearch({...query,keyword:'',start:query.start||'0001-01-01'},today);
 export function browseSite(state,query,today,functions=[]) {
-  const {start,end}=validateBrowse(query,today);
-  return {expenses:searchExpenses(state,{keyword:'',start,end},today),functions:[...functions],categories:searchCategories(state,today),tags:state.tags||[]};
+  const accounts=searchAccounts(state,{...query,keyword:''},today);
+  return {expenses:accounts.expenses,accounts,functions:[...functions],categories:searchCategories(state,today),tags:state.tags||[]};
 }
 export function categoryReport(state,query,today) {
   const rows=searchExpenses(state,{keyword:'',start:query.start || '0001-01-01',end:query.end},today);
@@ -95,17 +120,35 @@ export function calendarMonth(state, month, today) {
   first.setUTCFullYear(year, number - 1, 1);
   const last = new Date(0);
   last.setUTCFullYear(year, number, 0);
+  const end=`${month}-${String(last.getUTCDate()).padStart(2,'0')}`;
+  const report=searchAccounts(state,{keyword:'',start:month+'-01',end:end>today?today:end,type:'all'},today);
   const byDay = new Map();
-  for (const row of activeExpenses(state, today)) {
-    if (!row.spent_on.startsWith(month)) continue;
-    if (!byDay.has(row.spent_on)) byDay.set(row.spent_on, []);
-    byDay.get(row.spent_on).push(row);
+  for (const row of report.rows) {
+    if (!byDay.has(row.date)) byDay.set(row.date, []);
+    byDay.get(row.date).push(row);
   }
   const days = Array.from({ length:last.getUTCDate() }, (_, index) => {
     const date = `${month}-${String(index + 1).padStart(2, '0')}`;
-    const expenses = ordered(byDay.get(date) || []);
+    const rows=byDay.get(date)||[],expenses=rows.filter(row=>row.type==='expense').map(row=>row.entry),incomes=rows.filter(row=>row.type==='income').map(row=>row.entry);
+    const incomeTotal=incomes.reduce((sum,row)=>sum+cents(row.cents),0n),expenseTotal=expenses.reduce((sum,row)=>sum+cents(row.cents),0n);
     return { date, day:index + 1, isFuture:date > today, hasExpense:expenses.length > 0,
-      expenses, total:expenses.reduce((sum, row) => sum + cents(row.cents), 0n) };
+      hasIncome:incomes.length>0,rows,incomes,expenses,incomeTotal,expenseTotal,difference:incomeTotal-expenseTotal,total:expenseTotal };
   });
   return { month, leadingBlanks:(first.getUTCDay() + 6) % 7, days };
+}
+
+export function monthlyAccounts(state,month,today) {
+  const calendar=calendarMonth(state,month,today),sources=new Map(),categories=new Map();
+  let incomeTotal=0n,expenseTotal=0n;
+  for(const day of calendar.days.slice().reverse()) {
+    incomeTotal+=day.incomeTotal;expenseTotal+=day.expenseTotal;
+    for(const row of day.rows) {
+      const groups=row.type==='income'?sources:categories,name=row.type==='income'?row.entry.name:row.entry.category;
+      if(!groups.has(name))groups.set(name,{name,total:0n,rows:[]});
+      const group=groups.get(name);group.total+=cents(row.entry.cents);group.rows.push(row);
+    }
+  }
+  const orderedGroups=groups=>[...groups.values()].sort((a,b)=>a.total===b.total?a.name.localeCompare(b.name):a.total>b.total?-1:1);
+  return {month,through:month===today.slice(0,7)?today:calendar.days.at(-1).date,incomeTotal,expenseTotal,difference:incomeTotal-expenseTotal,
+    incomeSources:orderedGroups(sources),expenseCategories:orderedGroups(categories)};
 }

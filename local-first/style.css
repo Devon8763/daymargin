@@ -18,6 +18,9 @@ button:disabled { cursor: wait; opacity: .6; }
 .buttons { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 #view-navigation[hidden] { display: none; }
 #view-navigation button[aria-current="page"] { font-weight: bold; border-width: 2px; }
+#record-kind { margin-bottom: 1rem; }
+#record-kind button[aria-pressed="true"] { font-weight: bold; border-width: 2px; }
+#income-record-section { margin: 0; padding: 0; }
 .site-search-entry { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; }
 .site-search-entry label { flex: 1; min-width: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -41,6 +44,7 @@ fieldset > .buttons { margin-top: 1rem; }
 .comparison-table th, .comparison-table td { text-align: left; padding: .6rem; border-bottom: 1px solid #dce5df; overflow-wrap: anywhere; }
 .comparison-chart { position: relative; height: 300px; margin: 1rem 0; }
 .comparison-chart[hidden] { display: none; }
+#tag-monthly-summary dd { margin: .25rem 0 .75rem; font-weight: 600; }
 .comparison-pies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 #comparison-results { overflow-wrap: anywhere; }
 #settings-error, #setting-error { color: #a2241b; overflow-wrap: anywhere; }
@@ -111,3 +115,61 @@ dialog::backdrop { background: #0006; }
   .expense-selectable > div:nth-child(3) { grid-column: 2 / -1; grid-row: 1; }
   .expense-selectable > .buttons { grid-column: 2 / -1; }
 }
+
+#invoice-preview { overflow-wrap: anywhere; }
+#analysis-choice-label { display: block; margin: 1rem 0; }
+#analysis-basic-periods { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,260px),1fr)); gap: 1rem; }
+#expense-analysis[hidden], #tag-analysis[hidden], #analysis-form[hidden], #analysis-basic-periods[hidden], #analysis-custom[hidden], #analysis-chart-controls[hidden], #analysis-results[hidden], #analysis-pending[hidden], #analysis-form select[hidden] { display: none; }
+#analysis-advanced-summary { overflow-wrap: anywhere; }
+#analysis-form label[hidden] { display: none; }
+
+/* Analysis controls stay inside their period cards. */
+#view-analysis [hidden] { display: none !important; }
+#view-analysis { min-width: 0; overflow-wrap: anywhere; }
+#analysis-navigation { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+#analysis-navigation [aria-pressed="true"] { background: #20372f; color: white; border: 2px solid #20372f; }
+#view-analysis label { display: flex; flex-direction: column; gap: .35rem; min-width: 0; margin: .65rem 0; }
+#view-analysis input, #view-analysis select { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+#view-analysis .usage-checkbox { flex-direction: row; align-items: center; }
+#view-analysis .usage-checkbox input { width: 1.25rem; flex-shrink: 0; }
+#analysis-form .analysis-query-bar { display: flex; align-items: end; flex-wrap: wrap; gap: .75rem; margin-bottom: .75rem; }
+#analysis-form .analysis-query-bar label { flex: 1 1 160px; }
+#analysis-submit { margin: .65rem 0; }
+#analysis-basic-periods { display: block; }
+#analysis-groups { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
+#analysis-groups > fieldset { min-width: 0; margin: 0; padding: 1rem; background: #f7faf8; }
+#analysis-groups legend { max-width: 100%; padding: 0 .35rem; font-size: 1.1rem; font-weight: bold; overflow-wrap: anywhere; }
+#analysis-groups [data-period-summary] { margin: .25rem 0 .75rem; font-size: .9rem; }
+#analysis-groups [data-range] { border-top: 1px solid #dce5df; padding-top: .5rem; }
+#analysis-groups .form-grid { grid-template-columns: 1fr; gap: .25rem; }
+#analysis-groups .buttons { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+#analysis-custom > .buttons { margin: 1rem 0; }
+#analysis-category-summary { border: 1px solid #81988a; border-radius: .35rem; padding: .65rem; }
+#analysis-categories { min-width: 0; }
+#analysis-active-filters { margin: .5rem 0; }
+#analysis-chart-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+#analysis-chart-controls label { width: 180px; }
+#analysis-key-summary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .75rem; }
+#analysis-key-summary section { min-width: 0; border: 1px solid #81988a; border-radius: .35rem; padding: .75rem; }
+#analysis-key-summary h3 { margin-top: 0; }
+#analysis-key-summary .analysis-difference { grid-column: 1 / -1; font-weight: bold; margin: .5rem 0; }
+#view-analysis .comparison-table { max-width: 100%; }
+@media (max-width: 650px) {
+  #analysis-groups, #analysis-key-summary { grid-template-columns: 1fr; }
+  #analysis-form .analysis-query-bar { align-items: stretch; }
+  #analysis-form .analysis-query-bar label { flex-basis: 100%; }
+  #analysis-submit { width: 100%; }
+}
+
+#monthly-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .75rem; }
+#monthly-summary > div { border: 1px solid #81988a; border-radius: .35rem; padding: .75rem; min-width: 0; }
+#monthly-summary dd { margin: .5rem 0 0; font-size: 1.2rem; font-weight: bold; }
+#monthly-analysis [data-group] { margin: .5rem 0; padding: .5rem; border-top: 1px solid #dce5df; }
+#monthly-analysis .expense { grid-template-columns: repeat(auto-fit,minmax(min(100%,140px),1fr)); }
+@media (max-width: 650px) {
+  #monthly-summary { grid-template-columns: 1fr; }
+  #monthly-analysis .expense { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+#budget-settings .budget-preference { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+#budget-settings .budget-preference input { width: 1.25rem; min-height: 1.25rem; flex: 0 0 auto; }

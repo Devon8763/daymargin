@@ -64,6 +64,15 @@ try {
   q('#view-planning [data-search-open]').click();form.elements.keyword.value='備份';form.requestSubmit();await wait(()=>!q('#search-groups').hidden&&[...q('#search-functions').querySelectorAll('button')].some(button=>button.textContent.includes('備份')));
   q('#search-functions button').click();check(!q('#view-settings').hidden&&document.activeElement===q('#download-backup')&&q('#export-panel').hidden,'Backup feature search triggered a download instead of focusing its real entry');
   q('[data-view-button=planning]').click();lines.push('backup feature is discoverable; navigation only focuses the entry without opening/downloading');
+  q('#view-planning [data-search-open]').click();form.elements.keyword.value='收入';form.requestSubmit();
+  await wait(()=>[...q('#search-functions').querySelectorAll('button')].some(button=>button.textContent.includes('新增已收到的收入')));
+  [...q('#search-functions').querySelectorAll('button')].find(button=>button.textContent.includes('新增已收到的收入')).click();
+  check(!q('#view-record').hidden&&!q('#income-record-section').hidden&&q('#expense-entry').hidden&&document.activeElement===q('#income-form-title'),'Income feature jump focuses a hidden entry');
+  q('#view-record [data-search-open]').click();form.elements.keyword.value='記錄消費';form.requestSubmit();
+  await wait(()=>[...q('#search-functions').querySelectorAll('button')].some(button=>button.textContent==='記錄消費'));
+  [...q('#search-functions').querySelectorAll('button')].find(button=>button.textContent==='記錄消費').click();
+  check(!q('#expense-entry').hidden&&q('#income-record-section').hidden&&document.activeElement===q('#form-title'),'Expense feature jump focuses a hidden entry');
+  q('[data-view-button=planning]').click();lines.push('shared recording feature links reveal their own visible forms');
   q('#view-planning [data-search-open]').click();q('#site-search-back').click();q('[data-view-button=record]').click();q('#home-search-keyword').value='';
   let blankReads=0;IDBDatabase.prototype.transaction=function(...args){if(this.name===name)blankReads++;return transaction.apply(this,args);};
   q('#view-record [data-search-open]').click();await wait(()=>!q('#search-groups').hidden);check(q('#search-selection').hidden&&blankReads===1&&q('#search-functions button')&&q('#search-tags button'),'Blank browse must use one readonly snapshot and show current groups');IDBDatabase.prototype.transaction=transaction;

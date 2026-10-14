@@ -119,7 +119,7 @@ try {
   form.requestSubmit();
   await new Promise(resolve => setTimeout(resolve, 100));
   check(document.querySelector('#search-count').textContent.includes('1 筆') &&
-    document.querySelector('[data-day="2025-01-15"]').getAttribute('aria-label').includes('當日有消費'),
+    document.querySelector('[data-day="2025-01-15"]').getAttribute('aria-label').includes('當日有支出'),
     'Search and calendar used different snapshots');
   check(new TextDecoder().decode(await exportPortableBackup(db)) === new TextDecoder().decode(afterOtherTab),
     'Search wrote after another tab changed data');

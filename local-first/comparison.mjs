@@ -1,5 +1,5 @@
 import {isoDate,cents,categoryOptions,pythonStrip,ValidationError} from './rules.mjs';
-import {activeExpenses,literalMatch,ordered} from './browse.mjs';
+import {activeExpenses,literalMatch,ordered,tagReport,validateTagQuery} from './browse.mjs';
 const dayNumber=date=>Date.parse(date+'T00:00:00Z')/86400000;
 const dateText=day=>new Date(day*86400000).toISOString().slice(0,10);
 // Decimal ROUND_HALF_UP, without converting money or ratios to floating point.
@@ -16,6 +16,17 @@ export function comparisonDefaults(today) {
   const first=today.slice(0,7)+'-01',previousEnd=dateText(dayNumber(first)-1);
   const next=new Date(first+'T00:00:00Z');next.setUTCMonth(next.getUTCMonth()+1);
   return {a_start:first,a_end:dateText(next.getTime()/86400000-1),b_start:previousEnd.slice(0,7)+'-01',b_end:previousEnd,category:'',keyword:''};
+}
+export function analysisQuickRange(choice,today) {
+  isoDate(today);
+  if(choice==='custom')return null;
+  if(choice==='all')return {start:'',end:''};
+  const defaults=comparisonDefaults(today);
+  if(choice==='month')return {start:defaults.a_start,end:today};
+  if(choice==='previous')return {start:defaults.b_start,end:defaults.b_end};
+  if(choice==='year')return {start:today.slice(0,4)+'-01-01',end:today};
+  if(choice==='three'){const date=new Date(defaults.a_start+'T00:00:00Z');date.setUTCMonth(date.getUTCMonth()-2);return {start:date.toISOString().slice(0,10),end:today};}
+  throw new ValidationError('請選擇有效時間條件。');
 }
 export function validateComparison(query,today) {
   isoDate(today);
@@ -94,6 +105,31 @@ export function analysisPeriods(unit,start,end) {
   }
   return periods;
 }
+export function analysisPeriodRange(unit,choice,value,today) {
+  isoDate(today);
+  if(!['week','month','year'].includes(unit))throw new ValidationError('請選擇週、月或年。');
+  if(choice==='custom')return null;
+  let anchor=today;
+  if(choice==='select') {
+    if(unit==='month') {if(typeof value!=='string'||!/^\d{4}-\d{2}$/.test(value))throw new ValidationError('請選擇有效月份。');anchor=value+'-01';}
+    else if(unit==='year') {if(typeof value!=='string'||!/^\d{1,4}$/.test(value)||Number(value)<1)throw new ValidationError('請輸入1～9999的年份。');anchor=value.padStart(4,'0')+'-01-01';}
+    else anchor=value;
+  } else if(choice==='previous')anchor=dateText(dayNumber(analysisPeriods(unit,today,today)[0].start)-1);
+  else if(choice!=='current'&&!(unit==='month'&&choice==='month'))throw new ValidationError('請選擇有效期間。');
+  return analysisPeriods(unit,anchor,anchor)[0];
+}
+export function analysisDifference(result) {
+  if(result.groups.length!==2)return null;
+  const [a,b]=result.groups.map(group=>group.total_cents);
+  return a===null||b===null?null:a-b;
+}
+function summarizePeriods(periods) {
+  const started=periods.filter(period=>period.started),consumed=started.filter(period=>period.total_cents>0n),total=started.length?started.reduce((sum,period)=>sum+period.total_cents,0n):null;
+  return {total_cents:total,selected_count:periods.length,started_count:started.length,consumed_count:consumed.length,
+    highest_cents:started.length?started.reduce((max,period)=>period.total_cents>max?period.total_cents:max,0n):null,
+    lowest_cents:started.length?started.reduce((min,period)=>period.total_cents<min?period.total_cents:min,started[0].total_cents):null,
+    all_average:started.length?{numerator:total,denominator:BigInt(started.length)}:null,consumed_average:consumed.length?{numerator:total,denominator:BigInt(consumed.length)}:null};
+}
 export function analyzeExpenses(state,input,today) {
   isoDate(today);
   const validKeys=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
@@ -122,14 +158,20 @@ export function analyzeExpenses(state,input,today) {
       const value=cents(row.cents);period.total_cents+=value;period.rows.push(row);period.categories.set(row.category,(period.categories.get(row.category)||0n)+value);
     }
     for(const period of periods)ordered(period.rows);
-    const started=periods.filter(period=>period.started),consumed=started.filter(period=>period.total_cents>0n),total=started.length?started.reduce((sum,period)=>sum+period.total_cents,0n):null;
-    return {name:group.name,periods,overlap,total_cents:total,selected_count:periods.length,started_count:started.length,consumed_count:consumed.length,
-      highest_cents:started.length?started.reduce((max,period)=>period.total_cents>max?period.total_cents:max,0n):null,
-      lowest_cents:started.length?started.reduce((min,period)=>period.total_cents<min?period.total_cents:min,started[0].total_cents):null,
-      all_average:started.length?{numerator:total,denominator:BigInt(started.length)}:null,consumed_average:consumed.length?{numerator:total,denominator:BigInt(consumed.length)}:null};
+    return {name:group.name,periods,overlap,...summarizePeriods(periods)};
   });
   const memberships=new Map();
   for(const group of groups)for(const period of group.periods)memberships.set(period.start,(memberships.get(period.start)||0)+1);
   for(const group of groups)for(const period of group.periods)period.cross_overlap=memberships.get(period.start)>1;
   return {unit:input.unit,today,groups,cross_overlap,plottable:groups.every(group=>group.total_cents===null||group.total_cents<=BigInt(Number.MAX_SAFE_INTEGER))};
+}
+export function analyzeTagMonths(state,query,today) {
+  const bounds=validateTagQuery(query,today),report=tagReport(state,query,today);
+  const start=bounds.start||(report.rows.length?report.rows.at(-1).spent_on.slice(0,7)+'-01':''),end=bounds.end;
+  const periods=start?analyzeExpenses({...state,expenses:report.rows},{unit:'month',groups:[{name:'標籤',ranges:[{start,end}]}],categories:[],keyword:''},today).groups[0].periods.map(period=>{
+    const selectedStart=period.start<start?start:period.start,selectedEnd=period.end>end?end:period.end,started=selectedStart<=today;
+    return {...period,month:period.start.slice(0,7),start:selectedStart,end:selectedEnd,started,unfinished:selectedEnd>today,
+      actual_end:started?(selectedEnd<today?selectedEnd:today):null,total_cents:started?period.total_cents:null};
+  }):[];
+  return {...report,today,start,end,periods,...summarizePeriods(periods),plottable:report.total<=BigInt(Number.MAX_SAFE_INTEGER)};
 }

@@ -5,6 +5,24 @@ const port = Number(process.argv[2] ?? 8767);
 const secureHeaders=process.argv[3]==='--secure'?securityHeaders:{}; // Test-only CSP source; fixed entry has no port option.
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid local preview port');
 const files = new Map([
+  ['/tests/local-first-budget-hints-demo.html',['../local-first/index.html','text/html']],
+  ['/tests/local-first-budget-hints.html',['../local-first/index.html','text/html']],
+  ['/tests/local_first_budget_hints_browser.mjs',['local_first_budget_hints_browser.mjs','text/javascript']],
+  ['/local-first/budget-preferences.mjs',['../local-first/budget-preferences.mjs','text/javascript']],
+  ['/tests/local-first-monthly.html',['../local-first/index.html','text/html']],
+  ['/tests/local-first-monthly-demo.html',['../local-first/index.html','text/html']],
+  ['/tests/local_first_monthly_accounts_browser.mjs',['local_first_monthly_accounts_browser.mjs','text/javascript']],
+  ['/tests/local-first-analysis-layout.html',['../local-first/index.html','text/html']],
+  ['/tests/local-first-analysis-layout-demo.html',['../local-first/index.html','text/html']],
+  ['/tests/local_first_analysis_layout_browser.mjs',['local_first_analysis_layout_browser.mjs','text/javascript']],
+  ['/tests/local-first-analysis-controls.html',['../local-first/index.html','text/html']],
+  ['/tests/local_first_analysis_controls_browser.mjs',['local_first_analysis_controls_browser.mjs','text/javascript']],
+  ['/tests/local-first-calendar-income.html',['../local-first/index.html','text/html']],
+  ['/tests/local_first_calendar_income_browser.mjs',['local_first_calendar_income_browser.mjs','text/javascript']],
+  ['/tests/local-first-account-search.html',['../local-first/index.html','text/html']],
+  ['/tests/local_first_account_search_browser.mjs',['local_first_account_search_browser.mjs','text/javascript']],
+  ['/tests/local-first-tag-monthly.html',['../local-first/index.html','text/html']],
+  ['/tests/local_first_tag_monthly_ui_browser.mjs',['local_first_tag_monthly_ui_browser.mjs','text/javascript']],
   ['/tests/local_first_invoice_browser.html',['local_first_invoice_browser.html','text/html']],
   ['/tests/local_first_invoice_browser.mjs',['local_first_invoice_browser.mjs','text/javascript']],
   ['/tests/local-first-invoice.html',['../local-first/index.html','text/html']],
@@ -125,6 +143,14 @@ const files = new Map([
 createServer(async (request, response) => {
   const path = new URL(request.url, 'http://127.0.0.1').pathname;
   console.log(request.method, path);
+  if(request.method==='GET'&&path==='/tests/local-first-budget-hints-narrow.html'){response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 預算提示</title><iframe title="合成預算提示" src="/tests/local-first-budget-hints-demo.html" width="375" height="2100"></iframe></html>');return;}
+  if(request.method==='GET'&&path==='/tests/local-first-monthly-demo-narrow.html'){response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 每月收支畫面</title><iframe title="合成每月收支畫面" src="/tests/local-first-monthly-demo.html" width="375" height="2000"></iframe></html>');return;}
+  if(request.method==='GET'&&path==='/tests/local-first-monthly-narrow.html'){response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 每月收支</title><iframe title="合成每月收支" src="/tests/local-first-monthly.html" width="375" height="1100"></iframe></html>');return;}
+  if(request.method==='GET'&&path==='/tests/local-first-analysis-layout-narrow.html') {response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 分析期間卡</title><iframe title="合成分析期間卡" src="/tests/local-first-analysis-layout-demo.html" width="375" height="1100"></iframe></html>');return;}
+  if(request.method==='GET'&&path==='/tests/local-first-analysis-layout-check-narrow.html') {response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 分析驗證</title><iframe title="合成分析驗證" src="/tests/local-first-analysis-layout.html" width="375" height="1100"></iframe></html>');return;}
+  if(request.method==='GET'&&path==='/tests/local-first-analysis-controls-narrow.html') {response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 分析操作</title><iframe title="合成分析操作" src="/tests/local-first-analysis-controls.html" width="375" height="1100"></iframe></html>');return;}
+  if(request.method==='GET'&&path==='/tests/local-first-calendar-income-narrow.html') {response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 收入月曆</title><iframe title="合成收入月曆" src="/tests/local-first-calendar-income.html" width="375" height="1100"></iframe></html>');return;}
+  if(request.method==='GET'&&path==='/tests/local-first-account-search-narrow.html') {response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 收支搜尋</title><iframe title="合成收支搜尋" src="/tests/local-first-account-search.html" width="375" height="1100"></iframe></html>');return;}
   if(request.method==='GET'&&path==='/tests/local-first-invoice-narrow.html') {
     response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
     response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 合成發票驗證</title><h1>375px 合成發票驗證</h1><iframe title="合成發票畫面" src="/tests/local-first-invoice.html" width="375" height="1100" style="border:0"></iframe></html>');return;
@@ -139,6 +165,28 @@ createServer(async (request, response) => {
   if (request.method !== 'GET' || !file) { response.writeHead(404); response.end(); return; }
   try {
     let body = await readFile(new URL(file[0], import.meta.url));
+    if(['/tests/local-first-monthly.html','/tests/local-first-monthly-demo.html'].includes(path)){
+      body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_monthly_accounts_browser.mjs"');
+      response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
+    }
+    if(['/tests/local-first-analysis-layout.html','/tests/local-first-analysis-layout-demo.html'].includes(path)) {
+      body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_analysis_layout_browser.mjs"');
+      response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
+    }
+    if(path==='/tests/local-first-analysis-controls.html') {
+      body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_analysis_controls_browser.mjs"');
+      response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
+    }
+    if(['/tests/local-first-budget-hints.html','/tests/local-first-budget-hints-demo.html'].includes(path)){body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_budget_hints_browser.mjs"');response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;}
+    if(path==='/tests/local-first-tag-monthly.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_tag_monthly_ui_browser.mjs"');
+    if(path==='/tests/local-first-calendar-income.html') {
+      body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_calendar_income_browser.mjs"');
+      response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
+    }
+    if(path==='/tests/local-first-account-search.html') {
+      body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_account_search_browser.mjs"');
+      response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
+    }
     if(path==='/tests/local-first-invoice.html') {
       body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_invoice_ui_browser.mjs"');
       response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
@@ -163,10 +211,10 @@ createServer(async (request, response) => {
     if(path==='/tests/local-first-shortcuts.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_shortcuts_ui_browser.mjs"');
     if(path==='/tests/local-first-usage.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_usage_ui_browser.mjs"');
     // Isolated update tests only; these flags do not exist in the fixed production entry.
-    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.25.0-v3','0.13.11-v1')
+    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.26.6-v1','0.13.11-v1')
       .replace("  '/local-first/comparison.mjs',\n",'').replace("  '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js',\n",'');
     if(process.argv[4]==='--next-worker'&&(path==='/local-first/sw.js'||path==='/local-first/'||path==='/local-first/index.html'))
-      body=body.toString('utf8').replace('0.25.0','0.25.1'); // Synthetic next-version label, not a release.
+      body=body.toString('utf8').replace('0.26.6','0.26.7'); // Synthetic next-version label, not a release.
     if(path==='/tests/local-first-comparison.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_comparison_ui_browser.mjs"');
     if (path === '/tests/local-first-recurring.html') {
       body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"')

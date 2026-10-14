@@ -1,5 +1,5 @@
 import * as distribution from './vendor/lossless-json-4.3.1/lossless-json.js';
-import { isoDate,tagName } from './rules.mjs';
+import { isoDate,tagName,merchantName,categoryOptions } from './rules.mjs';
 import {usageInput} from './usage.mjs';
 
 // Official UMD exports in Node; its browser global is created by the same local file.
@@ -51,7 +51,9 @@ const RECURRING_INCOME_FIELDS={
 };
 export const V8_SECTIONS=[...V7_SECTIONS,...Object.keys(RECURRING_INCOME_FIELDS)];
 const INVOICE_FIELDS={invoice_imports:['key','expense_id']};
-export const ALL_SECTIONS=[...V8_SECTIONS,...Object.keys(INVOICE_FIELDS)];
+export const V9_SECTIONS=[...V8_SECTIONS,...Object.keys(INVOICE_FIELDS)];
+const MERCHANT_FIELDS={merchant_rules:['id','merchant','category','revision']};
+export const ALL_SECTIONS=[...V9_SECTIONS,...Object.keys(MERCHANT_FIELDS)];
 export class BackupError extends Error {
   constructor(kind) { super('生活帳本備份資料異常：' + kind); this.code = 'backup'; }
 }
@@ -115,16 +117,16 @@ export function emptyData(version = 1) {
     ...(version >= 2 ? Object.fromEntries(FINANCE_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 3 ? Object.fromEntries(ANNUAL_SECTIONS.map(section => [section, []])) : {}),
     ...(version >= 4 ? {usage_periods:[]} : {}), ...(version >= 5 ? {tags:[],expense_tags:[]} : {}),
-    ...(version >= 6 ? {scheduled_periods:[]} : {}),...(version>=7 ? {goals:[],goal_actions:[]} : {}),...(version>=8?{income_rules:[],income_periods:[]}:{}) ,...(version>=9?{invoice_imports:[]}:{}) };
+    ...(version >= 6 ? {scheduled_periods:[]} : {}),...(version>=7 ? {goals:[],goal_actions:[]} : {}),...(version>=8?{income_rules:[],income_periods:[]}:{}) ,...(version>=9?{invoice_imports:[]}:{}),...(version>=10?{merchant_rules:[]}:{}) };
 }
 export function validateBackup(bundle) {
   shape(bundle, ['format', 'version', 'data'], '格式');
   if (bundle.format !== 'life-ledger-backup') invalid('格式／版本');
-  const version = integerValue(bundle.version, 1n, 9n);
-  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : version===5n ? V5_SECTIONS : version===6n ? V6_SECTIONS : version===7n ? V7_SECTIONS : version===8n?V8_SECTIONS:ALL_SECTIONS, '生活帳本');
+  const version = integerValue(bundle.version, 1n, 10n);
+  const data = bundle.data; shape(data, version === 1n ? SECTIONS : version === 2n ? V2_SECTIONS : version === 3n ? V3_SECTIONS : version===4n ? V4_SECTIONS : version===5n ? V5_SECTIONS : version===6n ? V6_SECTIONS : version===7n ? V7_SECTIONS : version===8n?V8_SECTIONS:version===9n?V9_SECTIONS:ALL_SECTIONS, '生活帳本');
   let count = 0;
   const ids = [];
-  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {}),...(version>=6n ? SCHEDULE_FIELDS : {}),...(version>=7n ? GOAL_FIELDS : {}),...(version>=8n?RECURRING_INCOME_FIELDS:{}),...(version>=9n?INVOICE_FIELDS:{})})) {
+  for (const [section, fields] of Object.entries({...FIELDS, ...(version >= 2n ? FINANCE_FIELDS : {}),...(version >= 3n ? ANNUAL_FIELDS : {}),...(version >= 4n ? USAGE_FIELDS : {}),...(version>=5n ? TAG_FIELDS : {}),...(version>=6n ? SCHEDULE_FIELDS : {}),...(version>=7n ? GOAL_FIELDS : {}),...(version>=8n?RECURRING_INCOME_FIELDS:{}),...(version>=9n?INVOICE_FIELDS:{}),...(version>=10n?MERCHANT_FIELDS:{})})) {
     const rows = data[section];
     if (!Array.isArray(rows)) invalid(section + '結構');
     count += rows.length; if (count > 100000) invalid('資料筆數上限');
@@ -354,6 +356,15 @@ export function validateBackup(bundle) {
       const key=item.goal_id+'\0'+plan.month;actual.set(key,(actual.get(key)??0n)+BigInt(item.cents));
     }
     for(const key of new Set([...actual.keys(),...contributions.keys()]))if((actual.get(key)??0n)!==(contributions.get(key)??0n))invalid('分配目標貢獻');
+  }
+  if(version>=10n) {
+    const categories=new Set(categoryOptions(data).map(row=>row.name));
+    for(const row of data.merchant_rules) {
+      try { if(merchantName(row.merchant)!==row.merchant)invalid('店家名稱'); } catch { invalid('店家名稱'); }
+      if(typeof row.category!=='string'||!categories.has(row.category))invalid('店家分類引用');
+      integerValue(row.revision);
+    }
+    unique(data.merchant_rules.map(row=>row.merchant),'店家規則');
   }
   if(version>=9n) {
     const expenses=new Map(data.expenses.map(row=>[row.id,row]));

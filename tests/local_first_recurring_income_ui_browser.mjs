@@ -13,7 +13,7 @@ try{
   check(new TextDecoder().decode(await ledger.exportPortableBackup(db))===new TextDecoder().decode(before),'Opening planning writes');
   const form=q('#income-rule-form');for(const [key,value]of Object.entries({name:'合成<img src=x onerror=alert(1)>月薪',amount:'.29',first_due_on:month+'-01',due_day:'1'}))form.elements[key].value=value;form.requestSubmit();await wait(()=>q('#income-rule-list li'));
   check(!q('#income-rule-list img')&&(await ledger.readLedger(db)).incomes.length===0,'Rule creation posts real income or XSS');lines.push('optional monthly rule creates no income; unsafe name is text');
-  q('[data-view-button="record"]').click();q('#income-recording').open=true;await wait(()=>q('#income-periods [data-status="pending"]'));
+  q('[data-view-button="record"]').click();q('#record-income-choice').click();await wait(()=>q('#income-periods [data-status="pending"]'));
   q('#income-periods [data-status="pending"] [data-income-operation="skip"]').click();await wait(()=>q('#income-periods [data-status="skipped"]'));
   q('#income-periods [data-status="skipped"] button').click();await wait(()=>q('#income-periods [data-status="pending"]'));
   check((await ledger.readLedger(db)).incomes.length===0,'Skip/restoration posts');lines.push('skip and restore only change this period, never received total');

@@ -27,6 +27,23 @@ export function categoryName(value) {
   }
   return name;
 }
+export function merchantName(value) {
+  const name=pythonStrip(value).trim();
+  if(!name||[...name].length>200||/[\u0000-\u001f\u007f-\u009f\p{Surrogate}]/u.test(name))throw new ValidationError('店家名稱需 1～200 字，不可包含換行或控制字元。');
+  return name;
+}
+export function invoiceCategorySuggestion(state,merchant='') {
+  const options=categoryOptions(state),rule=(state.merchant_rules||[]).find(row=>row.merchant===pythonStrip(merchant).trim());
+  if(rule&&options.some(row=>row.name===rule.category&&row.active===1))return rule.category;
+  const invoice=options.find(row=>row.name==='發票');
+  if(!invoice||invoice.active===1)return '發票';
+  return options.some(row=>row.name==='其他'&&row.active===1)?'其他':'';
+}
+// Preview-only validation copy; creation is repeated inside the confirmed import transaction.
+export function invoiceCategoryState(state,category) {
+  return category==='發票'&&!categoryOptions(state).some(row=>row.name==='發票')
+    ?{...state,categories:[...state.categories,{name:'發票',active:1}]}:state;
+}
 export function paymentName(value) {
   const name = pythonStrip(value);
   if (!name || [...name].length > 30 || /[\u0000-\u001f]/u.test(name)) {

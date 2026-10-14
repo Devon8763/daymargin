@@ -14,7 +14,7 @@ try{
   const old=await opened(request),state={...emptyData(7),format:'local-first-test-ledger',version:8,owner:'local-test-owner'};
   const tx=old.transaction([...V7_SECTIONS,'meta'],'readwrite');for(const section of V7_SECTIONS)for(const [position,row]of(section==='settings'?[state.settings]:state[section]).entries())tx.objectStore(section).add({key:rowKey(section,row),position,value:row});
   for(const [key,value]of Object.entries(metadata(state)))tx.objectStore('meta').add({key,value});await done(tx);old.close();
-  db=await ledger.openDatabase(name);peer=await ledger.openDatabase(name);check(db.version===10,'v10 schema');
+  db=await ledger.openDatabase(name);peer=await ledger.openDatabase(name);check(db.version===11,'v11 schema');
   const bytes=database=>ledger.exportPortableBackup(database).then(value=>new TextDecoder().decode(value));
   check(await bytes(db)===new TextDecoder().decode(writeBackup({format:'life-ledger-backup',version:1,data:emptyData(1)})),'migration changed old backup');lines.push('v8 to v10 creates two empty stores atomically, retains original rows and metadata');
   await ledger.updateIncomeRule(db,'add','ir_one',null,{name:'合成<img src=x onerror=alert(1)>',amount:'.29',first_due_on:month+'-01',due_day:1});
