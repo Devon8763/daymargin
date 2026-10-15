@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as core from '../local-first/comparison.mjs';
+import * as core from '../web/comparison.mjs';
 const row=(date,cents='29',extra={})=>({id:crypto.randomUUID(),spent_on:date,cents,category:'餐飲',note:'Lunch [x]',source:'manual',kind:'consumption',voided:0,...extra});
 const state=expenses=>({expenses,categories:[{name:'停用',active:0}]});
 const group=(ranges,name='組一')=>({name,ranges:ranges.map(([start,end=start])=>({start,end}))});

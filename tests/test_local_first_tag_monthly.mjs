@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as core from '../local-first/comparison.mjs';
-import {emptyData} from '../local-first/backup.mjs';
+import * as core from '../web/comparison.mjs';
+import {emptyData} from '../web/backup.mjs';
 const entry=(id,date,value,extra={})=>({id,spent_on:date,cents:value,category:'餐飲',note:'合成消費',source:'manual',kind:'consumption',voided:0,payment_source_name:'現金',...extra});
 const state=rows=>({...emptyData(5),expenses:rows,tags:[{id:'t_a',name:'旅行',hidden:1,revision:0},{id:'t_b',name:'聚餐',hidden:0,revision:0}],expense_tags:rows.map(row=>({expense_id:row.id,tag_id:'t_a'}))});
 const query=(start='',end='')=>({tag_id:'t_a',start,end});

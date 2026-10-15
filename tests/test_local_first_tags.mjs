@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as rules from '../local-first/rules.mjs';
-import * as ledger from '../local-first/ledger.mjs';
-import * as browse from '../local-first/browse.mjs';
-import {emptyData,writeBackup,readBackup} from '../local-first/backup.mjs';
-import {portable,metadata} from '../local-first/idb.mjs';
+import * as rules from '../web/rules.mjs';
+import * as ledger from '../web/ledger.mjs';
+import * as browse from '../web/browse.mjs';
+import {emptyData,writeBackup,readBackup} from '../web/backup.mjs';
+import {portable,metadata} from '../web/idb.mjs';
 const today='2026-10-06',selection=(ids=[],names=[])=>({ids,names});
 const entry=(extra={})=>({id:'e_one',spent_on:today,cents:'100000',category:'餐飲',note:'合成消費',source:'manual',recurring_id:null,period:null,voided:0,payment_source_id:'p_cash',payment_source_name:'現金',kind:'consumption',revision:0,...extra});
 const state=()=>({...emptyData(5),payment_sources:[{id:'p_cash',name:'現金',active:1}],expenses:[entry()]});

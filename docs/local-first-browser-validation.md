@@ -1,5 +1,7 @@
 # local-first 合成瀏覽器驗證紀錄
 
+> 日餘拆分註記（2026-10-14）：本文保留原專案的歷史版本、日期、驗證結果及限制，不代表日餘本輪重測。現行程式磁碟目錄為 `web/`；HTTP仍為 `/local-first/`。Windows請雙擊根目錄 `start_local_first.local.cmd`，歷史 Python／Node 指令不是目前使用者操作入口。
+
 ## 0.26.6 分配預算對照與接近上限提示 — 2026-10-14
 
 **只用隔離合成資料，不代表正式帳本驗收。** 實際起點0.26.5；分支`codex/localhost-web-auth`，HEAD `baf832728885c4ca292774800c5527c76c6a7bfc`。原33個tracked修改、13個未追蹤路徑全部保留；本輪未stage／commit／push／PR／tag，未操作使用者25154／8767／8768來源，未讀寫正式SQLite、Token、`.env`或既有備份。

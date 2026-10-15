@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as core from '../local-first/comparison.mjs';
+import * as core from '../web/comparison.mjs';
 test('quick ranges use full previous calendar months across years and leap February',()=>{
   assert.equal(typeof core.analysisQuickRange,'function');
   assert.deepEqual(core.analysisQuickRange('month','2024-02-20'),{start:'2024-02-01',end:'2024-02-20'});

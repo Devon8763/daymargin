@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as browse from '../local-first/browse.mjs';
+import * as browse from '../web/browse.mjs';
 const today='2026-10-13',query={keyword:'',start:'',end:''};
 const expense=(id,date='2024-02-29',extra={})=>({id,spent_on:date,cents:'29',note:'AbC[.*]<img>合成',category:'合成',source:'manual',kind:'consumption',voided:0,...extra});
 const income=(id,date='2024-02-29',extra={})=>({id,received_on:date,cents:'101',name:'AbC[.*]<img>合成',voided:0,...extra});

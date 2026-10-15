@@ -15,7 +15,7 @@ const text=bytes=>new TextDecoder().decode(bytes);
 button.onclick=async()=>{
   button.disabled=true;
   try {
-    const names=await caches.keys(),version='local-first-offline-0.26.6-v1';
+    const names=await caches.keys(),version='local-first-offline-0.26.7-v1';
     if(!names.includes(version))throw new Error('新版快取尚未啟用');
     const cache=await caches.open(version);
     for(const [path,content] of [['index.html','id="view-search"'],['page.mjs','async function runSearch'],['browse.mjs','function siteSearch'],['index.html','id="budget-category-link"'],['index.html','id="category-management-title"'],['index.html','id="storage-status"'],['index.html','id="view-navigation"'],['index.html','id="privacy-title"'],['index.html','id="expense-tags"'],['index.html','id="tag-analysis"'],['index.html','id="analysis-navigation"'],['page.mjs','function syncAnalysisRange'],['comparison.mjs','function analysisPeriodRange'],['page.mjs',"statistics.id='analysis-statistics'"],['index.html','id="monthly-analysis"'],['browse.mjs','function monthlyAccounts'],['page.mjs','function runMonthlyAccounts'],['page.mjs','function showView'],['rules.mjs','function tagName'],['browse.mjs','function tagReport'],['ledger.mjs','export const updateTag'],['rules.mjs','自動來源消費的原入帳日期不可更改'],
@@ -40,7 +40,7 @@ button.onclick=async()=>{
     if(text(await exportPortableBackup(db))!==text(before)||rawBefore!==await raw())throw new Error('唯讀檢查期間帳本改變');
     if(localStorage.getItem('daymargin.budget.v1')!==budgetPreferencesBefore)throw new Error('唯讀更新期間預算偏好改變');
     if(localStorage.getItem('daymargin.home.v1')!==homePreferencesBefore)throw new Error('唯讀更新期間首頁偏好改變');
-    result.textContent='PASS：0.26.6-v1 全站搜尋、分組與分類／標籤明細及全部 20 個離線資源；原始資料列、metadata 與備份逐位元組不變'+(namesBefore.some(name=>name.startsWith('local-first-offline-')&&name!==version)?'；原生 Service Worker 更新完成':'');
+    result.textContent='PASS：0.26.7-v1 全站搜尋、分組與分類／標籤明細及全部 20 個離線資源；原始資料列、metadata 與備份逐位元組不變'+(namesBefore.some(name=>name.startsWith('local-first-offline-')&&name!==version)?'；原生 Service Worker 更新完成':'');
   }catch(error){result.textContent='FAIL：'+error.message;}
   finally{button.disabled=false;}
 };

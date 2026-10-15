@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {calendarMonth} from '../local-first/browse.mjs';
+import {calendarMonth} from '../web/browse.mjs';
 const spent=(id,date='2024-02-29',extra={})=>({id,spent_on:date,cents:'29',note:'合成支出',source:'manual',kind:'consumption',voided:0,...extra});
 const received=(id,date='2024-02-29',extra={})=>({id,received_on:date,cents:'101',name:'合成<img>收入',voided:0,...extra});
 test('income-only, expense-only and mixed dates keep exact whole-day totals and separate flags',()=>{

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-const load=()=>import('../local-first/comparison.mjs');
+const load=()=>import('../web/comparison.mjs');
 const row=(date,cents='101',extra={})=>({spent_on:date,cents,category:'餐飲',note:'Lunch [x]',source:'manual',kind:'consumption',voided:0,...extra});
 const state=expenses=>({expenses,categories:[{name:'停用',active:0}]});
 const query=(a_start='2024-02-01',a_end='2024-02-29',b_start='2024-01-01',b_end='2024-01-31',extra={})=>({a_start,a_end,b_start,b_end,category:'',keyword:'',...extra});

@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-const html=await readFile(new URL('../local-first/index.html',import.meta.url),'utf8');
-const css=await readFile(new URL('../local-first/style.css',import.meta.url),'utf8');
+const html=await readFile(new URL('../web/index.html',import.meta.url),'utf8');
+const css=await readFile(new URL('../web/style.css',import.meta.url),'utf8');
 const labels=[['usage_remind','開啟提示',true],['usage_show_daily_cost','顯示每日平均成本（約數，元／天）',false]];
 
 test('usage checkboxes stay next to their complete clickable label text',()=>{

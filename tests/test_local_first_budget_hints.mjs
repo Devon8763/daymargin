@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as browse from '../local-first/browse.mjs';
+import * as browse from '../web/browse.mjs';
 
 test('selected month uses only its explicit total including zero, not category sum',()=>{
   const state={expenses:[],categories:[],budgets:[{month:'2024-01',category:'總額',cents:'1800000'},{month:'2024-02',category:'總額',cents:'0'},{month:'2024-03',category:'餐飲',cents:'100'}]};

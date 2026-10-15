@@ -1,5 +1,7 @@
 # 使用期間與完整備份 JSON v4
 
+> 日餘拆分註記（2026-10-14）：本文保留原專案的歷史版本、日期、驗證結果及限制，不代表日餘本輪重測。現行程式磁碟目錄為 `web/`；HTTP仍為 `/local-first/`。Windows請雙擊根目錄 `start_local_first.local.cmd`，歷史 Python／Node 指令不是目前使用者操作入口。
+
 0.16.0，2026-10-05。**僅供合成資料測試，請勿輸入真實帳目；IndexedDB 未加密，Python Web 尚未被取代。**
 
 ## 資料流

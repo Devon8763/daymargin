@@ -49,7 +49,7 @@ try {
     nav('planning');const recurring=q('#fixed-form');recurring.elements.kind.value='分期';recurring.elements.kind.dispatchEvent(new Event('change'));await wait(()=>recurring.elements.periods.required&&visibleMark(recurring.elements.periods));recurring.elements.kind.value='固定';recurring.elements.kind.dispatchEvent(new Event('change'));await wait(()=>!recurring.elements.periods.required&&!visibleMark(recurring.elements.periods));
     await wait(()=>recurring.elements.amount.required&&visibleMark(recurring.elements.amount));
     for(const input of q('#allocation-items').querySelectorAll('input'))check(input.required&&visibleMark(input),'Allocation required fields missing');
-    check(q('#usage-inputs').textContent.includes('開啟提示')&&!document.body.textContent.includes('選填'),'Optional labels or reminder title not simplified');
+    check(q('#usage-inputs').textContent.includes('開啟提示')&&!form.textContent.includes('選填'),'Expense optional labels or reminder title not simplified');
     nav('record');q('#expenses-disclosure').open=true;q('#expenses [data-expense-id=e_active] button').click();await wait(()=>!form.elements.payment_source_id.required&&!visibleMark(form.elements.payment_source_id));q('#cancel-edit').click();
     nav('settings');q('#download-backup').click();check(q('#export-password').required&&q('#export-confirm-password').required,'Encrypted password fields not required');q('#export-mode').value='plain';q('#export-mode').dispatchEvent(new Event('change'));await wait(()=>!q('#export-password').required&&q('#export-risk').required);q('#cancel-export').click();
   });

@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import * as rules from '../local-first/rules.mjs';
-import * as browse from '../local-first/browse.mjs';
-import * as ledger from '../local-first/ledger.mjs';
-import { emptyData, readBackup, writeBackup } from '../local-first/backup.mjs';
-import { portable } from '../local-first/idb.mjs';
+import * as rules from '../web/rules.mjs';
+import * as browse from '../web/browse.mjs';
+import * as ledger from '../web/ledger.mjs';
+import { emptyData, readBackup, writeBackup } from '../web/backup.mjs';
+import { portable } from '../web/idb.mjs';
 
 const today = '2026-10-15', month = '2026-10';
 const blank = () => ({format:'local-first-test-ledger',version:2,owner:'local-test-owner',...emptyData(),

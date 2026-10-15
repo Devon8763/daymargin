@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import * as vendor from '../local-first/vendor/lossless-json-4.3.1/lossless-json.js';
+import * as vendor from '../web/vendor/lossless-json-4.3.1/lossless-json.js';
 const { stringify } = vendor.default;
-const url = new URL('../local-first/backup.mjs', import.meta.url);
+const url = new URL('../web/backup.mjs', import.meta.url);
 const fixture = readFileSync(new URL('fixtures/portable_life_ledger.json', import.meta.url));
 const bytes = value => new TextEncoder().encode(typeof value === 'string' ? value : stringify(value));
 async function module() { assert.ok(existsSync(url), 'Missing pure portable backup format'); return import(url); }

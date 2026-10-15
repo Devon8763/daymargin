@@ -9,6 +9,7 @@ const test = params.get('case') || 'start';
 const run = params.get('run') || crypto.randomUUID();
 const name = `${DB_NAME}-entry-${test}-${run}`;
 const lines = [];
+let downloadHooks;
 const ok = (condition, message) => { if (!condition) throw new Error(message); };
 const done = tx => new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = reject; });
 const request = q => new Promise((resolve, reject) => { q.onsuccess = () => resolve(q.result); q.onerror = () => reject(q.error); });
@@ -155,8 +156,11 @@ try {
     }
 
     const before = text(await exportPortableBackup(db));
-    const click = HTMLAnchorElement.prototype.click;
-    let link;
+    const click = HTMLAnchorElement.prototype.click, create = URL.createObjectURL;
+    downloadHooks={click,create};
+    let link, exported;
+    // Read the actual export Blob; connect-src 'self' intentionally forbids fetch(blob:).
+    URL.createObjectURL = blob => { const href=create(blob); exported={blob,href}; return href; };
     HTMLAnchorElement.prototype.click = function () { link = { href: this.href, download: this.download }; };
     document.querySelector('#download-backup').click();
     document.querySelector('#export-mode').value='plain';
@@ -164,9 +168,10 @@ try {
     document.querySelector('#export-risk').checked=true;
     document.querySelector('#export-form').requestSubmit();
     await waitFor(() => status.textContent.includes('已要求瀏覽器下載'));
-    HTMLAnchorElement.prototype.click = click;
+    HTMLAnchorElement.prototype.click = click; URL.createObjectURL = create;
     ok(link?.download === 'life-ledger-backup-v1.json', 'Download filename must be fixed');
-    const received = bytes(await (await fetch(link.href)).arrayBuffer());
+    ok(exported?.blob instanceof Blob && link.href === exported.href && exported.blob.type === 'application/json;charset=utf-8', 'Download link must reference the actual UTF-8 export Blob');
+    const received = bytes(await exported.blob.arrayBuffer());
     ok(text(received) === before && text(await exportPortableBackup(db)) === before, 'Download changed ledger or backup');
     ok(readBackup(received).version === 1, 'Downloaded bytes are not valid v1');
     lines.push('下載固定檔名與UTF-8 v1完整備份；前後帳本相同');
@@ -182,4 +187,4 @@ try {
 } catch (failure) {
   report.textContent = 'FAIL：' + failure.message + '\n' + lines.join('\n');
   throw failure;
-} finally { db.close(); }
+} finally { if(downloadHooks){HTMLAnchorElement.prototype.click=downloadHooks.click;URL.createObjectURL=downloadHooks.create;}db.close(); }

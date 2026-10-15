@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { searchExpenses, calendarMonth, validateSearch } from '../local-first/browse.mjs';
+import { searchExpenses, calendarMonth, validateSearch } from '../web/browse.mjs';
 
 const entry = (id, spent_on, cents, source = 'manual', extra = {}) => ({
   id, spent_on, cents, source, kind: 'consumption', voided: 0,

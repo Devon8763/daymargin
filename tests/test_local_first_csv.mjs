@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-const load = () => import('../local-first/csv.mjs');
+const load = () => import('../web/csv.mjs');
 const row = (id, spent_on, source = 'manual', extra = {}) => ({
   id, spent_on, source, kind:'consumption', voided:0, cents:'1234',
   note:'午餐', category:'餐飲', payment_source_name:'歷史卡名', ...extra,

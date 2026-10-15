@@ -7,7 +7,7 @@ export const PORT = 8768;
 export const ENTRY_URL = `http://${HOST}:${PORT}/local-first/`;
 const files = new Map([
   ['/local-first/', ['index.html', 'text/html']],
-  ['/local-first/vendor/chartjs-4.5.1/chart.umd.min.js', ['../web/static/vendor/chartjs-4.5.1/chart.umd.min.js', 'text/javascript']],
+  ['/local-first/vendor/chartjs-4.5.1/chart.umd.min.js', ['vendor/chartjs-4.5.1/chart.umd.min.js', 'text/javascript']],
   ...['index.html', 'style.css', 'page.mjs', 'home-preferences.mjs', 'budget-preferences.mjs', 'rules.mjs', 'schedule.mjs', 'usage.mjs', 'annual.mjs', 'income.mjs', 'browse.mjs', 'csv.mjs', 'comparison.mjs', 'ledger.mjs', 'idb.mjs', 'backup.mjs', 'backup-crypto.mjs', 'sw.js',
     'vendor/lossless-json-4.3.1/lossless-json.js'].map(name => ['/local-first/' + name,
     [name, name.endsWith('.html') ? 'text/html' : name.endsWith('.css') ? 'text/css' : 'text/javascript']]),
@@ -64,7 +64,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     });
     server.listen(PORT, HOST, () => {
       console.log('固定本機入口；僅供合成資料測試，請勿輸入真實帳目。');
-      console.log('備份未加密，Python Web 尚未被取代。');
+      console.log('本機帳本未加密；完整備份可選密碼保護。');
       console.log(ENTRY_URL);
       console.log('請保持此視窗開啟；按 Ctrl+C 停止服務。');
     });

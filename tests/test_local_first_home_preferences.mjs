@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-const load=()=>import('../local-first/home-preferences.mjs').catch(()=>({}));
+const load=()=>import('../web/home-preferences.mjs').catch(()=>({}));
 const storage=()=>{const rows=new Map();return {getItem:key=>rows.get(key)??null,setItem:(key,value)=>rows.set(key,value)};};
 test('fresh source keeps required search/record, original order, three shortcuts and collapsed summaries',async()=>{
   const core=await load();assert.equal(typeof core.loadHomePreferences,'function');

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as ledger from '../local-first/ledger.mjs';
-import * as rules from '../local-first/rules.mjs';
-import {emptyData,writeBackup,readBackup} from '../local-first/backup.mjs';
-import {portable} from '../local-first/idb.mjs';
+import * as ledger from '../web/ledger.mjs';
+import * as rules from '../web/rules.mjs';
+import {emptyData,writeBackup,readBackup} from '../web/backup.mjs';
+import {portable} from '../web/idb.mjs';
 const today='2026-10-06';
 const state=()=>({...emptyData(4),payment_sources:[{id:'p_cash',name:'現金',active:1}]});
 const form=(extra={})=>({name:'早餐',note:'三明治',category:'餐飲',payment_source_id:'p_cash',amount:'.29',...extra});

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-const url = new URL('../local-first/rules.mjs', import.meta.url);
+const url = new URL('../web/rules.mjs', import.meta.url);
 const fixture = JSON.parse(readFileSync(new URL('fixtures/life_ledger_rules.json', import.meta.url), 'utf8'));
 async function rules() { assert.ok(existsSync(url), 'Missing isolated browser rules'); return import(url); }
 const state = () => ({ categories: [], payment_sources: [{ id: 'p_cash', name: '現金', active: 1 }, { id: 'p_other', name: '測試卡', active: 0 }] });
@@ -67,9 +67,9 @@ test('Taiwan calendar boundary is owned by entry, not pure rules', async () => {
   assert.equal(r.isoDate('2026-09-25'),'2026-09-25');
   const code=readFileSync(url,'utf8');
   assert.doesNotMatch(code,/Date\.now|new Date|indexedDB|\bdocument\b|\bfetch\s*\(/);
-  const source=readFileSync(new URL('../local-first/page.mjs',import.meta.url),'utf8');
+  const source=readFileSync(new URL('../web/page.mjs',import.meta.url),'utf8');
   assert.match(source,/\btaiwanToday\b.*from '\.\/ledger\.mjs'/);
-  const entry=readFileSync(new URL('../local-first/ledger.mjs',import.meta.url),'utf8');
+  const entry=readFileSync(new URL('../web/ledger.mjs',import.meta.url),'utf8');
   assert.match(entry,/timeZone:\s*['"]Asia\/Taipei['"]/);
 });
 

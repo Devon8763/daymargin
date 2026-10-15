@@ -14,7 +14,7 @@ exit /b 1
 
 :run
 echo 固定本機入口（合成資料測試）；網址將在服務成功啟動後顯示。
-"%LOCALFIRST_NODE%" "%~dp0local-first\serve.mjs"
+"%LOCALFIRST_NODE%" "%~dp0web\serve.mjs"
 set "LOCALFIRST_RESULT=%ERRORLEVEL%"
 if "%LOCALFIRST_RESULT%"=="0" exit /b 0
 echo [ERROR] 本機入口未啟動或已中止。請查看上方錯誤，不要改用其他連接埠。

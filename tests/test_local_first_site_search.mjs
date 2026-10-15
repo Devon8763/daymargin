@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as browse from '../local-first/browse.mjs';
+import * as browse from '../web/browse.mjs';
 const today='2026-10-07',query={keyword:'旅行',start:'',end:''};
 const entry=(id,source='manual',extra={})=>({id,source,kind:'consumption',voided:0,spent_on:'2024-02-29',cents:'101',note:'旅行支出',category:'旅行',...extra});
 const state=()=>({expenses:[entry('a'),entry('b','固定'),entry('c','訂閱'),entry('d','分期'),entry('v','manual',{voided:1}),entry('future','manual',{spent_on:'2099-01-01'}),entry('income','manual',{kind:'income'})],categories:[{name:'旅行',active:0}],tags:[{id:'t_trip',name:'旅行',hidden:1},{id:'t_other',name:'其他',hidden:0}],expense_tags:[{expense_id:'a',tag_id:'t_trip'},{expense_id:'a',tag_id:'t_other'},{expense_id:'b',tag_id:'t_trip'},{expense_id:'v',tag_id:'t_trip'}]});

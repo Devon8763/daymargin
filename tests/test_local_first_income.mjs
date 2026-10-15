@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {emptyData,readBackup,writeBackup,BackupError} from '../local-first/backup.mjs';
+import {emptyData,readBackup,writeBackup,BackupError} from '../web/backup.mjs';
 const initial=()=>({format:'local-first-test-ledger',version:3,owner:'local-test-owner',...emptyData(),incomes:[],income_actions:[],monthly_allocations:[],allocation_preferences:[]});
 const bundle=data=>({format:'life-ledger-backup',version:2,data:Object.fromEntries(Object.entries(data).filter(([key])=>!['format','version','owner'].includes(key)))});
 const form=(amount='0.10',received_on='2026-10-01')=>({amount,received_on,name:'月薪'});
-const change=async(state,operation,id,revision,input,today='2026-10-04')=>(await import('../local-first/ledger.mjs')).changeIncome(state,operation,id,revision,input,today);
+const change=async(state,operation,id,revision,input,today='2026-10-04')=>(await import('../web/ledger.mjs')).changeIncome(state,operation,id,revision,input,today);
 
 test('separate income records: exact month totals, date moves, void and immutable history',async()=>{
   let state=await change(initial(),'add','i_one',null,form());
   state=await change(state,'add','i_two',null,form('0.20'));
   state=await change(state,'add','i_september',null,form('10','2026-09-30'));
-  const {incomeMonth}=await import('../local-first/income.mjs');
+  const {incomeMonth}=await import('../web/income.mjs');
   assert.equal(incomeMonth(state,'2026-10').received,30n);
   assert.equal(incomeMonth(state,'2026-09').received,1000n);
   state=await change(state,'update','i_one',0,form('0.11','2026-09-30'));
@@ -31,8 +31,8 @@ test('income rejects future, malformed values, missing source, forged fields and
   assert.equal((await change(initial(),'add','i_limit',null,form('1000000000'))).incomes[0].cents,'100000000000');
 });
 test('allocation defaults only living; under/equal/over allocation and zero income remain plans',async()=>{
-  const {incomeMonth,defaultAllocation}=await import('../local-first/income.mjs');
-  const {changeAllocation}=await import('../local-first/ledger.mjs');
+  const {incomeMonth,defaultAllocation}=await import('../web/income.mjs');
+  const {changeAllocation}=await import('../web/ledger.mjs');
   let state=initial(); assert.deepEqual(defaultAllocation(),[{id:'living',name:'生活開銷',cents:'0'}]);
   for(const value of ['0','0.10','0.20','0.30']){
     state=changeAllocation(state,'2026-10',state.monthly_allocations[0]?.revision??null,[{id:'living',name:'生活開銷',amount:value},{id:'custom_one',name:'自訂用途',amount:'0'}]);
@@ -52,8 +52,8 @@ test('allocation defaults only living; under/equal/over allocation and zero inco
   assert.deepEqual(changeAllocation(state,'2026-11',null,[]).monthly_allocations.at(-1).items,[]);
 });
 test('monthly recurring suggestion uses existing versions, null day, final period and read-only exclusion',async()=>{
-  const {recurringSuggestions}=await import('../local-first/income.mjs');
-  const {changeSuggestion}=await import('../local-first/ledger.mjs');
+  const {recurringSuggestions}=await import('../web/income.mjs');
+  const {changeSuggestion}=await import('../web/ledger.mjs');
   let state=initial();
   state.recurring_rules=['固定','訂閱','分期'].map((kind,i)=>({id:'r_'+i,name:kind,cents:'100',category:'餐飲',kind,start_month:'2026-09',periods:kind==='分期'?2:0,due_day:i?31:null,active:1,revision:0}));
   state.recurring_versions.push({id:'v_one',recurring_id:'r_1',effective_month:'2026-10',name:'訂閱',cents:'123',category:'餐飲',due_day:31});
@@ -81,13 +81,13 @@ test('JSON v2 validates all finance rows, references and order; v1 remains uncha
   assert.equal(readBackup(writeBackup(full)).data.income_actions[0].before,null);
 });
 test('income is an optional secondary entry and its local module is fully cached and allowlisted',()=>{
-  const source=file=>readFileSync(new URL('../local-first/'+file,import.meta.url),'utf8');
+  const source=file=>readFileSync(new URL('../web/'+file,import.meta.url),'utf8');
   assert.match(source('index.html'),/<details id="income-planning">/);
   assert.match(source('index.html'),/href="#income-planning"/);
   for(const file of ['sw.js','serve.mjs'])assert.match(source(file),/income\.mjs/);
 });
 test('allocation peer conflict, malformed references and exact row capacity are rejected without mutation',async()=>{
-  const {changeAllocation,changeSuggestion}=await import('../local-first/ledger.mjs');
+  const {changeAllocation,changeSuggestion}=await import('../web/ledger.mjs');
   const state=initial(),before=structuredClone(state),items=[{id:'living',name:'生活開銷',amount:'1'}];
   const changed=changeAllocation(state,'2026-10',null,items);
   assert.throws(()=>changeAllocation(changed,'2026-10',null,items));
@@ -99,7 +99,7 @@ test('allocation peer conflict, malformed references and exact row capacity are 
   assert.equal(capacity.incomes.length,100000);assert.equal(capacity.income_actions.length,0);
 });
 test('completed last installment and extreme imported cents do not revive or lose exact totals',async()=>{
-  const {recurringSuggestions,incomeMonth}=await import('../local-first/income.mjs');
+  const {recurringSuggestions,incomeMonth}=await import('../web/income.mjs');
   const state=initial();state.recurring_rules=[{id:'r_last',name:'分期',cents:'1',category:'餐飲',kind:'分期',start_month:'2026-02',periods:1,due_day:31,active:1,revision:0}];
   state.expenses=[{id:'e_last',source:'分期',recurring_id:'r_last',period:'2026-02',voided:1}];
   assert.equal(recurringSuggestions(state,'2026-02').items.length,0);
@@ -108,8 +108,8 @@ test('completed last installment and extreme imported cents do not revive or los
   assert.equal(incomeMonth(state,'2026-02','2026-02-27').received,0n);
 });
 test('suggestion boundaries use leap/short months and never leak into expense statistics',async()=>{
-  const {recurringSuggestions}=await import('../local-first/income.mjs');
-  const {monthBudget,searchExpenses}=await import('../local-first/browse.mjs');
+  const {recurringSuggestions}=await import('../web/income.mjs');
+  const {monthBudget,searchExpenses}=await import('../web/browse.mjs');
   const state=initial();state.recurring_rules=[{id:'r_cross',name:'跨年',cents:'29',category:'餐飲',kind:'訂閱',start_month:'2023-12',periods:0,due_day:31,active:1,revision:0}];
   for(const [month,day] of [['2023-12','31'],['2024-02','29'],['2025-02','28'],['2024-04','30']])assert.equal(recurringSuggestions(state,month).items[0].due_on,month+'-'+day);
   const before=monthBudget(state,'2026-10-04');const changed=await change(state,'add','i_income',null,form());
@@ -117,7 +117,7 @@ test('suggestion boundaries use leap/short months and never leak into expense st
   assert.deepEqual(searchExpenses(changed,{keyword:'',start:'2026-10-01',end:''},'2026-10-04'),[]);
 });
 test('v2 encrypted backup retains exact bytes and rejects wrong passwords or ciphertext tampering',async()=>{
-  const {encryptBackup,decryptBackup}=await import('../local-first/backup-crypto.mjs');
+  const {encryptBackup,decryptBackup}=await import('../web/backup-crypto.mjs');
   const payload=writeBackup(bundle(await change(initial(),'add','i_one',null,form()))),password='synthetic-income-password';
   const one=await encryptBackup(payload,password),two=await encryptBackup(payload,password);
   assert.notDeepEqual(one,two);assert.deepEqual(await decryptBackup(one,password),payload);

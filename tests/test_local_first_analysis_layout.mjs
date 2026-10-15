@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as core from '../local-first/comparison.mjs';
+import * as core from '../web/comparison.mjs';
 test('period controls select complete calendar months with matching presets and leap boundaries',()=>{
   assert.equal(typeof core.analysisPeriodRange,'function');
   assert.deepEqual(core.analysisPeriodRange('month','month','','2024-02-20'),{start:'2024-02-01',end:'2024-02-29'});

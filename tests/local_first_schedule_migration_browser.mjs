@@ -43,10 +43,10 @@ try {
   check(db.version===11&&snapshot.version===11&&db.objectStoreNames.length===26,'Schema not upgraded to twenty-six stores');
   check(snapshot.scheduled_periods.length===0&&snapshot.recurring_versions.length===1,'Migration manufactured schedule rows or versions');
   check(await raw(db)===before&&text(writeBackup(portable(snapshot)))===payload,'Migration rewrote original rows, metadata or backup bytes');
-  lines.push('v6 to v10 adds empty schedule, goal and recurring-income stores; all original records, keys, positions, metadata and JSON v5 bytes are identical');
+  lines.push('v6 to v11 adds empty new stores; all original records, keys, positions, metadata and JSON v5 bytes are identical');
   db.close();const reopened=await openLedgerDatabase(name);connections.push(reopened);
   check(text(writeBackup(portable(await readSnapshot(reopened))))===payload,'Reopen changed old bytes');
-  lines.push('v10 reopen retains old source links, voided consumption and action snapshots');
+  lines.push('v11 reopen retains old source links, voided consumption and action snapshots');
   for(const corrupt of ['meta','row','key']) {
     const invalidName=name+'-'+corrupt,seed=await createOld(invalidName,corrupt);
     old=seed.db;before=await raw(old);old.close();let refused=false;
@@ -62,7 +62,7 @@ try {
     scheduled_periods:[{rule_id:'r_old',index:3652058,defaults:{due_on:'9999-12-31',name:'合成草稿',cents:'29',category:'餐飲',payment_source_id:null,payment_source_name:'未指定'},status:'pending',expense_id:null,revision:0}]};
   const tx=fresh.transaction(STORES,'readwrite');addState(tx,current);await done(tx);
   const restored=await readSnapshot(fresh),encoded=text(writeBackup(portable(current)));
-  check(restored.version===10&&text(writeBackup(portable(restored)))===encoded,'New schedule store cannot roundtrip maximal index or null payment');
+  check(restored.version===11&&text(writeBackup(portable(restored)))===encoded,'New schedule store cannot roundtrip maximal index or null payment');
   check(portable(restored).version===6&&Object.keys(portable(restored).data).length===19,'Generic version or schedule omitted from JSON v6');
   lines.push('native v7 generic version and maximal safe period index roundtrip with null legacy payment snapshots');
   document.querySelector('#result').textContent='PASS：'+lines.length+' 組排程原生升級\n'+lines.join('\n');

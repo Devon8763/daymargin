@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {emptyData,readBackup,writeBackup,validateBackup,BackupError,MAX_INTEGER} from '../local-first/backup.mjs';
-import {portable,rowKey,metadata} from '../local-first/idb.mjs';
+import {emptyData,readBackup,writeBackup,validateBackup,BackupError,MAX_INTEGER} from '../web/backup.mjs';
+import {portable,rowKey,metadata} from '../web/idb.mjs';
 
 const bundle=()=>({format:'life-ledger-backup',version:6,data:{...emptyData(5),scheduled_periods:[]}});
 const defaults=(due_on='2026-10-07')=>({due_on,name:'合成費用',cents:'29',category:'餐飲',payment_source_id:'p_cash',payment_source_name:'現金'});

@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as ledger from '../local-first/ledger.mjs';
-import {emptyData,writeBackup,MAX_INTEGER} from '../local-first/backup.mjs';
-import {portable} from '../local-first/idb.mjs';
-import {scheduleItems,scheduleMonth,scheduleRules} from '../local-first/schedule.mjs';
-import {recurringSuggestions} from '../local-first/income.mjs';
-import {endingSoon} from '../local-first/usage.mjs';
+import * as ledger from '../web/ledger.mjs';
+import {emptyData,writeBackup,MAX_INTEGER} from '../web/backup.mjs';
+import {portable} from '../web/idb.mjs';
+import {scheduleItems,scheduleMonth,scheduleRules} from '../web/schedule.mjs';
+import {recurringSuggestions} from '../web/income.mjs';
+import {endingSoon} from '../web/usage.mjs';
 const today='2026-10-07',blank=()=>({...emptyData(6),payment_sources:[{id:'p_cash',name:'現金',active:1},{id:'p_none',name:'未指定',active:1}]}),form=(extra={})=>({kind:'固定',name:'合成定期',amount:'100.01',category:'餐飲',payment_source_id:'p_cash',first_due_on:'2026-09-01',unit:'day',every:15,periods:0,...extra});
 const change=(state,op='add',id='r_one',expected=null,input=form(),date=today)=>ledger.changeSchedule(state,op,id,expected,input,date);
 const process=(state,op,index=0,rev=null,input=null,date=today)=>ledger.changeScheduledPeriod(state,op,'r_one',index,state.recurring_rules[0]?.revision??state.annual_rules[0].revision,rev,input,date);

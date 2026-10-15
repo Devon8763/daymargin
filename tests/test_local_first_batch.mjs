@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as ledger from '../local-first/ledger.mjs';
-import {emptyData,writeBackup,MAX_INTEGER} from '../local-first/backup.mjs';
-import {portable} from '../local-first/idb.mjs';
+import * as ledger from '../web/ledger.mjs';
+import {emptyData,writeBackup,MAX_INTEGER} from '../web/backup.mjs';
+import {portable} from '../web/idb.mjs';
 import {readFileSync} from 'node:fs';
 const today='2026-10-08';
 const blank=()=>({format:'local-first-test-ledger',version:7,owner:'local-test-owner',...emptyData(6),payment_sources:[{id:'p_cash',name:'現金',active:1},{id:'p_old',name:'停用卡',active:0},{id:'p_card',name:'新卡',active:1}]});
@@ -38,7 +38,7 @@ test('more than fifty targets and capacity/revision boundaries remain one comple
   const capped=sample();capped.tags[1].revision=MAX_INTEGER;assert.throws(()=>ledger.changeExpenseBatch(capped,targets(capped),{tags:{ids:['t_hidden'],names:[]}},today));
 });
 test('search offers native batch selection, optional options and a separate explicit confirmation',()=>{
-  const html=readFileSync(new URL('../local-first/index.html',import.meta.url),'utf8');
+  const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
   for(const id of ['batch-select-all','batch-clear','batch-count','batch-form','batch-category','batch-payment','batch-tag-input','batch-tag-options','batch-dialog','batch-summary','batch-confirm','batch-cancel'])assert(html.includes('id="'+id+'"'),'Missing batch control '+id);
   assert(html.includes('全選符合結果'));assert(html.includes('新增標籤'));assert(html.includes('aria-labelledby="batch-title"'));
 });
@@ -52,7 +52,7 @@ test('batch removes associations only, accepts different old values and skips al
   const combined=ledger.changeExpenseBatch(state,targets(state),{category:'購物',payment_source_id:'p_card',tags:{ids:[],names:['追加']},remove_tag_ids:['t_old']},today);assert.equal(combined.actions.length,4);assert.equal(combined.tags.length,3);assert(combined.expenses.every(row=>row.category==='購物'&&row.payment_source_name==='新卡'));assert.doesNotThrow(()=>bytes(combined));
 });
 test('search interaction has four closed disclosures and separate single/batch actions with one modal form',()=>{
-  const html=readFileSync(new URL('../local-first/index.html',import.meta.url),'utf8');
+  const html=readFileSync(new URL('../web/index.html',import.meta.url),'utf8');
   for(const id of ['search-functions-group','search-categories-group','search-tags-group','search-accounts']){const tag=html.match(new RegExp('<details id="'+id+'"[^>]*>'))?.[0];assert(tag,'Missing disclosure '+id);assert(!/\sopen(?:\s|>)/.test(tag),'Disclosure defaults open');}
   assert(html.includes('id="batch-edit"'));assert(html.includes('id="batch-open"'));assert(html.includes('<dialog id="batch-editor"'));assert(html.includes('id="batch-remove-options"'));assert(!html.includes('id="batch-options"'));
 });

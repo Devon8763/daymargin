@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import * as rules from '../local-first/rules.mjs';
-import * as ledger from '../local-first/ledger.mjs';
-import { emptyData, readBackup, writeBackup, MAX_INTEGER, MAX_BYTES } from '../local-first/backup.mjs';
+import * as rules from '../web/rules.mjs';
+import * as ledger from '../web/ledger.mjs';
+import { emptyData, readBackup, writeBackup, MAX_INTEGER, MAX_BYTES } from '../web/backup.mjs';
 
 const fixture = () => ({ format:'local-first-test-ledger', version:2, owner:'local-test-owner',
   ...readBackup(new Uint8Array(readFileSync(new URL('fixtures/portable_life_ledger.json', import.meta.url)))).data });

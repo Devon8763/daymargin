@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {emptyData,readBackup,writeBackup,MAX_INTEGER} from '../local-first/backup.mjs';
-import {portable,metadata} from '../local-first/idb.mjs';
-import * as ledger from '../local-first/ledger.mjs';
+import {emptyData,readBackup,writeBackup,MAX_INTEGER} from '../web/backup.mjs';
+import {portable,metadata} from '../web/idb.mjs';
+import * as ledger from '../web/ledger.mjs';
 const initial=()=>({format:'local-first-test-ledger',version:8,owner:'local-test-owner',...emptyData(7)});
 const form=(saved_amount='0',deadline='')=>({name:'合成目標',target_amount:'100',saved_amount,deadline,remind:1,completed:0});
 const add=(state,id='g_one',value=form())=>ledger.changeGoal(state,'add',id,null,value);

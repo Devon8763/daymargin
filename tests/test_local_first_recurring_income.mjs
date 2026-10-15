@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as ledger from '../local-first/ledger.mjs';
-import * as income from '../local-first/income.mjs';
-import {emptyData,readBackup,writeBackup,MAX_INTEGER} from '../local-first/backup.mjs';
-import {portable,metadata} from '../local-first/idb.mjs';
+import * as ledger from '../web/ledger.mjs';
+import * as income from '../web/income.mjs';
+import {emptyData,readBackup,writeBackup,MAX_INTEGER} from '../web/backup.mjs';
+import {portable,metadata} from '../web/idb.mjs';
 const initial=()=>({...emptyData(8),format:'local-first-test-ledger',version:9,owner:'local-test-owner'});
 const form={name:'合成月薪',amount:'10.29',first_due_on:'2024-01-31',due_day:31};
 const add=(state=initial(),value=form,today='2024-01-01')=>ledger.changeIncomeRule(state,'add','ir_one',null,value,today);

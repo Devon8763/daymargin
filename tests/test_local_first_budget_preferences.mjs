@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-const prefs=await import('../local-first/budget-preferences.mjs').catch(()=>({}));
+const prefs=await import('../web/budget-preferences.mjs').catch(()=>({}));
 const storage=()=>{const map=new Map([['daymargin.home.v1','unchanged legacy home']]);return {map,getItem:key=>map.get(key)??null,setItem:(key,value)=>map.set(key,value)};};
 test('default on, explicit off reloads and preserves existing home preferences',()=>{
   const s=storage();assert.deepEqual(prefs.loadBudgetPreferences(s),{near:true,warning:''});

@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as rules from '../local-first/rules.mjs';
-import * as ledger from '../local-first/ledger.mjs';
-import {invoicePreview} from '../local-first/csv.mjs';
-import {emptyData,writeBackup,readBackup} from '../local-first/backup.mjs';
-import {portable,metadata} from '../local-first/idb.mjs';
+import * as rules from '../web/rules.mjs';
+import * as ledger from '../web/ledger.mjs';
+import {invoicePreview} from '../web/csv.mjs';
+import {emptyData,writeBackup,readBackup} from '../web/backup.mjs';
+import {portable,metadata} from '../web/idb.mjs';
 const base=()=>({...emptyData(10),format:'local-first-test-ledger',version:11,owner:'local-test-owner',payment_sources:[{id:'p_cash',name:'現金',active:1}]});
 const choice=(category='發票',number='AB00000001')=>({number,date:'2024-01-31',form:{spent_on:'2024-01-31',amount:'0.29',note:'合成品項',category,payment_source_id:'p_cash'}});
 test('known merchant header is optional, exact and consistent across invoice items',()=>{

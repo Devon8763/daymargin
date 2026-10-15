@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {scheduleDue,scheduleItems,scheduleMonth,scheduleRules,scheduleReserve} from '../local-first/schedule.mjs';
-import {emptyData} from '../local-first/backup.mjs';
+import {scheduleDue,scheduleItems,scheduleMonth,scheduleRules,scheduleReserve} from '../web/schedule.mjs';
+import {emptyData} from '../web/backup.mjs';
 
 const sample=()=>({...emptyData(6),payment_sources:[{id:'p_cash',name:'現金',active:1},{id:'p_none',name:'未指定',active:1}],
   recurring_rules:[{id:'r_month',name:'合成月付',cents:'10001',category:'餐飲',kind:'固定',start_month:'2026-09',periods:0,due_day:7,active:1,revision:0}],

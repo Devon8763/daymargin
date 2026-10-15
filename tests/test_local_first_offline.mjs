@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const source = await readFile(new URL('../local-first/sw.js', import.meta.url), 'utf8');
-assert.match(source, /const CACHE = 'local-first-offline-0\.26\.6-v1';/);
+const source = await readFile(new URL('../web/sw.js', import.meta.url), 'utf8');
+assert.match(source, /const CACHE = 'local-first-offline-0\.26\.7-v1';/);
 const required = ['/local-first/', '/local-first/index.html', '/local-first/style.css', '/local-first/page.mjs', '/local-first/home-preferences.mjs', '/local-first/budget-preferences.mjs', '/local-first/ledger.mjs', '/local-first/idb.mjs', '/local-first/rules.mjs', '/local-first/schedule.mjs', '/local-first/income.mjs', '/local-first/annual.mjs', '/local-first/usage.mjs', '/local-first/browse.mjs', '/local-first/csv.mjs', '/local-first/comparison.mjs', '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js', '/local-first/backup.mjs', '/local-first/backup-crypto.mjs', '/local-first/vendor/lossless-json-4.3.1/lossless-json.js'];
 
 function worker({ broken = '', existing = new Map() } = {}) {

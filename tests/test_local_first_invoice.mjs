@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as csv from '../local-first/csv.mjs';
-import * as ledger from '../local-first/ledger.mjs';
-import {emptyData,writeBackup,readBackup} from '../local-first/backup.mjs';
-import {portable,metadata} from '../local-first/idb.mjs';
+import * as csv from '../web/csv.mjs';
+import * as ledger from '../web/ledger.mjs';
+import {emptyData,writeBackup,readBackup} from '../web/backup.mjs';
+import {portable,metadata} from '../web/idb.mjs';
 const head='載具自訂名稱,發票日期,發票號碼,發票金額,發票狀態,折讓,賣方統一編號,賣方名稱,賣方地址,買方統編,消費明細_數量,消費明細_單價,消費明細_金額,消費明細_品名';
 const row=(number='AB00000001',note='合成品項',total='10.29',date='20240131',status='開立已確認',allowance='否',detail=total)=>['',date,number,total,status,allowance,'','','','','1',detail,detail,note].map(v=>/[,"\n]/.test(v)?'"'+v.replaceAll('"','""')+'"':v).join(',');
 const file=(...rows)=>new TextEncoder().encode('\uFEFF'+head+'\r\n'+rows.join('\r\n'));
@@ -41,7 +41,7 @@ test('empty, forged fields, invalid or inactive options, extreme amounts and cap
   const full=base();full.categories=Array.from({length:99999},(_,i)=>({name:'c'+i,active:1}));metadata(full);assert.throws(()=>ledger.changeInvoiceImport(full,[{...choice(),form:{...choice().form,category:'c0'}}],'2024-02-01'));assert.equal(full.expenses.length,0);
 });
 test('import preview and safe rendering code are read only until explicit confirmation',async()=>{
-  const {readFile}=await import('node:fs/promises'),html=await readFile(new URL('../local-first/index.html',import.meta.url),'utf8'),page=await readFile(new URL('../local-first/page.mjs',import.meta.url),'utf8');
+  const {readFile}=await import('node:fs/promises'),html=await readFile(new URL('../web/index.html',import.meta.url),'utf8'),page=await readFile(new URL('../web/page.mjs',import.meta.url),'utf8');
   assert.match(html,/id="invoice-import"/);assert.match(html,/id="invoice-dialog"/);assert.match(page,/invoicePreview/);assert.match(page,/importInvoiceExpenses/);assert(!page.includes('invoiceContent.innerHTML'));
 });
 test('bounded parser refuses excessive rows, invoice groups and duplicate required columns',()=>{

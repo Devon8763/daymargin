@@ -1,5 +1,5 @@
-import { STORES, openLedgerDatabase, readSnapshot } from '../local-first/idb.mjs';
-import { readBackup, writeBackup } from '../local-first/backup.mjs';
+import { openLedgerDatabase, readSnapshot } from '../local-first/idb.mjs';
+import { readBackup, writeBackup, SECTIONS as OLD_SECTIONS } from '../local-first/backup.mjs';
 
 const prefix = 'discordbot-localfirst-synthetic-v1-storage-checks';
 const lines = [];
@@ -28,15 +28,15 @@ try {
   const blankName = prefix + '-blank';
   await erase(blankName);
   let db = await openLedgerDatabase(blankName);
-  ok(db.version === 7 && await readSnapshot(db, true) === null, 'Blank v7 must stay blank on read');
-  db.close(); lines.push('blank v2 remains uninitialized');
+  ok(db.version === 11 && db.objectStoreNames.length === 26 && await readSnapshot(db, true) === null, 'Blank v11 must stay blank on read');
+  db.close(); lines.push('blank v11 remains uninitialized');
 
   const original = await fixtureState();
   const name = prefix + '-full';
   await erase(name); await seed(name, original);
   db = await openLedgerDatabase(name);
   let restored = await readSnapshot(db);
-  ok(restored.format === original.format && restored.version === 7 && restored.owner === original.owner, 'State header');
+  ok(restored.format === original.format && restored.version === 11 && restored.owner === original.owner, 'State header');
   const encode = state => writeBackup({ format:'life-ledger-backup', version:1,
     data: Object.fromEntries(['expenses','categories','payment_sources','budgets','recurring_rules',
       'recurring_versions','shortcuts','actions','settings'].map(section => [section,state[section]])) });
@@ -71,7 +71,7 @@ try {
 
   const futureName = prefix + '-future';
   await erase(futureName);
-  const future = await request(indexedDB.open(futureName,8)); future.close();
+  const future = await request(indexedDB.open(futureName,12)); future.close();
   let futureRejected=false;
   try { (await openLedgerDatabase(futureName)).close(); } catch { futureRejected=true; }
   ok(futureRejected,'Future DB version must reject'); lines.push('future version rejected');
@@ -80,7 +80,7 @@ try {
   await erase(extraName);
   const extraOpening = indexedDB.open(extraName,2);
   extraOpening.onupgradeneeded = () => {
-    for (const section of [...STORES,'unexpected']) extraOpening.result.createObjectStore(section,{keyPath:'key'});
+    for (const section of [...OLD_SECTIONS,'meta','unexpected']) extraOpening.result.createObjectStore(section,{keyPath:'key'});
     extraOpening.transaction.objectStore('unexpected').add({key:'private',value:'preserve'});
   };
   (await request(extraOpening)).close();

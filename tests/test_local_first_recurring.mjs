@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {emptyData,writeBackup,readBackup,MAX_INTEGER} from '../local-first/backup.mjs';
-import {portable} from '../local-first/idb.mjs';
-import * as ledger from '../local-first/ledger.mjs';
-import * as rules from '../local-first/rules.mjs';
+import {emptyData,writeBackup,readBackup,MAX_INTEGER} from '../web/backup.mjs';
+import {portable} from '../web/idb.mjs';
+import * as ledger from '../web/ledger.mjs';
+import * as rules from '../web/rules.mjs';
 const initial=()=>({format:'local-first-test-ledger',version:2,owner:'local-test-owner',...emptyData()});
 const form=(changes={})=>({kind:'訂閱',name:' 合成訂閱 ',amount:'.29',category:'居住',start_month:'2026-12',due_day:31,...changes});
 const change=(state,op,id=null,revision=null,input=null,today='2026-12-15')=>ledger.changeRecurring(state,op,id,revision,input,today);

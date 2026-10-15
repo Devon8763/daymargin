@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as browse from '../local-first/browse.mjs';
+import * as browse from '../web/browse.mjs';
 const spent=(id,date='2024-02-29',extra={})=>({id,spent_on:date,cents:'29',note:'<img> 合成',source:'manual',kind:'consumption',voided:0,category:'停用歷史',...extra});
 const received=(id,date='2024-02-29',extra={})=>({id,received_on:date,cents:'101',name:'薪資<img>',voided:0,...extra});
 const report=(state,month='2024-02',today='2024-03-01')=>{assert.equal(typeof browse.monthlyAccounts,'function');return browse.monthlyAccounts(state,month,today);};

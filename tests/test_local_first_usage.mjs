@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {emptyData,writeBackup,readBackup} from '../local-first/backup.mjs';
-import {portable} from '../local-first/idb.mjs';
-import {monthBudget,searchExpenses,calendarMonth} from '../local-first/browse.mjs';
-import {expenseCsv} from '../local-first/csv.mjs';
-import {compareExpenses} from '../local-first/comparison.mjs';
-const usage=await import('../local-first/usage.mjs').catch(()=>({}));
+import {emptyData,writeBackup,readBackup} from '../web/backup.mjs';
+import {portable} from '../web/idb.mjs';
+import {monthBudget,searchExpenses,calendarMonth} from '../web/browse.mjs';
+import {expenseCsv} from '../web/csv.mjs';
+import {compareExpenses} from '../web/comparison.mjs';
+const usage=await import('../web/usage.mjs').catch(()=>({}));
 const form=(extra={})=>({started_on:'2024-02-28',days:7,remind:1,reminder_days:7,show_daily_cost:0,active:1,...extra});
 const entry=(extra={})=>({id:'e_one',spent_on:'2024-02-28',cents:'10001',category:'餐飲',note:'合成商品',source:'manual',recurring_id:null,period:null,voided:0,payment_source_id:'p_cash',payment_source_name:'現金',kind:'consumption',revision:0,...extra});
 const state=()=>({...emptyData(4),payment_sources:[{id:'p_cash',name:'現金',active:1}],expenses:[entry()]});

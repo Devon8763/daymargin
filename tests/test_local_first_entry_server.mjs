@@ -5,7 +5,7 @@ import { request } from 'node:http';
 import { createConnection } from 'node:net';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-const script=new URL('../local-first/serve.mjs',import.meta.url);
+const script=new URL('../web/serve.mjs',import.meta.url);
 const load=async()=>{assert.notEqual(await readFile(script).catch(()=>null),null,'Missing fixed local entry server');return import(script.href);};
 const start=server=>new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve(server.address().port));});
 const stop=server=>new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});
@@ -27,7 +27,7 @@ const security=headers=>{
 };
 test('comparison module and reused Chart.js are local, byte-identical and retain MIT provenance',async()=>withServer(async port=>{
   const {createHash}=await import('node:crypto');
-  const directory=new URL('../web/static/vendor/chartjs-4.5.1/',import.meta.url);
+  const directory=new URL('../web/vendor/chartjs-4.5.1/',import.meta.url);
   const provenance=JSON.parse(await readFile(new URL('provenance.json',directory),'utf8'));
   for(const [name,hash] of Object.entries(provenance.sha256)){
     assert.equal(createHash('sha256').update(await readFile(new URL(name,directory))).digest('hex'),hash,name);
@@ -43,17 +43,17 @@ test('fixed entry constants and Windows launcher preserve failures without chang
   const {HOST,PORT,ENTRY_URL}=await load();assert.equal(HOST,'127.0.0.1');assert.equal(PORT,8768);assert.equal(ENTRY_URL,'http://127.0.0.1:8768/local-first/');
   const bytes=await readFile(new URL('../start_local_first.local.cmd',import.meta.url)).catch(()=>null);
   assert.ok(bytes,'Missing Windows launcher');const text=bytes.toString('utf8');
-  assert.ok(text.includes('local-first\\serve.mjs'));assert.ok(text.includes('pause'));
+  assert.ok(text.includes('web\\serve.mjs'));assert.ok(text.includes('pause'));
   assert.ok(!/uvicorn|DISCORDBOT_DB_PATH|data\.db|\.env|--port|%\*/.test(text),'Launcher crosses boundary');
   assert.ok(!/(?<!\r)\n/.test(text),'CMD must use CRLF');
 });
 test('required local assets are byte-identical, correctly typed and covered by CSP',async()=>withServer(async port=>{
   const paths=['index.html','style.css','page.mjs','home-preferences.mjs','budget-preferences.mjs','rules.mjs','income.mjs','annual.mjs','usage.mjs','browse.mjs','csv.mjs','ledger.mjs','idb.mjs','backup.mjs','backup-crypto.mjs','sw.js','vendor/lossless-json-4.3.1/lossless-json.js'];
   for(const name of paths){const response=await get(port,'/local-first/'+name);assert.equal(response.status,200,name);security(response.headers);
-    assert.deepEqual(response.body,await readFile(new URL('../local-first/'+name,import.meta.url)),name);
+    assert.deepEqual(response.body,await readFile(new URL('../web/'+name,import.meta.url)),name);
     assert.match(response.headers['content-type'],name.endsWith('.css')?/^text\/css/:name.endsWith('.html')?/^text\/html/:/^text\/javascript/);
   }
-  assert.deepEqual((await get(port)).body,await readFile(new URL('../local-first/index.html',import.meta.url)));
+  assert.deepEqual((await get(port)).body,await readFile(new URL('../web/index.html',import.meta.url)));
   assert.match((await get(port)).body.toString(),/僅供合成資料測試，請勿輸入真實帳目/);
 }));
 test('invalid Host, duplicates, missing authority and absolute request targets are refused',async()=>withServer(async port=>{

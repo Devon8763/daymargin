@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyData, MAX_INTEGER, writeBackup } from '../local-first/backup.mjs';
-import { portable } from '../local-first/idb.mjs';
-import * as rules from '../local-first/rules.mjs';
-import * as ledger from '../local-first/ledger.mjs';
+import { emptyData, MAX_INTEGER, writeBackup } from '../web/backup.mjs';
+import { portable } from '../web/idb.mjs';
+import * as rules from '../web/rules.mjs';
+import * as ledger from '../web/ledger.mjs';
 const initial = () => ({format:'local-first-test-ledger',version:2,owner:'local-test-owner',...emptyData()});
 const form = changes => ({name:'房租',amount:'100.29',category:'居住',start_month:'2026-09',due_day:28,...changes});
 const change = (state,op,id,rev,input,date='2026-09-24') => ledger.changeFixed(state,op,id,rev,input,date);
