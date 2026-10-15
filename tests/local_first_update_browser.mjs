@@ -1,8 +1,15 @@
 import {openDatabase,readLedgerIfPresent,restorePortableBackup,exportPortableBackup,updateSchedule,updateGoal,updateAllocation,updateIncomeRule,processIncomePeriod,updateIncome,updateMerchantRule,importInvoiceExpenses,taiwanToday,readLedger} from '../local-first/ledger.mjs';
 import {STORES} from '../local-first/idb.mjs';
+import {SYNTHETIC,RELEASE,validateScenario,assertVersionResponse} from './local_first_version_scenarios.mjs';
 const q=id=>document.querySelector('#'+id),check=(value,message)=>{if(!value)throw new Error(message);};
 const wait=async predicate=>{for(let i=0;i<100;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,100));}throw new Error('Timed out');};
 const text=bytes=>new TextDecoder().decode(bytes);
+const scenarioName=new URLSearchParams(location.search).get('scenario')??'synthetic';
+check(['synthetic','release'].includes(scenarioName),'Unknown update scenario');
+const scenario=scenarioName==='release'?RELEASE:SYNTHETIC;validateScenario(scenario);
+const responseVersions=async expected=>{
+  for(const path of ['/local-first/','/local-first/sw.js']){const response=await fetch(path,{cache:'no-store'});check(response.ok,'Missing scenario response');assertVersionResponse(path,await response.text(),expected);}
+};
 const raw=async db=>{
   const tx=db.transaction(STORES,'readonly'),rows={};
   for(const name of STORES)tx.objectStore(name).getAll().onsuccess=event=>{rows[name]=event.target.result;};
@@ -32,7 +39,7 @@ try{
   await importInvoiceExpenses(db,[{number:'AB00000301',date:today,form:{spent_on:today,amount:'.29',note:'合成更新發票',category:'發票',payment_source_id:(await readLedger(db)).payment_sources.find(row=>row.active===1).id}}]);
   backupBefore=text(await exportPortableBackup(db));rawBefore=await raw(db);
   q('open-a').disabled=false;q('open-b').disabled=false;
-  q('result').textContent='READY：二十五類合成資料已建立；帳本與備份基準保留在記憶體';
+  q('result').textContent='READY：'+scenario.label+'；二十五類合成資料已建立；帳本與備份基準保留在記憶體';
 }catch{q('result').textContent='FAIL：isolated setup';}
 const analysisReady=async page=>{
   const doc=page.document;doc.querySelector('[data-view-button=analysis]').click();
@@ -51,8 +58,9 @@ q('open-a').onclick=()=>{a=window.open('/local-first/');q('open-a').disabled=tru
 q('open-b').onclick=()=>{b=window.open('/local-first/');q('open-b').disabled=true;};
 stage('check-old',async()=>{
   await opened(a);await opened(b);
+  await responseVersions(scenario.old);
   for(const [page,draft] of [[a,'未送出合成草稿 A'],[b,'未送出合成草稿 B']]){
-    check(page.document.querySelector('#page-version').textContent==='目前使用頁面版本：0.26.7','Wrong old page version');
+    check(page.document.querySelector('#page-version').textContent==='目前使用頁面版本：'+scenario.old.version,'Wrong old page version');
     page.document.querySelector('#expense-form').elements.note.value=draft;
     check(!page.document.querySelector('#expenses img'),'Imported markup executed');
   }
@@ -62,31 +70,33 @@ stage('check-old',async()=>{
   a.document.querySelector('#site-search-back').click();
   const day=a.document.querySelector('#calendar-grid [data-day="'+taiwanToday()+'"]');check(day.textContent.includes('＋'),'income calendar marker missing');day.click();check(a.document.querySelector('#calendar-day-total').textContent.includes('收入合計：＋0.29 元'),'income calendar total missing');
   await analysisReady(a);await unchanged();q('check-waiting').disabled=false;q('check-failure').disabled=false;
-  q('result').textContent='PASS：舊版 0.26.7 控制兩頁、二十五類唯讀及惡意文字安全；草稿未儲存';
+  q('result').textContent='PASS：'+scenario.label+'；舊版 '+scenario.old.version+' 控制兩頁、二十五類唯讀及惡意文字安全；草稿未儲存';
 });
 stage('check-failure',async()=>{
+  await responseVersions(scenario.next);
   const registration=await navigator.serviceWorker.getRegistration('/local-first/');await registration.update();
   for(const [page,draft] of [[a,'未送出合成草稿 A'],[b,'未送出合成草稿 B']]){
     await wait(()=>page.document.querySelector('#update-status').textContent.includes('新版安裝未完成'));
-    check(page.document.querySelector('#page-version').textContent==='目前使用頁面版本：0.26.7','Failed update changed version');
+    check(page.document.querySelector('#page-version').textContent==='目前使用頁面版本：'+scenario.old.version,'Failed update changed version');
     check(page.document.querySelector('#expense-form').elements.note.value===draft,'Failed update lost draft');
   }
   check(registration.waiting===null,'Failed update is waiting');
-  check(JSON.stringify(await caches.keys())===JSON.stringify(['local-first-offline-0.26.7-v1']),'Failed cache retained or old cache removed');
+  check(JSON.stringify(await caches.keys())===JSON.stringify([scenario.old.cache]),'Failed cache retained or old cache removed');
   await unchanged();
   q('result').textContent='PASS：缺少 Chart.js 時新版安裝失敗、沒有等待／不完整快取；舊頁、草稿、帳本與備份不變';
 });
 stage('check-waiting',async()=>{
+  await responseVersions(scenario.next);
   const registration=await navigator.serviceWorker.getRegistration('/local-first/');await registration.update();
   await wait(()=>registration.waiting?.state==='installed');
   for(const [page,draft] of [[a,'未送出合成草稿 A'],[b,'未送出合成草稿 B']]){
-    check(page.document.querySelector('#page-version').textContent==='目前使用頁面版本：0.26.7','Waiting changed page version');
+    check(page.document.querySelector('#page-version').textContent==='目前使用頁面版本：'+scenario.old.version,'Waiting changed page version');
     await wait(()=>page.document.querySelector('#update-status').textContent.includes('新版已下載，關閉此來源所有頁籤／視窗後重新開啟才會使用新版'));
     check(page.document.querySelector('#expense-form').elements.note.value===draft,'Draft lost');
     check(page.navigator.serviceWorker.controller.state==='activated'&&page.navigator.serviceWorker.controller!==registration.waiting,'Waiting replaced old controller');
   }
   await unchanged();q('close-a').disabled=false;
-  q('result').textContent='PASS：新版完整下載但仍等待，兩頁維持 0.26.7 與原草稿；帳本／備份逐位元組不變';
+  q('result').textContent='PASS：新版完整下載但仍等待，兩頁維持 '+scenario.old.version+' 與原草稿；帳本／備份逐位元組不變';
 });
 stage('close-a',async()=>{
   a.close();const registration=await navigator.serviceWorker.getRegistration('/local-first/');
@@ -104,16 +114,17 @@ stage('close-b',async()=>{
 q('open-new').onclick=()=>{newPage=window.open('/local-first/');q('check-new').disabled=false;};
 stage('check-new',async()=>{
   await opened(newPage);
-  check(newPage.document.querySelector('#page-version').textContent==='目前使用頁面版本：0.26.8','New cached page version not loaded');
+  check(newPage.document.querySelector('#page-version').textContent==='目前使用頁面版本：'+scenario.next.version,'New cached page version not loaded');
   check(!newPage.document.querySelector('#update-status').textContent.includes('新版已下載'),'New page still claims waiting');
   await wait(()=>newPage.document.querySelector('#offline-status').textContent.includes('可離線重新開啟'));
-  const names=await caches.keys();check(names.length===1&&names[0]==='local-first-offline-0.26.8-v1','Wrong activated cache');
+  const names=await caches.keys();check(names.length===1&&names[0]===scenario.next.cache,'Wrong activated cache');
   const cache=await caches.open(names[0]),paths=(await cache.keys()).map(request=>new URL(request.url));
+  assertVersionResponse('/local-first/',await(await cache.match('/local-first/index.html')).text(),scenario.next);
   check(paths.length===20&&paths.every(url=>url.origin===location.origin&&!url.search&&url.pathname.startsWith('/local-first/')),'Static cache contains extra content');
   newPage.document.querySelector('#view-record [data-search-open]').click();await wait(()=>!newPage.document.querySelector('#search-groups').hidden);
   check(newPage.document.querySelector('#search-results [data-income-id="i_search_update"]')&&newPage.document.querySelector('#search-totals').textContent.includes('收入合計：0.29 元'),'offline income search missing');
   newPage.document.querySelector('#site-search-back').click();const day=newPage.document.querySelector('#calendar-grid [data-day="'+taiwanToday()+'"]');check(day.textContent.includes('＋'),'offline income marker missing');day.click();check(newPage.document.querySelector('#calendar-day-total').textContent.includes('收入合計：＋0.29 元'),'offline income day missing');
   await analysisReady(newPage);await unchanged();
-  q('result').textContent='PASS：停服後同網址離線冷啟動顯示測試新版 0.26.8（非發行版）；20 靜態資源、二十五類原始列／metadata／完整備份逐位元組不變';
+  q('result').textContent='PASS：'+scenario.label+'；停服後同網址離線冷啟動顯示 '+scenario.next.version+'；20 靜態資源、二十五類原始列／metadata／完整備份逐位元組不變';
 });
 window.addEventListener('pagehide',()=>{db?.close();a?.close();b?.close();newPage?.close();});

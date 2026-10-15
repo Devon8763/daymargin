@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>原生更新與帳本不變驗證</title>
 <h1>原生更新與帳本不變驗證（隔離合成來源）</h1>
-<p>先開啟兩個測試頁，換成 --next-worker 服務後檢查等待，再停服、關閉兩頁及離線重開。本頁不在 worker 範圍內。</p>
+<p>預設為合成升版：相同程式只改測試標籤，不是真實舊版。先開兩頁，再換成 --next-worker 檢查失敗與等待，關閉全部舊頁後停服離線重開。真實舊版演練須以 ?scenario=release 及已核對的舊資源服務，不能只替換標籤。本頁不在worker範圍內。</p>
 <pre id="result">RUNNING</pre>
 <button id="open-a" disabled>開啟舊頁 A</button><button id="open-b" disabled>開啟舊頁 B</button>
 <button id="check-old" disabled>檢查舊頁與草稿</button><button id="check-failure" disabled>檢查新版安裝失敗</button><button id="check-waiting" disabled>下載並檢查等待新版</button>

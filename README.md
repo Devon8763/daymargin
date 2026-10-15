@@ -1,10 +1,10 @@
 # 日餘
 
-目前版本：**0.26.7**（獨立專案；依使用者指示建立C2，仍僅供合成資料測試）。
+目前版本：**0.26.10**（測試版本情境整理與現行說明更正；保留未提交的F01／F02／F03修正，仍僅供合成資料測試）。
 
-2026-10-15使用者授權在工具無法完成普通瀏覽器驗收後繼續C2；這不代表未驗證項目通過。滑鼠雙擊、兩個全新普通設定檔的實體加密備份還原、窄版、固定來源隔離及合成回退仍未完成，詳見[驗證紀錄](docs/split-provenance/validation.md)。
+2026-10-15拆分時未完成的普通瀏覽器驗收限制保留於[拆分紀錄](docs/split-provenance/validation.md)。後續內嵌瀏覽器測試不能代替普通設定檔、實體備份復原與使用者手測；日常使用決定也不代表未完成驗收已通過，詳見[目前驗證範圍](docs/local-first-0.26.10-validation.md)。
 
-日餘，讓生活有度。網站程式位於 `web/`，沿用瀏覽器本機帳本與既有功能。僅供合成資料测试；IndexedDB帳本未加密，完整備份可選密碼保護。
+日餘，讓生活有度。網站程式位於 `web/`，是獨立local-first記帳專案，不需Discord登入或Python Web。僅供合成資料測試；IndexedDB帳本未加密，加密完整備份只保護下載檔。
 
 ## Windows啟動
 
@@ -25,6 +25,6 @@
 - [更新紀錄](CHANGELOG.md)：相關歷史保留版本、日期、原意及當時驗證限制，不能當成本輪結果。
 - [第三方授權](THIRD_PARTY_LICENSES.md)：Chart.js、內嵌色彩庫及lossless-json原檔與MIT授權。
 - [拆分來源與SHA對照](docs/split-provenance/source.md)。
-- [本輪驗證及手測](docs/local-first-browser-validation.md)。
+- [0.26.10驗證與手測](docs/local-first-0.26.10-validation.md)；[0.26.9量測、驗證及手測](docs/local-first-0.26.9-validation.md)；[0.26.8驗證及手測](docs/local-first-0.26.8-validation.md)；[既有驗證歷史](docs/local-first-browser-validation.md)。
 
 原DiscordBOT及Python Web仍完整保留於原專案。日餘不依賴其目錄，不建立App／shared空殼、不沿用Git遠端。

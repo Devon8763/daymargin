@@ -11,12 +11,12 @@
 <main>
   <h1>瀏覽器本機記帳驗證</h1>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.26.7</p>
+  <p id="page-version">目前使用頁面版本：0.26.10</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
   <p>瀏覽器可能清除離線快取或本機帳本；可離線使用不等於資料永久安全，請下載並妥善保存備份。</p>
-  <noscript>請啟用 JavaScript 才能操作本機驗證頁；現有 Python Web 不受影響。</noscript>
+  <noscript>請啟用 JavaScript 才能使用日餘本機記帳。</noscript>
   <p id="error" role="alert"></p>
   <div id="recovery-guidance" hidden>
     <p>不要清除原瀏覽器的網站資料或覆蓋原帳本，請保留原瀏覽器設定檔。</p>
@@ -231,7 +231,7 @@
       <p id="settings-error" role="alert"></p>
     </div>
   </section>
-  <section aria-labelledby="list-title"><details id="expenses-disclosure"><summary id="list-title" data-search-feature>有效消費</summary><ul id="expenses"></ul><p id="empty" hidden>尚無有效消費。</p></details></section>
+  <section aria-labelledby="list-title"><details id="expenses-disclosure"><summary id="list-title" data-search-feature>有效消費</summary><p id="expenses-count" role="status"></p><ul id="expenses"></ul><button id="expenses-more" type="button" hidden>顯示更多</button><p id="empty" hidden>尚無有效消費。</p></details></section>
   <section aria-labelledby="search-title">
     <h2 id="search-title">搜尋條件</h2>
     <form id="search-form" novalidate>
@@ -519,8 +519,8 @@
     </dialog>
     <div id="export-panel" hidden>
       <h3>完整備份方式</h3>
-      <p>備份密碼不會加密瀏覽器帳本；本頁不保存密碼或金鑰，忘記密碼無法取回。Python Web 尚未被取代。</p>
-      <p>含收入／分配使用 JSON v2，含年度費用／期數使用 JSON v3，含使用期間使用 JSON v4，含標籤使用 JSON v5，含統一定期安排／期數使用 JSON v6（十九類完整資料）；舊 Python／舊版 local-first 不支援，不可刪去新資料後當作完整帳本搬移。加密封裝仍為 v1。</p>
+      <p>備份密碼只保護下載檔，不會加密瀏覽器帳本；本頁不保存密碼或金鑰，忘記密碼無法取回。日餘記帳不需Discord登入或Python Web。</p>
+      <p>本版可匯入生活帳本 JSON v1～v10；匯出版本依實際資料內容決定。新資料格式不保證舊 Python／舊版 local-first 可讀，不可刪去新資料後當作完整帳本搬移。加密封裝仍為 v1，與 JSON 版本及 IndexedDB schema 不同。</p>
       <form id="export-form" novalidate autocomplete="off">
         <fieldset id="export-inputs">
           <label>備份方式<select id="export-mode"><option value="encrypted" selected>加密備份（建議）</option><option value="plain">不加密備份</option></select></label>
@@ -554,7 +554,7 @@
     <p>加密完整備份只保護下載的備份檔，不會加密瀏覽器內帳本。請自行確認檔案已下載並保管密碼；發出下載要求不代表檔案已保存。遺失備份密碼，便無法解密，程式沒有密碼取回功能。</p>
     <p>清除網站資料、移除瀏覽器設定檔或換裝置，可能無法再讀取原帳本。已有可用完整備份時，可在另一個全新空白設定檔、相同固定網址還原並核對。原帳本開啟失敗時，請先保留原設定檔，不要清除網站資料或覆蓋原帳本。</p>
     <p>目前版本在瀏覽器內處理記帳與統計，本機服務提供頁面與程式資源。載入及檢查更新時，頁面會向本機服務要求靜態檔案；完整下載後才具備離線能力。目前沒有帳務上傳或雲端同步入口，這不等於對整台電腦、瀏覽器或其他軟體作出絕對不連線、不傳送或不記錄的保證。</p>
-    <p>這是本機版本的資料說明，不是對外服務的正式隱私政策或安全認證。僅供合成資料測試，請勿輸入真實帳目；Python Web 尚未被取代。</p>
+    <p>日餘是獨立的本機記帳專案，不需Discord登入或Python Web。這是本機版本的資料說明，不是對外服務的正式隱私政策或安全認證。僅供合成資料測試，請勿輸入真實帳目；尚未完成的驗收仍需另行確認。</p>
     </div>
   </section>
 </main>

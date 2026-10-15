@@ -1,10 +1,19 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import {headers as securityHeaders} from '../web/serve.mjs';
+import {renderPreviewVersion} from './local_first_version_scenarios.mjs';
 const port = Number(process.argv[2] ?? 8767);
 const secureHeaders=process.argv[3]==='--secure'?securityHeaders:{}; // Test-only CSP source; fixed entry has no port option.
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid local preview port');
 const files = new Map([
+  ['/tests/local_first_version_scenarios.mjs',['local_first_version_scenarios.mjs','text/javascript']],
+  ['/tests/local-first-home-list.html',['../web/index.html','text/html']],
+  ['/tests/local_first_home_list_browser.mjs',['local_first_home_list_browser.mjs','text/javascript']],
+  ['/tests/local_first_home_fixture.mjs',['local_first_home_fixture.mjs','text/javascript']],
+  ['/tests/local-first-comparison-rename.html',['../web/index.html','text/html']],
+  ['/tests/local_first_comparison_rename_ui_browser.mjs',['local_first_comparison_rename_ui_browser.mjs','text/javascript']],
+  ['/tests/local-first-edit-snapshot.html',['../web/index.html','text/html']],
+  ['/tests/local_first_edit_snapshot_ui_browser.mjs',['local_first_edit_snapshot_ui_browser.mjs','text/javascript']],
   ['/tests/local_first_schedule_safety_checks.mjs',['local_first_schedule_safety_checks.mjs','text/javascript']],
   ['/tests/local-first-budget-hints-demo.html',['../web/index.html','text/html']],
   ['/tests/local-first-budget-hints.html',['../web/index.html','text/html']],
@@ -162,6 +171,10 @@ createServer(async (request, response) => {
     return;
   }
   const file = files.get(path);
+  if(request.method==='GET'&&path==='/tests/local-first-home-list-narrow.html') {
+    response.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
+    response.end('<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>375px 首頁分批驗證</title><iframe title="375px 合成首頁" src="/tests/local-first-home-list.html?size=105&mode=interactive" width="375" height="1600" style="border:0"></iframe></html>');return;
+  }
   if(process.argv.includes('--no-charts')&&path==='/local-first/vendor/chartjs-4.5.1/chart.umd.min.js'){response.writeHead(503,secureHeaders);response.end();return;}
   if (request.method !== 'GET' || !file) { response.writeHead(404); response.end(); return; }
   try {
@@ -210,12 +223,16 @@ createServer(async (request, response) => {
     if(path==='/tests/local-first-tags.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_tags_ui_browser.mjs"');
     if(path==='/tests/local-first-navigation.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_navigation_browser.mjs"');
     if(path==='/tests/local-first-shortcuts.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_shortcuts_ui_browser.mjs"');
+    if(path==='/tests/local-first-edit-snapshot.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_edit_snapshot_ui_browser.mjs"');
+    if(path==='/tests/local-first-home-list.html') {
+      body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_home_list_browser.mjs"');
+      response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
+    }
+    if(path==='/tests/local-first-comparison-rename.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_comparison_rename_ui_browser.mjs"');
     if(path==='/tests/local-first-usage.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_usage_ui_browser.mjs"');
     // Isolated update tests only; these flags do not exist in the fixed production entry.
-    if(process.argv[4]==='--previous-worker'&&path==='/local-first/sw.js')body=body.toString('utf8').replace('0.26.7-v1','0.13.11-v1')
-      .replace("  '/local-first/comparison.mjs',\n",'').replace("  '/local-first/vendor/chartjs-4.5.1/chart.umd.min.js',\n",'');
-    if(process.argv[4]==='--next-worker'&&(path==='/local-first/sw.js'||path==='/local-first/'||path==='/local-first/index.html'))
-      body=body.toString('utf8').replace('0.26.7','0.26.8'); // Synthetic next-version label, not a release.
+    if(['/local-first/sw.js','/local-first/','/local-first/index.html'].includes(path))
+      body=renderPreviewVersion(path,body.toString('utf8'),process.argv.includes('--next-worker')?'next':process.argv.includes('--previous-worker')?'previous':'current');
     if(path==='/tests/local-first-comparison.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_comparison_ui_browser.mjs"');
     if (path === '/tests/local-first-recurring.html') {
       body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"')
@@ -266,5 +283,5 @@ createServer(async (request, response) => {
     }
     response.writeHead(200, { ...secureHeaders, 'Content-Type': file[1] + '; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     response.end(body);
-  } catch { response.writeHead(404); response.end(); }
+  } catch(error) { response.writeHead(error.message?.startsWith('Version scenario:')?500:404,secureHeaders); response.end(error.message?.startsWith('Version scenario:')?error.message:''); }
 }).listen(port, '127.0.0.1', () => console.log(`Synthetic static preview: http://127.0.0.1:${port}/local-first/`));

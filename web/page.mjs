@@ -23,13 +23,14 @@ const management = document.querySelector('#data-management');
 const restoreFile = document.querySelector('#restore-file');
 const review = document.querySelector('#restore-review');
 let db, state, editing = null, deleting = null, busy = false, writeBlocked = false;
-let editingOrigin = null, deletingOrigin = null;
+let editingOrigin = null, deletingOrigin = null, editingUsage = null;
 let expenseSubmissionId=null,usageStartChosen=false;
 const viewNavigation=document.querySelector('#view-navigation'),privacyView=document.querySelector('#privacy-view');
 let privacyReturn=null;
 let helpReturn=null;
 let searchRequest=0,searchReturn=null,searchSelection=null,selectionRows=[],selectionShown=0,selectionTrigger=null;
 let searchExpenseDraft=null;
+let homeExpenseRows=[],homeExpenseShown=0,homeExpenseSnapshot=null,homeExpenseIndex=null;
 // Move the original nodes once: forms, listeners, disclosures and internal hidden flags are retained.
 document.querySelector('#view-settings').append(document.querySelector('#home-edit'),document.querySelector('#settings-fields'),document.querySelector('#settings-error'));
 const previousSettings=document.querySelector('#ledger-settings').closest('section');
@@ -1199,7 +1200,7 @@ function usageRequired() {
 form.elements.usage_days.addEventListener('input',usageRequired);
 form.elements.usage_started_on.oninput=()=>{usageStartChosen=true;};
 form.elements.spent_on.onchange=()=>{
-  if(!usageStartChosen && (!editing || !state.usage_periods.some(row=>row.expense_id===editing.id)))
+  if(!usageStartChosen && !editingUsage)
     form.elements.usage_started_on.value=form.elements.spent_on.value;
 };
 document.querySelector('#usage-stop').onclick=()=>{if(!busy&&!writeBlocked){form.elements.usage_days.value='';form.elements.usage_remind.checked=false;usageRequired();}};
@@ -1208,12 +1209,12 @@ function beginExpenseEdit(entry,origin,snapshot=state) {
   if(['search-results','search-selection-results','calendar-day-results'].includes(origin?.listId)&&!editing&&!annualDraft&&!searchExpenseDraft)searchExpenseDraft=expenseDraft();
   showView('record',false);selectRecordKind('expense');
   annualDraft=null;expenseSubmissionId=null;editingOrigin=origin;
-  editing=structuredClone(entry);choices();error.textContent='';
+  editing=structuredClone(entry);editingUsage=structuredClone(snapshot.usage_periods.find(row=>row.expense_id===entry.id) ?? null);choices();error.textContent='';
   form.elements.amount.value=amountText(entry.cents,false);form.elements.note.value=entry.note;
   form.elements.spent_on.value=entry.spent_on;form.elements.spent_on.readOnly=entry.source!=='manual';
   document.querySelector('#expense-date-note').hidden=entry.source==='manual';
   form.elements.category.value=entry.category;form.elements.payment_source_id.value='';
-  usageFields(state.usage_periods.find(row=>row.expense_id===entry.id),entry.spent_on);
+  usageFields(editingUsage,entry.spent_on);
   tagFields(entry.id,snapshot);
   document.querySelector('#form-title').textContent='更改消費';document.querySelector('#save').textContent='儲存更改';
   document.querySelector('#cancel-edit').hidden=false;form.elements.amount.focus();
@@ -1243,6 +1244,7 @@ function resetForm() {
   const previous = annualDraft?.previous || searchExpenseDraft;
   searchExpenseDraft=null;
   editing = null;
+  editingUsage = null;
   annualDraft = null;
   editingOrigin = null;
   choices();
@@ -1270,6 +1272,10 @@ function returnToExpense(origin) {
   if (!origin) return;
   const container = document.getElementById(origin.listId);
   showView(container.closest('[data-view]').dataset.view,false);
+  if(origin.listId==='expenses') {
+    const index=homeExpenseRows.findIndex(row=>row.id===origin.id);
+    while(homeExpenseShown<=index)appendHomeExpenses();
+  }
   const row = origin.ruleId ? [...container.querySelectorAll('[data-rule-id]')].find(row=>row.dataset.ruleId===origin.ruleId&&row.dataset.index===String(origin.index)) : [...container.children].find(row => row.dataset[origin.type==='income'?'incomeId':'expenseId'] === origin.id);
   if(row?.closest('details'))row.closest('details').open=true;
   const target = row?.querySelector('[data-batch-id]') || row?.querySelector('button') || container;
@@ -1292,12 +1298,26 @@ function render() {
   if (incomePanel.open && incomeLoaded) renderIncome();
   renderIncomeRecords();
   renderRecurringIncome();
-  list.replaceChildren();
-  const entries = activeExpenses(state, taiwanToday()).slice().reverse();
-  document.querySelector('#empty').hidden = entries.length !== 0;
-  list.append(...entries.map(entry=>expenseRow(entry,state)));
+  const through=Math.max(homeExpenseShown,50);
+  homeExpenseRows=activeExpenses(state,taiwanToday()).slice().reverse();homeExpenseSnapshot=state;homeExpenseIndex=expenseRelations(state);
+  list.replaceChildren();homeExpenseShown=0;
+  document.querySelector('#empty').hidden=homeExpenseRows.length!==0;
+  document.querySelector('#expenses-count').textContent='共 '+homeExpenseRows.length+' 筆有效消費。';
+  do {appendHomeExpenses();} while(homeExpenseShown<Math.min(through,homeExpenseRows.length));
 }
-function expenseRow(entry,snapshot=state,selectable=false,daily=false,readOnly=false) {
+function appendHomeExpenses() {
+  homeExpenseShown=appendBatch(homeExpenseRows,list,document.querySelector('#expenses-more'),homeExpenseShown,homeExpenseSnapshot,false,homeExpenseIndex);
+}
+document.querySelector('#expenses-more').onclick=()=>{if(!busy&&!writeBlocked)appendHomeExpenses();};
+function expenseRelations(snapshot) {
+  const usage=new Map(),links=new Map(),labels=new Map(),posted=new Set();
+  for(const row of snapshot.usage_periods)usage.set(row.expense_id,row);
+  for(const row of snapshot.expense_tags || []){if(!links.has(row.tag_id))links.set(row.tag_id,[]);links.get(row.tag_id).push(row.expense_id);}
+  for(const tag of snapshot.tags || [])for(const id of links.get(tag.id) || []){if(!labels.has(id))labels.set(id,[]);labels.get(id).push('#'+tag.name+(tag.hidden?'（不再顯示）':''));}
+  for(const row of [...snapshot.annual_periods || [],...snapshot.scheduled_periods || []])posted.add(row.expense_id);
+  return {usage,labels,posted};
+}
+function expenseRow(entry,snapshot=state,selectable=false,daily=false,readOnly=false,relations) {
     const row = node('li', undefined, 'expense');
     row.dataset.expenseId = entry.id;row.dataset.accountType='expense';
     for (const [label, value] of [[selectable||daily?'支出日期':'日期', entry.spent_on], ['項目', entry.note], ['金額', (daily?'−':'') + amountText(entry.cents) + ' 元'], ['分類', entry.category], ['付款方式', entry.payment_source_name]]) {
@@ -1309,9 +1329,8 @@ function expenseRow(entry,snapshot=state,selectable=false,daily=false,readOnly=f
       input.setAttribute('aria-label','選取消費：'+entry.note+'（'+entry.spent_on+'）');input.checked=batchSelected.has(entry.id);input.disabled=busy||writeBlocked;
       input.onchange=()=>{if(busy||writeBlocked||!input.isConnected||!batchListActive()||row.parentElement.id!==batchListId())return;if(input.checked)batchSelected.set(entry.id,{id:entry.id,revision:entry.revision});else batchSelected.delete(entry.id);renderBatchSelection();};label.prepend(input);row.prepend(label);
     }
-    const tagIds=new Set((snapshot.expense_tags || []).filter(item=>item.expense_id===entry.id).map(item=>item.tag_id));
-    const labels=(snapshot.tags || []).filter(item=>tagIds.has(item.id)).map(item=>'#'+item.name+(item.hidden?'（不再顯示）':''));if(labels.length)row.append(node('p',labels.join(' · '),'expense-tag-labels'));
-    const usage=snapshot.usage_periods.find(item=>item.expense_id===entry.id);
+    const labels=relations.labels.get(entry.id);if(labels?.length)row.append(node('p',labels.join(' · '),'expense-tag-labels'));
+    const usage=relations.usage.get(entry.id);
     if(usage) row.append(node('p',usage.active===1 ? '使用期間：'+usage.started_on+'～'+usageEnd(usage)+'（可使用 '+usage.days+' 天）'
       +(usage.show_daily_cost===1?'；每日平均成本約 '+dailyCost(entry.cents,usage.days)+' 元／天（只供理解）':'') : '使用期間：已停止追蹤'));
     if(readOnly)return row;
@@ -1329,7 +1348,7 @@ function expenseRow(entry,snapshot=state,selectable=false,daily=false,readOnly=f
       dialog.showModal();
     };
     if(!selectable)buttons.append(edit);
-    if(entry.source==='manual' && ![...(state.annual_periods || []),...(state.scheduled_periods || [])].some(item=>item.expense_id===entry.id)) {
+    if(entry.source==='manual' && !relations.posted.has(entry.id)) {
       const shortcut=node('button','建立捷徑');shortcut.type='button';shortcut.dataset.operation='shortcut';
       shortcut.onclick=()=>shortcutRead(snapshot=>startShortcut(snapshot,shortcutDraft(snapshot,entry.id,entry.revision,taiwanToday()),null,{id:entry.id,revision:entry.revision}));
       buttons.append(shortcut);
@@ -1337,8 +1356,8 @@ function expenseRow(entry,snapshot=state,selectable=false,daily=false,readOnly=f
     buttons.append(remove);
     row.append(buttons); return row;
 }
-function appendBatch(rows, listElement, more, shown,snapshot=state,readOnly=false) {
-  listElement.append(...rows.slice(shown, shown + 50).map(row=>row.type==='income'?incomeSearchRow(row.entry,listElement.id,readOnly):expenseRow(row.entry??row,snapshot,['search-results','search-selection-results'].includes(listElement.id),listElement.id==='calendar-day-results',readOnly)));
+function appendBatch(rows, listElement, more, shown,snapshot=state,readOnly=false,relations=expenseRelations(snapshot)) {
+  listElement.append(...rows.slice(shown, shown + 50).map(row=>row.type==='income'?incomeSearchRow(row.entry,listElement.id,readOnly):expenseRow(row.entry??row,snapshot,['search-results','search-selection-results'].includes(listElement.id),listElement.id==='calendar-day-results',readOnly,relations)));
   more.hidden = shown + 50 >= rows.length;
   return Math.min(shown + 50, rows.length);
 }
@@ -1880,6 +1899,9 @@ function refreshChoices(change = null) {
   const payment = form.elements.payment_source_id.value;
   if (change?.type === 'category' && change.operation === 'rename') {
     const name = categoryName(document.querySelector('#setting-name').value);
+    if(comparisonQuery?.category===change.key)comparisonQuery.category=name;
+    const comparisonOption=comparisonForm.elements.category.selectedOptions[0];
+    if(comparisonOption?.value===change.key)comparisonOption.value=name;
     if(analysisQuery)analysisQuery.categories=analysisQuery.categories.map(category=>category===change.key?name:category);
     for(const draft of analysisDrafts.values())draft.categories=draft.categories.map(category=>category===change.key?name:category);
     for(const input of document.querySelectorAll('#analysis-categories input'))if(input.value===change.key)input.value=name;
@@ -1923,7 +1945,7 @@ form.addEventListener('submit', event => {
   catch(failure){error.textContent=failure instanceof ValidationError?failure.message:'請輸入有效標籤。';return;}
   if(form.elements.usage_days.value.trim())input.usage={started_on:form.elements.usage_started_on.value,days:Number(form.elements.usage_days.value),
     remind:Number(form.elements.usage_remind.checked),reminder_days:form.elements.usage_reminder_days.value.trim()===''?NaN:Number(form.elements.usage_reminder_days.value),show_daily_cost:Number(form.elements.usage_show_daily_cost.checked),active:1};
-  else if(editing && state.usage_periods.some(row=>row.expense_id===editing.id))input.usage=null;
+  else if(editingUsage)input.usage=null;
   const today = taiwanToday();
   expenseSubmissionId ??= 'e_'+crypto.randomUUID();
   saving(() => annualDraft ? processSchedule(db,'record',annualDraft.rule_id,annualDraft.index,annualDraft.rule_revision,annualDraft.revision,input)
