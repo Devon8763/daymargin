@@ -6,6 +6,8 @@ const port = Number(process.argv[2] ?? 8767);
 const secureHeaders=process.argv[3]==='--secure'?securityHeaders:{}; // Test-only CSP source; fixed entry has no port option.
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid local preview port');
 const files = new Map([
+  ['/tests/local-first-restore-failure.html',['../web/index.html','text/html']],
+  ['/tests/local_first_restore_failure_browser.mjs',['local_first_restore_failure_browser.mjs','text/javascript']],
   ['/tests/local_first_version_scenarios.mjs',['local_first_version_scenarios.mjs','text/javascript']],
   ['/tests/local-first-home-list.html',['../web/index.html','text/html']],
   ['/tests/local_first_home_list_browser.mjs',['local_first_home_list_browser.mjs','text/javascript']],
@@ -229,6 +231,7 @@ createServer(async (request, response) => {
       response.writeHead(200,{...secureHeaders,'Content-Type':'text/html; charset=utf-8','X-Frame-Options':'SAMEORIGIN','Content-Security-Policy':securityHeaders['Content-Security-Policy'].replace("frame-ancestors 'none'","frame-ancestors 'self'")});response.end(body);return;
     }
     if(path==='/tests/local-first-comparison-rename.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_comparison_rename_ui_browser.mjs"');
+    if(path==='/tests/local-first-restore-failure.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_restore_failure_browser.mjs"');
     if(path==='/tests/local-first-usage.html')body=body.toString('utf8').replace('href="style.css"','href="/local-first/style.css"').replace('src="page.mjs"','src="/tests/local_first_usage_ui_browser.mjs"');
     // Isolated update tests only; these flags do not exist in the fixed production entry.
     if(['/local-first/sw.js','/local-first/','/local-first/index.html'].includes(path))

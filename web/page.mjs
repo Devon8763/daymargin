@@ -1972,6 +1972,7 @@ function showLedger() {
   status.textContent = '瀏覽器本機測試帳本；資料僅保存在此瀏覽器與來源。';
 }
 function restoreControls(disabled) {
+  disabled = disabled || writeBlocked;
   for (const id of ['start-ledger', 'choose-restore', 'confirm-restore', 'cancel-restore', 'decrypt-backup']) {
     document.getElementById(id).disabled = disabled;
   }
@@ -1983,7 +1984,7 @@ document.querySelector('#start-ledger').onclick = async () => {
   try { await saving(() => initializeLedger(db), showLedger); }
   finally { restoreControls(false); }
 };
-document.querySelector('#choose-restore').onclick = () => { if (!busy) restoreFile.click(); };
+document.querySelector('#choose-restore').onclick = () => { if (!busy && !writeBlocked) restoreFile.click(); };
 function prepareRestore(payload){
   const backup=readBackup(payload);validateStorageLimits(backup);
   const labels={expenses:'消費',categories:'分類',payment_sources:'付款方式',budgets:'預算',recurring_rules:'定期規則',recurring_versions:'歷史版本',shortcuts:'捷徑',actions:'消費操作紀錄',settings:'設定',incomes:'收入',income_actions:'收入操作紀錄',monthly_allocations:'月份分配',allocation_preferences:'往後建議排除',annual_rules:'年度費用',annual_periods:'年度期數',scheduled_periods:'定期支出期數',usage_periods:'使用期間',tags:'標籤',expense_tags:'消費標籤關聯',goals:'目標',goal_actions:'目標調整紀錄',income_rules:'定期收入規則',income_periods:'定期收入期數',invoice_imports:'發票匯入關聯',merchant_rules:'店家分類規則'};
@@ -1993,7 +1994,7 @@ function prepareRestore(payload){
   document.querySelector('#restore-title').focus();
 }
 restoreFile.onchange = async () => {
-  if(busy)return;
+  if(busy||writeBlocked)return;
   const file = restoreFile.files[0];
   const currentSelection = ++selection;
   restoreFile.value = '';
@@ -2018,7 +2019,7 @@ restoreFile.onchange = async () => {
   }finally{busy=false;restoreControls(false);if(!decryptPanel.hidden)restorePassword.focus();}
 };
 decryptForm.onsubmit=async event=>{
-  event.preventDefault();if(busy||!pendingEncrypted)return;
+  event.preventDefault();if(busy||writeBlocked||!pendingEncrypted)return;
   const currentSelection=selection;busy=true;restoreControls(true);passwordError.textContent='';
   try{
     const payload=await decryptBackup(pendingEncrypted,restorePassword.value);
@@ -2028,16 +2029,17 @@ decryptForm.onsubmit=async event=>{
   finally{busy=false;restoreControls(false);if(currentSelection!==selection)document.querySelector('#choose-restore').focus();}
 };
 document.querySelector('#cancel-decrypt').onclick=()=>{
+  if(writeBlocked)return;
   ++selection;pendingEncrypted=null;pendingBackup=null;decryptForm.reset();decryptPanel.hidden=true;passwordError.textContent='';
   if(!busy)document.querySelector('#choose-restore').focus();
 };
 document.querySelector('#cancel-restore').onclick = () => {
-  if (busy) return;
+  if (busy || writeBlocked) return;
   ++selection; pendingBackup = null; review.hidden = true; error.textContent = '';
   document.querySelector('#choose-restore').focus();
 };
 document.querySelector('#confirm-restore').onclick = async () => {
-  if (busy || !pendingBackup) return;
+  if (busy || writeBlocked || !pendingBackup) return;
   busy = true; restoreControls(true); error.textContent = '';
   let completed = false;
   try {
@@ -2048,8 +2050,9 @@ document.querySelector('#confirm-restore').onclick = async () => {
     showLedger();
   } catch {
     pendingBackup = null; review.hidden = true;
-    error.textContent = completed ? '還原交易已完成，但重新讀取失敗。請重新載入頁面確認資料。' : '還原未完成，資料沒有變更。請重新選擇備份；若帳本已有資料，無法還原。';
-  } finally { busy = false; restoreControls(false); }
+    error.textContent = completed ? '還原已完成，但重新讀取或畫面更新未完成。請重新載入確認，勿重複還原。' : '還原未完成，資料沒有變更。請重新選擇備份；若帳本已有資料，無法還原。';
+    if (completed) { writeBlocked = true; status.textContent = error.textContent; }
+  } finally { busy = false; if (writeBlocked) fields.disabled = true; restoreControls(false); }
 };
 function resetExport(){
   exportForm.reset();exportError.textContent='';document.querySelector('#export-password-fields').hidden=false;

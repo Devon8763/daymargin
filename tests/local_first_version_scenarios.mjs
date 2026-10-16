@@ -1,7 +1,7 @@
 // Independent test pins; never infer expected versions from product files.
-export const CURRENT={version:'0.26.10',cache:'local-first-offline-0.26.10-v1'};
-export const SYNTHETIC={label:'合成升版（相同產品程式，非真實舊版／發行版）',old:CURRENT,next:{version:'0.26.11',cache:'local-first-offline-0.26.11-v1'}};
-export const RELEASE={label:'真實0.26.9工作版→0.26.10候選版（須提供已核對的舊資源）',old:{version:'0.26.9',cache:'local-first-offline-0.26.9-v1'},next:CURRENT};
+export const CURRENT={version:'0.26.11',cache:'local-first-offline-0.26.11-v1'};
+export const SYNTHETIC={label:'合成升版（相同產品程式，非真實舊版／發行版）',old:CURRENT,next:{version:'0.26.12',cache:'local-first-offline-0.26.12-v1'}};
+export const RELEASE={label:'真實0.26.10工作版→0.26.11候選版（須提供已核對的舊資源）',old:{version:'0.26.10',cache:'local-first-offline-0.26.10-v1'},next:CURRENT};
 // Historical cache name only: this fixture is not the actual 0.13.11 product.
 export const LEGACY_CACHE='local-first-offline-0.13.11-v1';
 const fail=message=>{throw new Error('Version scenario: '+message);};
