@@ -21,7 +21,7 @@ const wait=async action=>{
     const timeout=setTimeout(()=>{observer.disconnect();reject(new Error('Write timeout'));},5000);observer.observe(document.body,{subtree:true,attributes:true,childList:true});});
   action();await complete;
 };
-const row=category=>[...document.querySelectorAll('#budget-setting-list > li')].find(item=>item.dataset.category===category);
+const row=category=>{if(category!=='總額')document.querySelector('#budget-category-editors').open=true;return [...document.querySelectorAll('#budget-fields [data-category]')].find(item=>item.dataset.category===category);};
 const submit=async(category,value)=>{const form=row(category).querySelector('form');form.elements.amount.value=value;form.elements.amount.focus();await wait(()=>form.requestSubmit());check(document.activeElement===row(category).querySelector('input'),'Budget input keyboard focus lost after submit');};
 const clear=category=>row(category).querySelector('[data-operation="clear"]').click();
 try {

@@ -1,8 +1,8 @@
 # 日餘
 
-目前版本：**0.26.11**（修正還原提交後讀取／畫面失敗的寫入保護；F01／F02／F03已隨0.26.10提交，仍僅供合成資料測試）。
+目前版本：**0.27.0**（依核准A基準完成四區UI／UX、D01～D04與五項整合；帳務及資料契約不變，仍僅供合成資料測試）。
 
-2026-10-15拆分時未完成的普通瀏覽器驗收限制保留於[拆分紀錄](docs/split-provenance/validation.md)。後續內嵌瀏覽器測試不能代替普通設定檔、實體備份復原與使用者手測；日常使用決定也不代表未完成驗收已通過，詳見[目前驗證範圍](docs/local-first-0.26.11-validation.md)。
+2026-10-15拆分時未完成的普通瀏覽器驗收限制保留於[拆分紀錄](docs/split-provenance/validation.md)。隔離自動瀏覽器測試不能代替普通設定檔、實體備份復原與使用者手測；日常使用決定也不代表未完成驗收已通過，詳見[目前驗證範圍](docs/local-first-0.27.0-validation.md)。
 
 日餘，讓生活有度。網站程式位於 `web/`，是獨立local-first記帳專案，不需Discord登入或Python Web。僅供合成資料測試；IndexedDB帳本未加密，加密完整備份只保護下載檔。
 
@@ -24,7 +24,14 @@
 
 - [更新紀錄](CHANGELOG.md)：相關歷史保留版本、日期、原意及當時驗證限制，不能當成本輪結果。
 - [第三方授權](THIRD_PARTY_LICENSES.md)：Chart.js、內嵌色彩庫及lossless-json原檔與MIT授權。
+- [UI／UX第一版基準與實作對照](docs/ui-ux-design.md)；[0.27.0驗證與待驗收](docs/local-first-0.27.0-validation.md)。
 - [拆分來源與SHA對照](docs/split-provenance/source.md)。
 - [0.26.11驗證與手測](docs/local-first-0.26.11-validation.md)；[0.26.10驗證與手測](docs/local-first-0.26.10-validation.md)；[0.26.9量測、驗證及手測](docs/local-first-0.26.9-validation.md)；[0.26.8驗證及手測](docs/local-first-0.26.8-validation.md)；[既有驗證歷史](docs/local-first-browser-validation.md)。
 
 原DiscordBOT及Python Web仍完整保留於原專案。日餘不依賴其目錄，不建立App／shared空殼、不沿用Git遠端。
+
+## UI／UX開發Skills
+
+專案內`.agents/skills/`提供Impeccable與UI UX Pro Max；僅供Codex開發，不是網站執行依賴，未啟用Hook。請在Codex開啟本專案後，以`$impeccable`或`$ui-ux-pro-max`明確選用。安裝來源、版本、測試、隱私與使用限制見[安裝紀錄](docs/ui-ux-skills-installation.md)；本次安裝不代表已開始UI／UX設計。
+
+分工、按問題選 Skill、文件權威、實作授權與可直接使用的提示見 [UI／UX 協作規範](docs/ui-ux-workflow.md)。

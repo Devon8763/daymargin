@@ -43,7 +43,7 @@ try{
  const full=await ledger.readLedger(db);await ledger.editExpense(db,'e_hint',0,{amount:'100',note:full.expenses[0].note,category:'餐飲',spent_on:today,payment_source_id:'p_cash'},today);
  // Reload the page's state through the existing selected-month read, then perform a UI write to refresh all summaries.
  await set(month);q('[data-view-button=record]').click();q('#expense-form').elements.note.value='合成更新';q('#expense-form').elements.amount.value='.01';q('#save').click();await wait(()=>q('#budget-total').textContent.includes('已超支 0.01 元'));check(q('[data-home-block=budget]').hidden,'Write reveals hidden budget');
- const row=q('#expenses [data-expense-id=e_hint]');[...row.querySelectorAll('button')].find(b=>b.textContent==='刪除').click();q('#confirm-delete').click();await wait(()=>q('#budget-total').textContent.includes('剩餘 99.99 元'));check(q('[data-home-block=budget]').hidden,'Void reveals hidden budget');
+ const row=q('#expenses [data-expense-id=e_hint]');[...row.querySelectorAll('button')].find(b=>b.textContent==='作廢').click();q('#confirm-delete').click();await wait(()=>q('#budget-total').textContent.includes('剩餘 99.99 元'));check(q('[data-home-block=budget]').hidden,'Void reveals hidden budget');
  report.textContent='PASS：selected months/zero/category-only; exact total/category hints; current navigation/return/draft; switch reload/write failure; independent over-income allocation; readonly raw/meta/backup unchanged';db.close();
  }else{report.hidden=true;db.close();}
 }catch(error){report.textContent='FAIL：'+error.message;db.close();}finally{IDBDatabase.prototype.transaction=transaction;}

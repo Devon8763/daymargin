@@ -25,6 +25,7 @@ const review = document.querySelector('#restore-review');
 let db, state, editing = null, deleting = null, busy = false, writeBlocked = false;
 let editingOrigin = null, deletingOrigin = null, editingUsage = null;
 let expenseSubmissionId=null,usageStartChosen=false;
+let lastCompletedOperation='',incomeEntrySource='記帳';
 const viewNavigation=document.querySelector('#view-navigation'),privacyView=document.querySelector('#privacy-view');
 let privacyReturn=null;
 let helpReturn=null;
@@ -33,18 +34,38 @@ let searchExpenseDraft=null;
 let homeExpenseRows=[],homeExpenseShown=0,homeExpenseSnapshot=null,homeExpenseIndex=null;
 // Move the original nodes once: forms, listeners, disclosures and internal hidden flags are retained.
 document.querySelector('#view-settings').append(document.querySelector('#home-edit'),document.querySelector('#settings-fields'),document.querySelector('#settings-error'));
+document.querySelector('.app-header').append(viewNavigation);
 const previousSettings=document.querySelector('#ledger-settings').closest('section');
 for(const [id,label] of [['budget-settings','預算'],['fixed-settings','定期支出']]) {
   const section=node('section');section.setAttribute('aria-label',label);section.append(document.getElementById(id));document.querySelector('#view-planning').append(section);
 }
 previousSettings.remove();
+for(const section of document.querySelectorAll('#settings-fields > section,#tag-settings')){
+  const group=node('details');group.className='settings-group';group.append(node('summary',section.querySelector('h2,h3').textContent));section.before(group);group.append(section);
+}
+
 for(const [view,selectors] of [
   ['record',['#expense-form','#shortcut-quick','#ending-soon','#budget-overview','#schedule-overview','#expenses','#calendar-grid']],
   ['search',['#search-form']],
   ['planning',['#income-planning','#goal-planning']],
   ['analysis',['#expense-analysis','#expense-comparison','#tag-analysis','#monthly-analysis']],['settings',['#tag-settings','#data-management']]])
-  for(const selector of selectors)document.querySelector('#view-'+view).append(document.querySelector(selector).closest('section'));
+  for(const selector of selectors)document.querySelector('#view-'+view).append((selector==='#tag-settings'?document.querySelector(selector).parentElement:document.querySelector(selector).closest('section')));
 document.querySelector('#view-planning-title').after(document.querySelector('#planning-links'));
+document.querySelector('#search-groups').prepend(document.querySelector('#search-accounts'));
+const planningEntries=node('nav');planningEntries.id='planning-entries';planningEntries.className='planning-entries';planningEntries.setAttribute('aria-label','規劃功能');
+for(const [id,label]of [['budget-settings','生活預算'],['income-planning','收入與每月分配'],['fixed-settings','定期支出'],['goal-planning','存錢目標']]){const link=node('a',label);link.href='#'+id;planningEntries.append(link);}
+const planningPending=node('section');planningPending.id='planning-pending';planningPending.append(node('h2','待確認項目'));
+const pendingExpenses=node('ul');pendingExpenses.id='pending-expenses';const periods=document.querySelector('#schedule-periods'),periodHistory=node('details');periodHistory.append(node('summary','其他支出期數與處理紀錄'),document.querySelector('#schedule-recent'),document.querySelector('#schedule-older'));periods.append(pendingExpenses,periodHistory);
+planningPending.append(node('h3','支出'),periods,document.querySelector('#schedule-more'),node('h3','收入'));
+const incomePeriods=document.querySelector('#income-periods'),incomeHistory=node('details');incomeHistory.append(node('summary','其他收入期數與處理紀錄'),incomePeriods,document.querySelector('#income-period-more'));
+const pendingIncome=node('ul');pendingIncome.id='pending-income';planningPending.append(pendingIncome,incomeHistory);
+const planningFeedback=node('p');planningFeedback.id='planning-feedback';planningFeedback.setAttribute('role','alert');planningPending.append(planningFeedback);
+const recordPending=node('p'),pendingLink=node('a','查看待確認項目');pendingLink.href='#planning-pending';recordPending.append(pendingLink);document.querySelector('#income-record-fields').lastElementChild.replaceWith(recordPending);
+document.querySelector('#view-planning-title').after(planningEntries,planningPending);
+document.querySelector('#record-kind').after(recordPending);
+const planningEnding=node('section');planningEnding.id='planning-ending';const planningEndingList=node('ul');planningEndingList.id='planning-ending-list';planningEnding.append(node('h2','快結束'),planningEndingList);planningPending.after(planningEnding);
+document.querySelector('#planning-links').append(document.querySelector('#schedule-total').cloneNode(false));document.querySelector('#planning-links #schedule-total').id='planning-schedule-total';
+
 document.querySelector('#data-privacy').append(document.querySelector('#privacy-content'));
 const homeSearchSection=node('section');homeSearchSection.setAttribute('aria-label','搜尋');homeSearchSection.append(document.querySelector('#home-search-entry'));document.querySelector('#view-record-title').after(homeSearchSection);
 const homeBlocks=new Map([['search',homeSearchSection],['record',form.closest('section')],['shortcuts',document.querySelector('#shortcut-quick').closest('section')],['ending',document.querySelector('#ending-soon')],['budget',document.querySelector('#budget-overview')],['schedule',document.querySelector('#schedule-overview')],['goals',document.querySelector('#home-goals')],['expenses',document.querySelector('#expenses').closest('section')],['calendar',document.querySelector('#calendar-grid').closest('section')]].map(([key,section])=>{const wrap=node('div');wrap.dataset.homeBlock=key;section.before(wrap);wrap.append(section);return [key,wrap];}));
@@ -161,6 +182,9 @@ for(const link of document.querySelectorAll('a[href^="#"]'))link.addEventListene
   const target=document.getElementById(link.getAttribute('href').slice(1));
   const view=target?.closest('[data-view]');
   if(view)showView(view.dataset.view,false);
+  for(let details=target?.closest('details');details;details=details.parentElement.closest('details'))details.open=true;
+  if(target?.tagName==='DETAILS'){event.preventDefault();target.open=true;target.querySelector('summary').focus();}
+  if(target?.id==='planning-pending'){event.preventDefault();target.tabIndex=-1;target.focus();}
   if(target?.id==='data-privacy'){event.preventDefault();target.open=true;target.querySelector('summary').focus();}
   if(target?.id==='goal-planning'&&link.closest('#home-goals')){event.preventDefault();target.open=true;target.querySelector('summary').focus();}
   if(link.id==='home-shortcut-manager'){event.preventDefault();placeShortcutManager('settings');target.open=true;target.querySelector('summary').focus();}
@@ -318,12 +342,40 @@ function amountText(value, grouped = true) {
   const fraction = (total % 100n).toString().padStart(2, '0').replace(/0+$/, '');
   return (grouped ? whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : whole) + (fraction ? '.' + fraction : '');
 }
+function recordTaskCopy(task) {
+  const {income,entry,period,origin}=task;
+  const source=period?'規劃・待確認項目':({'search-results':'搜尋結果','search-selection-results':'搜尋的分類／標籤結果','calendar-day-results':'月曆','ending-soon-list':'快結束','planning-ending-list':'規劃・快結束','expenses':'有效消費','tag-results':'標籤分析','income-list':'收入明細'}[origin?.listId]||'記帳');
+  const item=period?.defaults||entry;
+  const object=item?[(item.due_on||item.received_on||item.spent_on),(item.name||item.note)].filter(Boolean).join(' · '):income?'新增一筆已收到的收入':'新增一筆支出';
+  const action=income?(period?'確認已收到並儲存':entry?'儲存收入更改':'儲存收入'):(entry?'儲存更改':'記錄消費');
+  const cancel=period?'取消本期草稿':entry?'取消更改':'清空草稿';
+  const returnHint=income&&period?'取消清空本期草稿，留在收入記帳；不等於略過，也不自動恢復原收入草稿。完成後留在收入記帳。':period?'取消不等於略過；取消或完成後恢復原草稿，返回原定期期數。':entry?(task.restoresDraft?'取消時恢復原草稿；':'取消依原入口處理；')+'完成後返回'+source+'，沿用原查詢；成功儲存會清除批次選取。':'支出與收入草稿分開保留，完成後留在記帳。';
+  return {source,object,action,cancel,returnHint,mode:period?'待確認草稿':entry?'更改既有帳目':'新增帳目'};
+}
+function updateTaskPresentation() {
+  for(const income of [false,true]){
+    const context=document.querySelector(income?'#income-task-context':'#expense-task-context');if(!context)return;
+    const copy=recordTaskCopy({income,entry:income?incomeEditing:editing,period:income?incomeConfirming:annualDraft,origin:income?incomeEditingOrigin:editingOrigin,restoresDraft:income?!!searchIncomeDraft:!!searchExpenseDraft});
+    if(income&&!incomeEditing&&!incomeConfirming)copy.source=incomeEntrySource;
+    context.textContent=writeBlocked?(lastCompletedOperation||status.textContent)+'；相關清單／摘要尚未更新。重新載入確認，勿重複提交。':copy.mode+'：'+copy.object+'｜來源：'+copy.source;
+    const button=document.querySelector(income?'#save-income':'#save');button.textContent=writeBlocked?'寫入已暫停':busy?'儲存中…':copy.action;
+    const cancel=document.querySelector(income?'#cancel-income-edit':'#cancel-edit');cancel.textContent=copy.cancel;
+    const hint=document.querySelector(income?'#income-task-return':'#expense-task-return');hint.textContent=copy.returnHint;hint.closest('details').hidden=writeBlocked;
+  }
+}
+function showFieldFailure(message,scope) {
+  if(!scope||!message.textContent.includes('金額'))return;
+  const input=scope.querySelector('[name=amount]');if(!input)return;
+  input.setAttribute('aria-invalid','true');input.setAttribute('data-ui-error','');input.setAttribute('aria-describedby',message.id);
+}
 function node(tag, text, className) {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = text;
   if (className) element.className = className;
   return element;
 }
+document.addEventListener('click',()=>queueMicrotask(updateTaskPresentation));
+new MutationObserver(()=>{if(writeBlocked)updateTaskPresentation();}).observe(status,{childList:true,subtree:true});
 function requiredMarkers() {
   for(const control of document.querySelectorAll('input,select,textarea')) {
     const label=control.closest('label');if(!label)continue;
@@ -394,16 +446,16 @@ async function plotTagMonths() {
   try{
     await import('./vendor/chartjs-4.5.1/chart.umd.min.js');if(request!==tagChartRequest)return;
     const canvas=node('canvas');canvas.setAttribute('role','img');canvas.setAttribute('aria-label','標籤每月'+(kind==='bar'?'長條':'折線')+'圖；精確金額見每月資料');box.append(canvas);box.hidden=false;
-    tagChart=new globalThis.Chart(canvas,{type:kind,data:{labels:result.periods.map(period=>period.month),datasets:[{label:'每月支出',data:result.periods.map(period=>period.total_cents===null?null:Number(period.total_cents)),backgroundColor:'#26745b',borderColor:'#26745b',tension:0,spanGaps:false,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,ticks:{callback:value=>Number.isSafeInteger(value)?analysisMoney(BigInt(value)):''}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>{const period=result.periods[context.dataIndex];return period.start+' ～ '+period.actual_end+'：'+analysisMoney(period.total_cents);}}}}}});
+    tagChart=new globalThis.Chart(canvas,{type:kind,data:{labels:result.periods.map(period=>period.month),datasets:[{label:'每月支出',data:result.periods.map(period=>period.total_cents===null?null:Number(period.total_cents)),backgroundColor:'#61546f',borderColor:'#61546f',tension:0,spanGaps:false,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,ticks:{callback:value=>Number.isSafeInteger(value)?analysisMoney(BigInt(value)):''}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:context=>{const period=result.periods[context.dataIndex];return period.start+' ～ '+period.actual_end+'：'+analysisMoney(period.total_cents);}}}}}});
   }catch{if(request!==tagChartRequest)return;tagChart?.destroy();tagChart=null;box.replaceChildren();box.hidden=true;message.textContent='圖表無法載入，請閱讀精確文字與每月資料。';}
 }
 function showTagReport(snapshot,query,today) {
   const result=analyzeTagMonths(snapshot,query,today),tag=snapshot.tags.find(row=>row.id===query.tag_id);tagSnapshot=snapshot;tagMonthlyResult=result;
   document.querySelector('#tag-summary').textContent='#'+tag.name+(tag.hidden?'（不再顯示，仍含歷史）':'')+'：'+(result.periods.length&&!result.started_count?'期間尚未開始':amountText(result.total)+' 元，'+result.rows.length+' 筆')+'；'+(query.start||'全部時間')+' ～ '+(query.end||today);
-  document.querySelector('#tag-monthly-results').hidden=false;document.querySelector('#tag-month-count').textContent='已開始 '+result.started_count+' 個月 · 有消費 '+result.consumed_count+' 個月'+(result.periods.some(period=>period.started&&period.unfinished)?' · 尚未結束的月份截至 '+today:'');
+  document.querySelector('#tag-monthly-results').hidden=false;document.querySelector('#tag-month-count').textContent='所選 '+result.periods.length+' 個月 · 已開始 '+result.started_count+' 個月 · 有消費 '+result.consumed_count+' 個月'+(result.periods.some(period=>period.started&&period.unfinished)?' · 尚未結束的月份截至 '+today:'');
   const summary=document.querySelector('#tag-monthly-summary');summary.replaceChildren();
   document.querySelector('#tag-extra-summary').replaceChildren();
-  for(const [label,value,extra]of [['每月最高',analysisMoney(result.highest_cents),true],['每月最低（含零月份）',analysisMoney(result.lowest_cents),true],['每月平均（含零月份）',analysisAverage(result.all_average),false],['有消費月份平均',analysisAverage(result.consumed_average),false]]){const item=node('div');item.append(node('dt',label),node('dd',value));(extra?document.querySelector('#tag-extra-summary'):summary).append(item);}
+  for(const [label,value,extra]of [['每月最高',analysisMoney(result.highest_cents),true],['每月最低（含零月份）',analysisMoney(result.lowest_cents),true],['每月平均（含零月份）',analysisAverage(result.all_average),false],['有消費月份平均',analysisAverage(result.consumed_average),false]]){const item=node('div');item.append(node('dt',label),node('dd',value+(extra?'':label.includes('含零')?'（分母 '+result.started_count+' 個已開始月）':'（分母 '+result.consumed_count+' 個有消費月）')));(extra?document.querySelector('#tag-extra-summary'):summary).append(item);}
   const table=comparisonTable(['月份','支出','統計範圍','帳目'],[]),body=table.querySelector('tbody');
   for(const period of result.periods){
     const row=node('tr');row.append(node('td',period.month),node('td',period.started?analysisMoney(period.total_cents):'尚未開始'),node('td',period.started?period.start+' ～ '+period.actual_end+(period.unfinished?'（尚未結束）':''):'尚未開始'));
@@ -552,29 +604,31 @@ function beginScheduleDraft(item) {
 }
 function renderPeriods() {
   const result=scheduleItems(state,taiwanToday(),annualLimit),recent=document.querySelector('#schedule-recent'),older=document.querySelector('#schedule-older ul');
-  recent.replaceChildren();older.replaceChildren();
+  recent.replaceChildren();older.replaceChildren();pendingExpenses.replaceChildren();
   const items=result.items;
   if(!items.length)recent.append(node('li','目前沒有可查看的期數。'));
   for(const [position,item] of items.entries()) {
     const row=node('li');row.dataset.ruleId=item.rule_id;row.dataset.index=item.index;
     const entry=state.expenses.find(entry=>entry.id===item.expense_id),voided=entry?.voided===1;
-    row.append(node('p','預定 '+item.defaults.due_on+'｜'+item.defaults.name+'｜預設 '+amountText(item.defaults.cents)+' 元｜'+item.defaults.category+'｜'+item.defaults.payment_source_name+'｜'+({upcoming:'即將到期',pending:'待記錄',recorded:'已記錄',skipped:'已略過'}[item.status])+(voided?'（消費已刪除，不會重建）':entry?'｜實付 '+amountText(entry.cents)+' 元｜實際日期 '+entry.spent_on:'')));
+    row.append(node('p','預定 '+item.defaults.due_on+'｜'+item.defaults.name+'｜預設 '+amountText(item.defaults.cents)+' 元｜'+item.defaults.category+'｜'+item.defaults.payment_source_name+'｜'+({upcoming:'即將到期',pending:'待記錄',recorded:'已記錄',skipped:'已略過'}[item.status])+(voided?'（消費已作廢，不會重建）':entry?'｜實付 '+amountText(entry.cents)+' 元｜實際日期 '+entry.spent_on:'')));
     if(item.status==='pending')for(const [operation,label] of [['record','按預設記錄'],['draft','更改實付再記錄'],['skip','略過此期']]) {
       const button=node('button',label);button.type='button';button.dataset.operation=operation;
-      button.onclick=()=>{if(busy||writeBlocked)return;if(operation==='draft')beginScheduleDraft(item);else if(operation==='skip')askAnnual(item);else saving(()=>processSchedule(db,'record',item.rule_id,item.index,item.rule_revision,item.revision,null),()=>{},document.querySelector('#fixed-error'));};row.append(button);
+      button.onclick=()=>{if(busy||writeBlocked)return;if(operation==='draft')beginScheduleDraft(item);else if(operation==='skip')askAnnual(item);else saving(()=>processSchedule(db,'record',item.rule_id,item.index,item.rule_revision,item.revision,null),()=>{},planningFeedback);};row.append(button);
     }
     else if(item.status==='skipped') {
       const button=node('button','恢復此期');button.type='button';button.dataset.operation='resume';
       button.onclick=()=>saving(()=>processSchedule(db,'resume',item.rule_id,item.index,item.rule_revision,item.revision,null),()=>{},document.querySelector('#fixed-error'));row.append(button);
     }
-    (position<5?recent:older).append(row);
+    (item.status==='pending'?pendingExpenses:position<5?recent:older).append(row);
   }
+  if(!pendingExpenses.children.length)pendingExpenses.append(node('li','目前沒有待記錄支出。'));
   document.querySelector('#schedule-older').hidden=items.length<=5;
   document.querySelector('#schedule-more').hidden=!result.more;
 }
 function renderScheduleOverview() {
   const result=scheduleMonth(state,taiwanToday().slice(0,7),taiwanToday());
-  document.querySelector('#schedule-total').textContent='本月規劃金額：'+amountText(result.total)+' 元';
+  document.querySelector('#schedule-total').textContent='本月預計到期／已記錄金額：'+amountText(result.total)+' 元（不是額外消費）';
+  document.querySelector('#planning-schedule-total').textContent='本月定期項目：'+amountText(result.total)+' 元；依期數狀態含預計到期及已記錄實付，不代表實際消費合計。';
   document.querySelector('#schedule-month-items').replaceChildren(...result.items.map(item=>node('li',item.defaults.due_on+'｜'+item.defaults.name+'｜'+amountText(item.contribution)+' 元｜'+({upcoming:'即將到期',pending:'待記錄',recorded:'已記錄',skipped:'已略過'}[item.status]))));
 }
 document.querySelector('#schedule-more').onclick=()=>{if(!busy&&!writeBlocked){annualLimit+=100;renderPeriods();}};
@@ -652,12 +706,12 @@ function renderRecurringIncome(){
     };const stop=node('button','停用定期收入');stop.type='button';stop.onclick=()=>{if(busy||writeBlocked||!confirm('停用「'+rule.name+'」？已到期草稿與歷史收入保留，未來不再產生新期數。'))return;saving(()=>updateIncomeRule(db,'disable',rule.id,rule.revision,null),()=>{},incomeRuleError);};row.append(edit,stop);}list.append(row);
   }
   if(!list.children.length)list.append(node('li','尚未設定定期收入。'));
-  const periods=document.querySelector('#income-periods'),result=recurringIncomeItems(state,taiwanToday(),incomePeriodLimit),receipts=new Map((state.incomes||[]).map(entry=>[entry.id,entry]));periods.replaceChildren();
+  const periods=document.querySelector('#income-periods'),result=recurringIncomeItems(state,taiwanToday(),incomePeriodLimit),receipts=new Map((state.incomes||[]).map(entry=>[entry.id,entry]));periods.replaceChildren();pendingIncome.replaceChildren();
   for(const item of result.items){
     const row=node('li');row.dataset.status=item.status;const entry=receipts.get(item.income_id);
     const label=item.status==='recorded'?(entry?.voided?'已記錄（收入已作廢，不會重建）':'已記錄'):item.status==='skipped'?'已略過':item.status==='upcoming'?'尚未到期':'待確認';
     row.append(node('p',item.defaults.due_on+'｜'+item.defaults.name+'｜預定 '+amountText(item.defaults.cents)+' 元｜'+label+(entry&&entry.voided===0?'｜實收 '+amountText(entry.cents)+' 元（'+entry.received_on+'）':'')));
-    const process=(operation,values=null)=>{if(busy||writeBlocked)return;saving(()=>processIncomePeriod(db,item.rule_id,item.month,item.rule_revision,item.revision,operation,values),()=>{if(operation==='record')incomeRecordMonth=(values?.received_on??item.defaults.due_on).slice(0,7);},incomeRecordError);};
+    const process=(operation,values=null)=>{if(busy||writeBlocked)return;saving(()=>processIncomePeriod(db,item.rule_id,item.month,item.rule_revision,item.revision,operation,values),()=>{if(operation==='record')incomeRecordMonth=(values?.received_on??item.defaults.due_on).slice(0,7);},planningFeedback);};
     if(item.defaults.due_on<=taiwanToday()&&item.status==='pending'){
       for(const [operation,text]of [['record','確認已收到'],['edit','先更改收入草稿'],['skip','略過這期']]){
         const button=node('button',text);button.type='button';button.dataset.incomeOperation=operation;button.onclick=()=>{
@@ -666,12 +720,13 @@ function renderRecurringIncome(){
             if((incomeForm.elements.name.value||incomeForm.elements.amount.value)&&!confirm('改用這期收入草稿？目前未儲存的收入草稿將被取代。'))return;
             incomeConfirming=structuredClone(item);incomeEditing=null;incomeDraftId=null;
             for(const [key,value]of Object.entries({name:item.defaults.name,amount:amountText(item.defaults.cents,false),received_on:item.defaults.due_on}))incomeForm.elements[key].value=value;
-            document.querySelector('#income-form-title').textContent='確認定期收入草稿';document.querySelector('#save-income').textContent='確認已收到並儲存';document.querySelector('#cancel-income-edit').hidden=false;incomeForm.elements.amount.focus();
+            document.querySelector('#income-form-title').textContent='確認定期收入草稿';document.querySelector('#save-income').textContent='確認已收到並儲存';document.querySelector('#cancel-income-edit').hidden=false;showView('record',false);selectRecordKind('income');incomeForm.elements.amount.focus();
           }else if(confirm((operation==='record'?'確認已收到':'略過這期')+'：'+item.defaults.due_on+'｜'+item.defaults.name+'｜'+amountText(item.defaults.cents)+' 元？'))process(operation);
         };row.append(button);
       }
-    }else if(item.status==='skipped'&&item.defaults.due_on<=taiwanToday()){const button=node('button','恢復待確認');button.type='button';button.onclick=()=>process('restore');row.append(button);}periods.append(row);
+    }else if(item.status==='skipped'&&item.defaults.due_on<=taiwanToday()){const button=node('button','恢復待確認');button.type='button';button.onclick=()=>process('restore');row.append(button);}(item.status==='pending'?pendingIncome:periods).append(row);
   }
+  if(!pendingIncome.children.length)pendingIncome.append(node('li','目前沒有待確認收入。'));
   if(!periods.children.length)periods.append(node('li','目前沒有定期收入期數。'));
   document.querySelector('#income-period-more').hidden=!result.more;
 }
@@ -711,6 +766,7 @@ function loadAllocation() {
   document.querySelector('#allocation-items').replaceChildren(...(plan?.items||defaultAllocation()).map(allocationRow));
 }
 function resetIncomeForm() {
+  incomeEntrySource='記帳';
   const origin=incomeEditingOrigin,previous=searchIncomeDraft;incomeEditingOrigin=null;searchIncomeDraft=null;
   incomeForm.reset();incomeEditing=null;incomeDraftId=null;incomeConfirming=null;incomeForm.elements.received_on.value=taiwanToday();
   document.querySelector('#income-form-title').textContent='新增已收到的收入';document.querySelector('#save-income').textContent='儲存收入';
@@ -783,6 +839,14 @@ async function openIncomeMonth(month) {
   catch{if(request===incomeViewRequest)incomeError.textContent='無法讀取收入與分配，請確認月份並重新載入。';}
 }
 incomePanel.addEventListener('toggle',()=>{if(incomePanel.open){if(incomeLoaded)renderIncome();else openIncomeMonth(incomeViewedMonth);}});
+document.querySelector('#record-income-entry').onclick=()=>{
+  if(busy||writeBlocked)return;
+  const pending=incomeEditing!==null||incomeConfirming!==null;
+  document.querySelector('#income-entry-warning').hidden=!pending;
+  if(pending){document.querySelector('#resume-income-entry').focus();return;}
+  incomeEntrySource='規劃・收入與每月分配';showView('record',false);selectRecordKind('income');updateTaskPresentation();incomeForm.elements.amount.focus();
+};
+document.querySelector('#resume-income-entry').onclick=()=>{showView('record',false);selectRecordKind('income');updateTaskPresentation();incomeForm.elements.amount.focus();};
 document.querySelector('#income-entry').onclick=event=>{event.preventDefault();incomePanel.open=true;incomePanel.querySelector('summary').focus();};
 incomeMonthForm.onsubmit=event=>{
   event.preventDefault();const month=incomeMonthForm.elements.month.value;
@@ -913,7 +977,8 @@ const monthlyForm=document.querySelector('#monthly-query');
 let monthlyRequest=0,monthlyQuery=null;
 monthlyForm.elements.month.value=taiwanToday().slice(0,7);monthlyForm.elements.month.max=monthlyForm.elements.month.value;
 const analysisDrafts=new Map(),analysisBasic=document.querySelector('#analysis-basic-periods');
-document.querySelector('#view-analysis h2').after(document.querySelector('#analysis-navigation'));
+document.querySelector('#view-analysis h2').after(document.querySelector('#analysis-navigation'),document.querySelector('#analysis-question'));
+document.querySelector('#tag-monthly-data').prepend(document.querySelector('#tag-monthly-summary'));
 for(const button of document.querySelectorAll('#analysis-navigation [data-analysis-mode]'))button.onclick=()=>selectAnalysis(button.dataset.analysisMode);
 document.querySelector('#analysis-legacy-host').append(document.querySelector('#expense-comparison'));
 function analysisPending() {
@@ -942,6 +1007,7 @@ function selectAnalysis(mode) {
   if(!['compare','trend','tag','monthly'].includes(mode))return;
   if(['compare','trend'].includes(analysisMode))analysisDrafts.set(analysisMode,{unit:analysisForm.elements.unit.value,keyword:analysisForm.elements.keyword.value,chart:analysisForm.elements.chart.value,categories:[...document.querySelectorAll('#analysis-categories input:checked')].map(input=>input.value),time:document.querySelector('#analysis-time-choice').value,advanced:document.querySelector('#analysis-advanced').open,category:document.querySelector('#analysis-category-details').open});
   analysisMode=mode;document.querySelector('#analysis-choice').value=mode;
+  const question=document.querySelector('#analysis-question');question.hidden=!['compare','tag'].includes(mode);question.textContent=mode==='tag'?'想查看哪個標籤的花費？':'想比較哪兩段時間的支出？';
   for(const button of document.querySelectorAll('#analysis-navigation [data-analysis-mode]'))button.setAttribute('aria-pressed',String(button.dataset.analysisMode===mode));
   document.querySelector('#analysis-title').textContent=mode==='trend'?'支出變化':'期間比較';
   ++tagQueryRequest;tagQuery=null;clearTagReport();tagQueryForm.querySelector('button').disabled=false;
@@ -1048,7 +1114,7 @@ async function analysisPlot() {
   if(!result.plottable){message.textContent='金額超過圖表安全精度；請閱讀精確文字與表格。';return;}
   if(!result.groups.some(group=>group.started_count)){message.textContent='期間尚未開始，沒有可繪製資料。';return;}
   let data,tooltip;
-  const money=value=>analysisMoney(value),colors=index=>`hsl(${(index*137.5)%360} 50% 40%)`;
+  const money=value=>analysisMoney(value),colors=index=>['#61546f','#276451','#906515','#a62e3d','#625d68'][index%5];
   if(kind==='pie'){
     const selected=analysisSelected,period=selected&&result.groups[selected.groupIndex].periods[selected.periodIndex];
     if(!period?.started||period.total_cents===0n){message.textContent='請選擇有消費的期間查看分類占比。';return;}
@@ -1071,14 +1137,14 @@ async function analysisPlot() {
 async function showAnalysis(result) {
   const target=document.querySelector('#analysis-results'),controls=document.querySelector('#analysis-chart-controls');target.before(controls);analysisResult=result;analysisSelected=null;target.replaceChildren();
   const key=node('div',undefined,'analysis-key-summary');key.id='analysis-key-summary';
-  const statistics=node('details');statistics.id='analysis-statistics';statistics.append(node('summary','統計明細'));
+  const statistics=node('details');statistics.id='analysis-statistics';statistics.append(node('summary','精確統計（平均與期間數）'));
   for(const group of result.groups){
     const card=node('section'),bounds=group.periods.length<=3?group.periods.map(period=>period.start+' ～ '+period.end).join('、'):'共 '+group.periods.length+' 期（'+group.periods[0].start+' 至 '+group.periods.at(-1).end+'；完整範圍見每期資料）';
     card.append(node('h3',group.name),node('p',bounds),node('p',group.total_cents===null?'期間尚未開始':'總支出：'+analysisMoney(group.total_cents)));
     const unfinished=group.periods.find(period=>period.unfinished);if(unfinished)card.append(node('p','截至 '+result.today.slice(5).replace('-','/')));
     const averages='所有已開始期間平均（含零期間）：'+analysisAverage(group.all_average)+'；有消費期間平均（排除零期間）：'+analysisAverage(group.consumed_average);
-    if(analysisMode==='trend')card.append(node('p',averages));
-    statistics.append(node('h3',group.name),node('p','所選期間數：'+group.selected_count+'；已開始：'+group.started_count+'；有消費期間數：'+group.consumed_count),node('p','最高：'+analysisMoney(group.highest_cents)+'；最低：'+analysisMoney(group.lowest_cents)),node('p',averages));
+    // The exact averages remain in expandable statistics, alongside their denominators.
+    statistics.append(node('h3',group.name),node('p','所選期間數：'+group.selected_count+'；已開始：'+group.started_count+'；有消費期間數：'+group.consumed_count),node('p','最高：'+analysisMoney(group.highest_cents)+'；最低：'+analysisMoney(group.lowest_cents)),node('p',averages+'；平均分母：含零 '+group.started_count+' 個已開始期間／排零 '+group.consumed_count+' 個有消費期間。'));
     if(group.overlap)card.append(node('p','本組重疊期間只計一次。'));key.append(card);
   }
   if(result.groups.length===2){const difference=analysisDifference(result);key.append(node('p',difference===null?'A − B：期間尚未開始，無法計算差額。':'A − B 差額：'+analysisMoney(difference),'analysis-difference'));}
@@ -1220,13 +1286,15 @@ function beginExpenseEdit(entry,origin,snapshot=state) {
   document.querySelector('#cancel-edit').hidden=false;form.elements.amount.focus();
 }
 function renderEndingSoon() {
-  const items=endingSoon(state,taiwanToday()),container=document.querySelector('#ending-soon-list');
-  container.replaceChildren();document.querySelector('#ending-soon').hidden=items.length===0;
+  const items=endingSoon(state,taiwanToday());
+  document.querySelector('#ending-soon').hidden=items.length===0;
+  for(const container of [document.querySelector('#ending-soon-list'),planningEndingList]){
+  container.replaceChildren();if(!items.length)container.append(node('li','目前沒有快結束項目。'));
   for(const item of items) {
     const row=node('li');row.append(node('p',item.name+'｜'+item.text+(item.end?'｜預計用完 '+item.end:'')));
     const button=node('button',item.kind==='usage'?'更改／停止追蹤':'查看分期');button.type='button';
     if(item.kind==='usage') {
-      row.dataset.expenseId=item.id;button.onclick=()=>beginExpenseEdit(state.expenses.find(entry=>entry.id===item.id),{listId:'ending-soon-list',id:item.id});
+      row.dataset.expenseId=item.id;button.onclick=()=>beginExpenseEdit(state.expenses.find(entry=>entry.id===item.id),{listId:container.id,id:item.id});
     } else button.onclick=()=>{
       showView('planning',false);
       document.querySelector('#fixed-settings').open=true;
@@ -1234,6 +1302,7 @@ function renderEndingSoon() {
       if(target){target.tabIndex=-1;target.focus();}
     };
     row.append(button);container.append(row);
+  }
   }
 }
 function expenseDraft() {
@@ -1256,7 +1325,7 @@ function resetForm() {
   form.elements.spent_on.readOnly = false;
   document.querySelector('#expense-date-note').hidden = true;
   document.querySelector('#form-title').textContent = '記錄消費';
-  document.querySelector('#save').textContent = '儲存消費';
+  document.querySelector('#save').textContent = '記錄消費';
   document.querySelector('#cancel-edit').hidden = true;
   if(previous) {
     for(const item of previous.values){form.elements[item.name].value=item.value;if(form.elements[item.name].type==='checkbox')form.elements[item.name].checked=item.checked;}
@@ -1298,6 +1367,7 @@ function render() {
   if (incomePanel.open && incomeLoaded) renderIncome();
   renderIncomeRecords();
   renderRecurringIncome();
+  updateTaskPresentation();
   const through=Math.max(homeExpenseShown,50);
   homeExpenseRows=activeExpenses(state,taiwanToday()).slice().reverse();homeExpenseSnapshot=state;homeExpenseIndex=expenseRelations(state);
   list.replaceChildren();homeExpenseShown=0;
@@ -1338,7 +1408,7 @@ function expenseRow(entry,snapshot=state,selectable=false,daily=false,readOnly=f
     edit.onclick = () => {
       beginExpenseEdit(entry,{listId:row.parentElement.id,id:entry.id},snapshot);
     };
-    const remove = node('button', '刪除'); remove.type = 'button';
+    const remove = node('button', '作廢'); remove.type = 'button'; remove.className='danger';
     remove.onclick = () => {
       if (busy || writeBlocked) return;
       deletingOrigin = {listId:row.parentElement.id, id:entry.id};
@@ -1376,6 +1446,8 @@ function renderBatchSelection() {
   document.querySelector('#batch-select-all').textContent='全選符合支出（'+batchListName()+'，'+batchRows().length+' 筆）';
   document.querySelector('#batch-select-all').disabled=busy||writeBlocked||!batchRows().length;
   document.querySelector('#batch-clear').disabled=busy||writeBlocked||!batchSelected.size;
+  document.querySelector('#batch-clear').hidden=!batchSelected.size;
+  document.querySelector('#batch-actions').hidden=!batchSelected.size;
   document.querySelector('#batch-edit').disabled=busy||writeBlocked||batchSelected.size!==1;
   document.querySelector('#batch-open').disabled=busy||writeBlocked||batchSelected.size<2;
   document.querySelector('#batch-fields').disabled=busy||writeBlocked;
@@ -1504,6 +1576,9 @@ function showSearch(snapshot, query, today) {
   const groups=query.keyword.trim()?siteSearch(snapshot,query,today,searchFunctions()):browseSite(snapshot,query,today,searchFunctions());
   searchRows = groups.accounts.rows;
   searchShown = 0;
+  document.querySelector('#search-empty').hidden=searchRows.length!==0;
+  document.querySelector('#search-count').hidden=searchRows.length===0;
+  document.querySelector('#search-accounts').open=true;
   homeSearch.value=query.keyword;
   document.querySelector('#search-groups').hidden=false;document.querySelector('#search-selection').hidden=true;
   document.querySelector('#search-expenses-heading').textContent='帳目（'+searchRows.length+'）';
@@ -1648,9 +1723,13 @@ async function saving(operation, success, message = error) {
     ++analysisChartRequest;
     ++monthlyRequest;
   let committed = false;
+  const task=recordTaskCopy({income:message===incomeRecordError,entry:message===incomeRecordError?incomeEditing:editing,period:message===incomeRecordError?incomeConfirming:annualDraft,origin:message===incomeRecordError?incomeEditingOrigin:editingOrigin});
+  const operationObject=message===error?[form.elements.spent_on.value,form.elements.note.value].join(' · '):message===incomeRecordError?[incomeForm.elements.received_on.value,incomeForm.elements.name.value].join(' · '):task.object;
+  const completedLabel=message===error||message===incomeRecordError?operationObject+' · '+task.action+'已完成':message.id==='budget-error'?'預算設定已儲存':'本次資料操作已完成';
+  for(const input of document.querySelectorAll('[data-ui-error]')){input.removeAttribute('aria-invalid');input.removeAttribute('data-ui-error');input.removeAttribute('aria-describedby');}
   const budgetControl = document.activeElement.closest('#budget-fields') ? document.activeElement : null;
   const fixedControl = document.activeElement.closest('#fixed-fields') ? document.activeElement : null;
-  const budgetRow = budgetControl?.closest('#budget-setting-list > li');
+  const budgetRow = budgetControl?.closest('#budget-fields [data-category]');
   busy = true; fields.disabled = true; error.textContent = '';
   document.querySelector('#invoice-fields').disabled=true;document.querySelector('#invoice-confirm').disabled=true;document.querySelector('#invoice-cancel').disabled=true;
   document.querySelector('#goal-fields').disabled=true;
@@ -1681,13 +1760,16 @@ async function saving(operation, success, message = error) {
     status.textContent = '瀏覽器本機測試帳本；儲存完成。';
   } catch (failure) {
     writeBlocked = committed;
+    if(committed)lastCompletedOperation=completedLabel;
     if (committed) for (const modal of [dialog, settingsDialog, fixedStopDialog, incomeVoidDialog, annualDialog,tagDialog,batchDialog,batchEditor,invoiceDialog,merchantRemoveDialog]) if (modal.open) modal.close();
     message.textContent = committed ? '資料已儲存，但畫面更新未完成。請重新載入確認，勿重複提交。'
       : failure instanceof LedgerError || failure instanceof ValidationError ? failure.message : '儲存未完成，請確認瀏覽器儲存空間後重試。';
+    if(!committed)showFieldFailure(message,message===error?form:message===incomeRecordError?incomeForm:message.closest('form'));
     if (dialog.open) document.querySelector('#delete-error').textContent = error.textContent;
     status.textContent = committed ? message.textContent : '瀏覽器本機測試帳本；此次儲存未完成。';
   } finally {
     busy = false; fields.disabled = writeBlocked;
+    updateTaskPresentation();
     document.querySelector('#invoice-fields').disabled=writeBlocked;document.querySelector('#invoice-confirm').disabled=writeBlocked;document.querySelector('#invoice-cancel').disabled=writeBlocked;invoiceSelection();
     document.querySelector('#analysis-submit').disabled=false;
     monthlyForm.querySelector('button').disabled=false;
@@ -1707,7 +1789,7 @@ async function saving(operation, success, message = error) {
     document.querySelector('#confirm-delete').disabled = writeBlocked;
     document.querySelector('#cancel-delete').disabled = false;
     if (budgetControl) {
-      const row = [...document.querySelectorAll('#budget-setting-list > li')].find(row => row.dataset.category === budgetRow?.dataset.category);
+      const row = [...document.querySelectorAll('#budget-fields [data-category]')].find(row => row.dataset.category === budgetRow?.dataset.category);
       const selector = budgetControl.tagName === 'INPUT' ? 'input' : budgetControl.dataset.operation === 'clear' ? '[data-operation="clear"]' : 'button[type="submit"]';
       const control = budgetControl.isConnected ? budgetControl : row?.querySelector(selector);
       (control || document.querySelector('#budget-settings summary')).focus();
@@ -1716,7 +1798,7 @@ async function saving(operation, success, message = error) {
 }
 function fixedBusy(disabled) {
   document.querySelector('#fixed-fields').disabled=disabled;
-  for(const button of document.querySelectorAll('#fixed-list button,#schedule-periods button,#schedule-more,#confirm-fixed-stop,#cancel-fixed-stop'))button.disabled=disabled;
+  for(const button of document.querySelectorAll('#fixed-list button,#schedule-periods button,#planning-pending button,#schedule-more,#confirm-fixed-stop,#cancel-fixed-stop'))button.disabled=disabled;
 }
 function fixedChoices() {
   for(const [field,rows] of [['category',categoryOptions(state).filter(row=>row.active===1||row.name===fixedEditing?.category).map(row=>({value:row.name,name:row.name+(row.active?'':'（停用，保留原值）')}))],
@@ -1862,7 +1944,7 @@ function renderBudgets() {
   const names = ['總額', ...options.filter(row => row.active === 1 || overview.categories.some(budget => budget.category === row.name)).map(row => row.name)];
   for (const row of overview.categories) if (!names.includes(row.category)) names.push(row.category);
   const rows = names.map(category => {
-    const row = node('li'); row.dataset.category = category;
+    const row = node('li'); row.dataset.category = category;if(category==='總額')row.id='budget-total-editor';
     const budget = category === '總額' ? overview.total : overview.categories.find(row => row.category === category);
     const active = category === '總額' || options.some(row => row.name === category && row.active === 1);
     const name = category === '總額' ? '總預算' : category + '預算';
@@ -1874,13 +1956,14 @@ function renderBudgets() {
       const input = node('input'); input.name = 'amount'; input.type = 'text'; input.inputMode = 'numeric'; input.autocomplete = 'off';input.required=true;
       input.value = budget ? amountText(budget.cents, false) : '';
       label.append(input);
-      const button = node('button', (budget ? '更改' : '設定') + name); button.type = 'submit';
+      const button = node('button', '儲存' + name); button.type = 'submit';
       form.append(label, button);
       form.onsubmit = event => {
         event.preventDefault();
-        saving(() => updateBudget(db, expected, 'set', category, input.value), () => {}, document.querySelector('#budget-error'));
+        return saving(() => updateBudget(db, expected, 'set', category, input.value), () => {}, document.querySelector('#budget-error'));
       };
-      row.append(form);
+      const feedback=node('p',budget?'已保存；只儲存本項。':'尚未設定；只儲存本項。');feedback.className='budget-save-status';feedback.setAttribute('role','status');row.append(form,feedback);input.addEventListener('input',()=>{feedback.textContent='未儲存；只保存'+name+'。';});
+      const original=form.onsubmit;form.onsubmit=async event=>{feedback.textContent='儲存中…';await original(event);const failure=document.querySelector('#budget-error').textContent;if(failure){feedback.textContent=failure;showFieldFailure(document.querySelector('#budget-error'),form);}};
     }
     if (budget) {
       const clear = node('button', '清除' + name); clear.type = 'button'; clear.dataset.operation = 'clear';
@@ -1889,7 +1972,8 @@ function renderBudgets() {
     }
     return row;
   });
-  document.querySelector('#budget-setting-list').replaceChildren(...rows);
+  document.querySelector('#budget-setting-list').replaceChildren(rows[0]);
+  document.querySelector('#budget-category-editing-list').replaceChildren(...rows.slice(1));
   const sum = document.querySelector('#budget-sum');
   sum.disabled = !overview.categories.length || overview.categories.reduce((sum, row) => sum + row.cents, 0n) <= 0n;
   sum.onclick = () => saving(() => updateBudget(db, expected, 'sum', '總額'), () => {}, document.querySelector('#budget-error'));

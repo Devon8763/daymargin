@@ -80,7 +80,7 @@ try {
       check(document.activeElement.closest('[data-expense-id]')?.dataset.expenseId===id,'Saved edit lost later batch return');
       check(q('#expenses [data-expense-id="'+id+'"]').textContent.includes('合成更改後續批次'),'New snapshot left stale row');
       lines.push('later-batch cancel/save returns directly to the correct row using current snapshot');
-      const deleted=q('#expenses [data-expense-id="'+id+'"]');[...deleted.querySelectorAll('button')].find(button=>button.textContent==='刪除').click();q('#confirm-delete').click();await wait(()=>q('#status').textContent.includes('儲存完成')&&!q('#delete-dialog').open);
+      const deleted=q('#expenses [data-expense-id="'+id+'"]');[...deleted.querySelectorAll('button')].find(button=>button.textContent==='作廢').click();q('#confirm-delete').click();await wait(()=>q('#status').textContent.includes('儲存完成')&&!q('#delete-dialog').open);
       check(!q('#expenses [data-expense-id="'+id+'"]')&&q('#expenses-count').textContent.includes(String(count-1)),'Soft deletion left stale list/index or full count');
       const after=await ledger.readLedger(db);check(after.usage_periods.some(row=>row.expense_id===id)&&after.expense_tags.some(row=>row.expense_id===id),'Display deletion removed historical relations');
       sessionStorage.setItem('home-test-'+name,await raw());lines.push('soft delete refresh excludes only the voided expense and retains historical tags/usage; raw reload baseline saved');

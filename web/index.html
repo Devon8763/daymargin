@@ -3,19 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>瀏覽器本機記帳驗證</title>
+  <title>日餘｜讓生活有度</title>
   <link rel="stylesheet" href="style.css">
   <script type="module" src="page.mjs"></script>
 </head>
 <body>
+<a class="skip-link" href="#view-navigation">跳到主要功能</a>
 <main>
-  <h1>瀏覽器本機記帳驗證</h1>
+  <header class="app-header"><div class="brand"><svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><path d="M31.5 10.8A16 16 0 1 0 35.2 25" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="20" cy="20" r="9" fill="currentColor"/><path d="M28 5a17 17 0 0 1 7 8" fill="none" stroke="#a67b2e" stroke-width="3" stroke-linecap="round"/></svg><h1>日餘</h1></div><p class="slogan">讓生活有度</p></header>
   <p class="warning">僅供合成資料測試，請勿輸入真實帳目。本機帳本未加密；備份可選密碼保護，請妥善保管檔案與密碼。</p>
-  <p id="page-version">目前使用頁面版本：0.26.11</p>
   <p id="update-status" role="status" aria-live="polite">無法判定新版狀態；目前頁面不會自動更新。</p>
   <p id="status" role="status" aria-live="polite">正在開啟瀏覽器本機測試帳本……</p>
+  <details id="runtime-info"><summary>版本與離線狀態</summary>
+  <p id="page-version">目前使用頁面版本：0.27.0</p>
   <p id="offline-status" role="status" aria-live="polite">離線重新開啟尚未就緒；首次使用請保持預覽服務開啟。</p>
   <p>瀏覽器可能清除離線快取或本機帳本；可離線使用不等於資料永久安全，請下載並妥善保存備份。</p>
+  </details>
   <noscript>請啟用 JavaScript 才能使用日餘本機記帳。</noscript>
   <p id="error" role="alert"></p>
   <div id="recovery-guidance" hidden>
@@ -51,12 +54,12 @@
     </div>
   </section>
   <div id="ledger-page" hidden>
-  <div id="view-record" data-view="record" role="region" aria-labelledby="view-record-title"><h2 data-search-feature id="view-record-title" tabindex="-1">記帳</h2><div id="home-search-entry" class="site-search-entry"><label><span class="sr-only">全站搜尋關鍵字</span><input id="home-search-keyword" type="search" placeholder="搜尋帳目、功能、分類或標籤（Enter）" autocomplete="off"></label><button type="button" data-search-open aria-label="開啟全站搜尋（記帳）"><span aria-hidden="true">🔍</span></button></div></div>
-  <div id="view-planning" data-view="planning" role="region" aria-labelledby="view-planning-title" hidden><h2 data-search-feature id="view-planning-title" tabindex="-1">規劃</h2><button type="button" data-search-open aria-label="開啟全站搜尋（規劃）"><span aria-hidden="true">🔍</span></button></div>
-  <div id="view-analysis" data-view="analysis" role="region" aria-labelledby="view-analysis-title" hidden><h2 data-search-feature id="view-analysis-title" tabindex="-1">分析</h2><button type="button" data-search-open aria-label="開啟全站搜尋（分析）"><span aria-hidden="true">🔍</span></button></div>
-  <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 data-search-feature id="view-settings-title" tabindex="-1">設定</h2><button type="button" data-search-open aria-label="開啟全站搜尋（設定）"><span aria-hidden="true">🔍</span></button><p><a href="#instructions-view" data-help-link>使用說明</a></p></div>
+  <div id="view-record" data-view="record" role="region" aria-labelledby="view-record-title"><h2 data-search-feature id="view-record-title" tabindex="-1">記帳</h2><div id="home-search-entry" class="site-search-entry"><label><span class="sr-only">全站搜尋關鍵字</span><input id="home-search-keyword" type="search" placeholder="搜尋帳目、功能、分類或標籤" autocomplete="off"></label><button type="button" data-search-open aria-label="開啟全站搜尋（記帳）">搜尋</button></div></div>
+  <div id="view-planning" data-view="planning" role="region" aria-labelledby="view-planning-title" hidden><h2 data-search-feature id="view-planning-title" tabindex="-1">規劃</h2><button type="button" data-search-open aria-label="開啟全站搜尋（規劃）">搜尋</button></div>
+  <div id="view-analysis" data-view="analysis" role="region" aria-labelledby="view-analysis-title" hidden><h2 data-search-feature id="view-analysis-title" tabindex="-1">分析</h2><button type="button" data-search-open aria-label="開啟全站搜尋（分析）">搜尋</button></div>
+  <div id="view-settings" data-view="settings" role="region" aria-labelledby="view-settings-title" hidden><h2 data-search-feature id="view-settings-title" tabindex="-1">設定</h2><button type="button" data-search-open aria-label="開啟全站搜尋（設定）">搜尋</button><p><a href="#instructions-view" data-help-link>使用說明</a></p></div>
   <section id="home-edit" data-settings-section="home" aria-labelledby="home-edit-title">
-    <h2 id="home-edit-title" data-search-feature>編輯首頁</h2>
+    <h2 id="home-edit-title" data-search-feature>編輯首頁</h2><details id="home-editor"><summary>顯示、排序與收合</summary>
     <p>只保存在此瀏覽器、此網址來源，不屬於帳本或完整備份。搜尋與記帳必須顯示；其餘只隱藏首頁，不刪資料。摘要預設在下次重新開啟套用。</p>
     <form id="home-preferences-form" novalidate>
       <ul id="home-order"></ul>
@@ -65,22 +68,22 @@
       <button id="save-home-preferences" type="submit">儲存首頁偏好</button>
     </form>
     <p id="home-preferences-status" role="status" aria-live="polite"></p>
-    <p><a id="home-shortcut-manager" href="#shortcut-settings">操作捷徑管理</a></p><div id="home-shortcut-settings-host"></div>
+    </details><p><a id="home-shortcut-manager" href="#shortcut-settings">操作捷徑管理</a></p><div id="home-shortcut-settings-host"></div>
   </section>
   <section id="home-goals" aria-label="存錢目標"><details id="home-goals-details"><summary>存錢目標</summary><ul id="home-goals-list"></ul><a href="#goal-planning">管理存錢目標</a></details></section>
   <div id="view-search" data-view="search" role="region" aria-labelledby="view-search-title" hidden><h2 id="view-search-title" tabindex="-1">全站搜尋</h2><button id="site-search-back" type="button">返回原區域</button></div>
-  <p id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a></p>
+  <div id="planning-links"><a id="income-entry" href="#income-planning">收入與每月分配</a></div>
   <section aria-label="記帳">
     <div id="record-kind" class="buttons" role="group" aria-label="記帳類型"><button id="record-expense-choice" type="button" aria-pressed="true">支出</button><button id="record-income-choice" type="button" aria-pressed="false">收入</button></div>
     <div id="expense-entry">
-      <h2 id="form-title" data-search-feature>記錄消費</h2>
+      <h2 id="form-title" data-search-feature>記錄消費</h2><p id="expense-task-context" class="task-context"></p><details class="task-return"><summary>返回與草稿</summary><p id="expense-task-return"></p></details>
       <form id="expense-form">
       <p class="required-legend"><span class="required-example" aria-hidden="true">*</span> 代表必填</p>
       <fieldset id="fields" disabled>
         <div class="form-grid">
           <label>金額（元）<input name="amount" type="text" inputmode="decimal" required autocomplete="off"></label>
-          <label>消費項目<input name="note" type="text" required autocomplete="off"></label>
           <label>日期<input name="spent_on" type="date" required></label>
+          <label>消費項目<input name="note" type="text" required autocomplete="off"></label>
           <label>分類<select name="category" required></select></label>
           <label>付款方式<select name="payment_source_id"></select></label>
         </div>
@@ -106,7 +109,7 @@
           <div id="tag-selected" class="buttons" aria-label="這筆消費的標籤"></div>
           <div id="tag-options" aria-label="可顯示的既有標籤"></div>
         </details>
-        <div class="buttons"><button type="submit" id="save">儲存消費</button><button type="button" id="cancel-edit" hidden>取消更改</button></div>
+        <div class="buttons"><button type="submit" id="save">記錄消費</button><button type="button" id="cancel-edit" hidden>取消更改</button></div>
       </fieldset>
       </form>
     </div>
@@ -152,7 +155,7 @@
   <section id="schedule-overview" aria-labelledby="schedule-overview-title">
     <h2 id="schedule-overview-title" data-search-feature>本月定期支出</h2>
     <p id="schedule-total"></p>
-    <p data-help-topic="定期支出">依預定付款月份歸屬，已記錄採有效實付金額；不是銀行餘額，也不是額外消費。略過或已刪除的消費不計入。</p>
+    <p data-help-topic="定期支出">依預定付款月份歸屬，已記錄採有效實付金額；不是銀行餘額，也不是額外消費。略過或已作廢的消費不計入。</p>
     <details><summary>查看本月明細</summary><ul id="schedule-month-items"></ul></details>
   </section>
   <section aria-label="本機帳本設定">
@@ -180,7 +183,7 @@
         </form>
         <p id="fixed-error" role="alert"></p>
         <ul id="fixed-list"></ul><p id="fixed-empty">尚無定期支出。</p>
-        <h3>各期處理狀態</h3>
+        <p><a href="#planning-pending">查看各期狀態與待確認項目</a></p>
         <p data-help-topic="定期支出">未到期只可查看。到期可按預設值記錄，或帶入記帳表單更改實付資料；取消不會略過。已略過可恢復同一期，已記錄消費即使刪除也不會重建。</p>
         <div id="schedule-periods"><ul id="schedule-recent"></ul><details id="schedule-older"><summary>其他期數</summary><ul></ul></details></div>
         <button id="schedule-more" type="button" hidden>顯示更多期數</button>
@@ -193,7 +196,7 @@
         <p><a id="budget-category-link" href="#category-management-title">更改分類名稱</a></p>
         <p data-help-topic="預算">新預算限正整數台幣，最多十億元。總預算須至少等於所有分類預算加總（含停用分類）；未設定總預算時可單獨設定分類預算。</p>
         <fieldset id="budget-fields">
-          <ul id="budget-setting-list"></ul>
+          <ul id="budget-setting-list"></ul><details id="budget-category-editors"><summary>分類預算：逐項保存</summary><ul id="budget-category-editing-list"></ul></details>
           <button id="budget-sum" type="button">設為分類預算加總</button>
         </fieldset>
         <p id="budget-error" role="alert"></p>
@@ -252,7 +255,7 @@
     <details id="search-categories-group"><summary id="search-categories-heading">分類（0）</summary><ul id="search-categories"></ul></details>
     <details id="search-tags-group"><summary id="search-tags-heading">標籤（0）</summary><ul id="search-tags"></ul></details>
     <details id="search-accounts"><summary id="search-expenses-heading">帳目（0）</summary>
-    <p id="search-count" role="status"></p>
+    <p id="search-count" role="status"></p><p id="search-empty" hidden>沒有符合條件的帳目</p>
     <p id="search-totals" role="status"></p>
     <ul id="search-results"></ul>
     <button id="search-more" type="button" hidden>顯示更多</button>
@@ -266,9 +269,9 @@
     </section>
     <div id="batch-controls" aria-labelledby="batch-title" hidden>
       <h3 id="batch-title">目前清單：帳目</h3>
-      <div class="buttons"><button id="batch-select-all" type="button">全選符合結果</button><button id="batch-clear" type="button">取消全選</button></div>
+      <div class="buttons"><button id="batch-select-all" type="button">全選符合結果</button><button id="batch-clear" type="button">取消選取</button></div>
       <p id="batch-count" role="status" aria-live="polite">已選取 0 筆。</p>
-      <div class="buttons"><button id="batch-edit" type="button" disabled>更改</button><button id="batch-open" type="button" disabled>批次更改</button></div>
+      <div id="batch-actions" class="buttons"><button id="batch-edit" type="button" disabled>更改</button><button id="batch-open" type="button" disabled>批次更改</button></div>
     </div>
   </section>
   <section aria-labelledby="calendar-title">
@@ -299,7 +302,7 @@
       <button id="analysis-monthly-entry" data-search-feature data-analysis-mode="monthly" type="button">每月收支</button>
       <label id="analysis-choice-label" hidden>分析方式<select id="analysis-choice"><option value="trend">支出變化</option><option value="compare" selected>期間比較</option><option value="tag">標籤分析</option><option value="monthly">每月收支</option></select></label>
     </div>
-    <h2 id="analysis-title" data-search-feature>期間比較</h2>
+    <p id="analysis-question" class="analysis-question">想比較哪兩段時間的支出？</p><h2 id="analysis-title" data-search-feature>期間比較</h2>
     <form id="analysis-form" novalidate>
       <div class="analysis-query-bar">
         <select name="mode" hidden aria-label="支出分析模式"><option value="compare">自選期間比較</option><option value="trend">連續區間趨勢</option></select>
@@ -366,7 +369,7 @@
       <dl id="tag-monthly-summary" class="form-grid"></dl>
       <label>每月圖表<select id="tag-chart-kind"><option value="bar">長條圖</option><option value="line">折線圖</option></select></label>
       <div id="tag-monthly-chart" class="comparison-chart" hidden></div><p id="tag-chart-status" role="status"></p>
-      <details id="tag-monthly-data"><summary>統計明細與每期資料</summary><p id="tag-month-count"></p><dl id="tag-extra-summary" class="form-grid"></dl><div id="tag-monthly-table"></div></details>
+      <details id="tag-monthly-data"><summary>精確統計（平均與期間數）及每期資料</summary><p id="tag-month-count"></p><dl id="tag-extra-summary" class="form-grid"></dl><div id="tag-monthly-table"></div></details>
     </div>
     <details id="tag-expense-details"><summary id="tag-expense-caption">查看標籤帳目</summary>
       <button id="tag-all-expenses" type="button">查看全部符合帳目</button>
@@ -404,7 +407,7 @@
   </section>
   <section aria-label="收入與每月分配">
     <details id="income-planning">
-      <summary data-search-feature>收入與每月分配</summary>
+      <summary data-search-feature>收入與每月分配</summary><button id="record-income-entry" type="button">記錄收入</button><div id="income-entry-warning" hidden><p role="status">目前有未完成的收入任務；先返回處理，原輸入保留。</p><button id="resume-income-entry" type="button">返回目前收入任務</button></div>
       <p>收入是實收；分配是每月用途規劃，可未分完或超過當月收入；生活預算是支出上限。三者都不代表資金移轉。</p>
       <p data-help-topic="收入與分配">收入是已收到的錢；分配只是用途規劃，不是消費、轉帳或實際存款餘額。</p>
       <fieldset id="income-fields">
@@ -450,11 +453,11 @@
   <section id="income-record-section" aria-label="記錄收入" hidden>
     <div id="income-recording">
       <fieldset id="income-record-fields">
-        <h2 id="income-form-title" data-search-feature>新增已收到的收入</h2>
+        <h2 id="income-form-title" data-search-feature>新增已收到的收入</h2><p id="income-task-context" class="task-context"></p><details class="task-return"><summary>返回與草稿</summary><p id="income-task-return"></p></details>
         <form id="income-form" novalidate>
           <div class="form-grid">
-            <label>收到日期<input name="received_on" type="date" required></label>
             <label>收入金額（元）<input name="amount" type="text" inputmode="decimal" required autocomplete="off"></label>
+            <label>收到日期<input name="received_on" type="date" required></label>
             <label>收入來源名稱<input name="name" type="text" maxlength="200" required autocomplete="off"></label>
           </div>
           <div class="buttons"><button id="save-income" type="submit">儲存收入</button><button id="cancel-income-edit" type="button" hidden>取消收入更改</button></div>
@@ -577,11 +580,11 @@
   </form>
 </dialog>
 <dialog id="delete-dialog" aria-labelledby="delete-title">
-  <h2 id="delete-title">確認刪除消費</h2>
+  <h2 id="delete-title">確認作廢消費</h2>
   <p id="delete-summary"></p>
-  <p>此筆將標記為已刪除，帳目與操作紀錄仍會保留。</p>
+  <p>此筆將標記為已作廢，帳目與操作紀錄仍會保留。</p>
   <p id="delete-error" role="alert"></p>
-  <div class="buttons"><button id="confirm-delete" type="button">確認刪除</button><button id="cancel-delete" type="button">取消</button></div>
+  <div class="buttons"><button id="confirm-delete" type="button">確認作廢</button><button id="cancel-delete" type="button">取消</button></div>
 </dialog>
 <dialog id="income-void-dialog" aria-labelledby="income-void-title">
   <h2 id="income-void-title">確認作廢收入</h2><p id="income-void-summary"></p>

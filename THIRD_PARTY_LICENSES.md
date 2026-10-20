@@ -1,5 +1,11 @@
 # 第三方資源與授權
 
+## 僅供開發的UI／UX Skills（2026-10-17）
+
+- Impeccable 4.6.0／Windows引擎0.1.15：來源為官方[pbakaus/impeccable](https://github.com/pbakaus/impeccable)，固定來源提交`6af45ac9a5eb8792f033d3242f52e99812fd91fa`。完整Apache-2.0授權保留於[Skill LICENSE](.agents/skills/impeccable/LICENSE)。Windows引擎取自官方engine-v0.1.15發行，SHA-256見[安裝紀錄](docs/ui-ux-skills-installation.md)。
+- UI UX Pro Max：使用官方[ui-ux-pro-max-cli 2.15.0](https://www.npmjs.com/package/ui-ux-pro-max-cli/v/2.15.0)產生Codex主Skill，保留主Skill、腳本與資料，不安裝六個附屬Skill。官方[nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)的完整MIT授權保留於[Skill LICENSE](.agents/skills/ui-ux-pro-max/LICENSE)。
+- 以上放在`.agents/skills/`供Codex開發使用，未加入網站白名單、前端bundle或Service Worker；未安裝npm／pip套件、字型、圖示或UI Framework。資料庫中的字型／圖示建議不等於這些素材已下載或獲得全部授權，未來採用實際素材時仍須逐項確認。
+
 ## Chart.js 4.5.1
 
 - 用途：生活記帳 Web `/compare` 與獨立 local-first「支出比較」圖表；local-first 僅送必要彙總及精確提示文字，使用者執行比較後才載入，不新增套件。
